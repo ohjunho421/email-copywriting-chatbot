@@ -348,7 +348,7 @@ class EmailCopywriter:
         
         # Claude에게 전달할 상세 컨텍스트 구성
         context = f"""
-당신은 Zendesk 영업 이메일 모범 사례를 완벽히 숙지한 전문 세일즈 카피라이터입니다.
+당신은 포트원(PortOne) 전문 세일즈 카피라이터로, 실제 검증된 한국어 영업 이메일 패턴을 완벽히 숙지하고 있습니다.
 
 **타겟 회사 정보:**
 - 회사명: {company_name}
@@ -357,19 +357,53 @@ class EmailCopywriter:
 **Perplexity 조사 결과 (최신 기사/활동/트렌드):**
 {research_data.get('company_info', '해당 회사는 성장하는 기업으로 디지털 혁신과 효율적인 비즈니스 운영에 관심이 높습니다.')}
 
+**회사별 맞춤 Pain Points:**
+{research_data.get('pain_points', '일반적인 Pain Point')}
+
 **개인화 요소:**
 {personalization_elements}
 
-**이메일 작성 전략:**
-1. 조사 결과를 바탕으로 해당 업체가 직면한 구체적인 Pain Point 파악
-2. 업계 트렌드나 최근 기사에서 언급된 어려움을 자연스럽게 언급
-3. PortOne 솔루션이 어떻게 이 문제를 해결할 수 있는지 구체적으로 제시
-4. 실제 수치와 사례를 활용한 설득력 있는 가치 제안
-5. 자연스러운 미팅/상담 제안으로 마무리
+**검증된 성과 좋은 한국어 이메일 템플릿 참고용 (스타일과 톤 참고):**
+
+**참고 템플릿 1: 직접적 Pain Point 접근**
+"안녕하세요, 회사명 담당자님. 코리아포트원 오준호입니다.
+혹시 대표님께서도 예측 불가능한 결제 시스템 장애, PG사 정책 변화로 인한 수수료 변동문제,
+혹은 해외 시장 진출 시의 결제 문제에 대한 장기적인 대비책을 고민하고 계신가요?
+저희 포트원은 단 하나의 연동으로 여러 PG사 통합 관리, 결제 안정성 강화, 비용 최적화,
+그리고 글로벌 확장성까지 제공하는 솔루션입니다."
+
+**참고 템플릿 2: 기술 담당자 대상**
+"혹시 이사님께서도 단일 PG사 종속으로 인한 리스크관리,
+여러 PG사 연동 시 발생하는 개발/유지보수 부담에 대한 고민을 하고계신가요?
+포트원은 단 한 번의 API 연동으로 50개 이상의 PG사를 통합하고,
+개발 리소스를 획기적으로 줄여주는 솔루션입니다."
+
+**참고 템플릿 3: 채용 컨텍스트 활용**
+"최근 '재무/회계 담당자' 채용을 진행하시는 것을 보고 연락드렸습니다.
+만약 새로 합류한 유능한 인재가, 가장 먼저 마주할 업무가 여러 PG사 사이트를 오가며
+엑셀로 정산 내역을 맞추는 단순 반복적인 수작업이라면 어떨까요?
+저희 포트원은 이러한 불필요한 수작업을 약 90% 이상 자동화하여,
+귀한 인재가 회사의 성장에 기여할 수 있도록 핵심 재무 전략 업무에만 집중할 수 있게 돕습니다."
+
+**참고 템플릿 4: 매출 구간 변경 이슈**
+"매출이 10억, 30억을 넘어서며 성장할수록, PG사의 '영중소 구간' 변경으로 불필요한 결제 수수료를 더 내고 계실 수 있습니다.
+포트원은 국내 25개 이상 PG사와의 제휴를 통해, 회사명이 현재보다 더 낮은 수수료를 적용받을 수 있도록 즉시 도와드릴 수 있습니다."
+
+**참고 템플릿 5: 커머스 재무 자동화**
+"현재 카페24와 같은 호스팅사를 통해 성공적으로 온라인 비즈니스를 운영하고 계시는데
+네이버페이, 쿠팡 등 오픈마켓에서 들어오는 매출과 실제 입금액이 맞는지 확인하는
+'정산' 업무에 생각보다 많은 시간을 쏟고 있지는 않으신가요?
+저희 PortOne의 커머스 재무 자동화 솔루션은 여러 채널의 정산 내역을 클릭 한 번으로 대사하여,
+수작업으로 인한 실수를 원천적으로 막고 숨어있던 비용을 찾아드립니다."
+
+**필수 포함 요소:**
+1. YouTube 영상 링크: "https://www.youtube.com/watch?v=2EjzX6uTlKc" (간단한 서비스 소개 유튜브영상)
+2. "1분짜리 소리없는 영상이니 부담없이 서비스를 확인해 보시기 바랍니다."
+3. 구체적 CTA: "다음 주 중 편하신 시간을 알려주시면 감사하겠습니다."
 
 **One Payment Infra로 해결 가능한 Pain Points:**
 - 결제 시스템 개발에 6개월+ 소요되는 문제 → 2주 내 구축
-- 여러 PG사 관리의 복잡성 → 20+ PG사 통합 관리
+- 여러 PG사 관리의 복잡성 → 50+ PG사 통합 관리
 - 결제 실패로 인한 매출 손실 → 스마트 라우팅으로 15% 성공률 향상
 - 높은 개발 비용 부담 → 85% 리소스 절감 + 100만원 무료 컨설팅
 - 결제 장애 대응의 어려움 → 실시간 모니터링 및 24/7 지원
@@ -384,23 +418,21 @@ class EmailCopywriter:
 - 부정확한 손익 분석 → 실시간 정확한 재무 데이터 제공
 - 채권/미수금 관리의 어려움 → 통합 관리 시스템 제공
 
-**설득력 있는 이메일 구조 (Pain Point → Solution → Meeting):**
-1. **개인화된 인사**: 조사 결과 기반 최신 소식/성과/변화 언급
-2. **Pain Point 제기**: 업계 트렌드나 해당 업체가 직면한 구체적 어려움 언급
-   - "혹시 이런 문제로 고민하고 계시지 않나요?"
-   - "최근 기사에서 본 바와 같이..."
-   - "업계에서 공통적으로 겪고 있는..."
-3. **해결책 제시**: PortOne 솔루션이 어떻게 이 문제를 해결하는지 구체적 설명
-   - 실제 수치와 사례 활용 (85% 절감, 90% 단축 등)
-   - 타 고객사 성공 사례 암시
-4. **자연스러운 미팅 제안**: 강압적이지 않은 상담/데모 제안
-   - "15분 정도 시간 내주시면 구체적인 방안을 말씀드릴 수 있습니다"
-   - "비슷한 고민을 가진 다른 고객사 사례를 공유해드리고 싶습니다"
+**CRITICAL: 반드시 지켜야 할 패턴:**
+- 상황별 맞춤 접근법 사용 (위 템플릿들 참고)
+- YouTube 영상 링크 필수 포함
+- "다음 주 중" 일정 요청으로 CTA 마무리
+- 구체적 수치와 혜택 언급 (85% 절감, 90% 자동화 등)
+- 자연스러운 한국어 문체 유지
 
-**Zendesk 모범 사례 준수:**
-- 제목: 7단어/41자 이내, 구체적 Pain Point나 혜택 제시
-- 본문: 150-250단어, 문제 제기 → 해결책 → 미팅 제안 구조
-- 톤: 전문적이면서도 공감하는 톤, 판매보다는 도움 제공 관점
+**명함 정보: 반드시 다음 서명으로 끝내기:**
+오준호 Junho Oh
+Sales team
+Sales Manager
+E ocean@portone.io
+M 010 5001 2143
+서울시 성동구 성수이로 20길 16 JK타워 4층
+https://www.portone.io
 
 **반드시 JSON 형태로 다음 4가지 이메일 생성 (2개 제품 × 2개 스타일):**
 
@@ -408,7 +440,7 @@ class EmailCopywriter:
   "opi_professional": {{
     "product": "One Payment Infra",
     "subject": "제목 (7단어/41자 이내)",
-    "body": "본문 (150-250단어, QVC 공식 적용)",
+    "body": "본문 (200-300단어)",
     "cta": "구체적인 행동 유도 문구",
     "tone": "전문적이고 신뢰감 있는 톤",
     "personalization_score": 8
@@ -416,7 +448,7 @@ class EmailCopywriter:
   "opi_curiosity": {{
     "product": "One Payment Infra",
     "subject": "제목 (7단어/41자 이내)",
-    "body": "본문 (150-250단어, QVC 공식 적용)",
+    "body": "본문 (200-300단어)",
     "cta": "구체적인 행동 유도 문구",
     "tone": "호기심을 자극하는 질문형 톤",
     "personalization_score": 9
@@ -424,7 +456,7 @@ class EmailCopywriter:
   "finance_professional": {{
     "product": "국내커머스채널 재무자동화 솔루션",
     "subject": "제목 (7단어/41자 이내)",
-    "body": "본문 (150-250단어, QVC 공식 적용)",
+    "body": "본문 (200-300단어)",
     "cta": "구체적인 행동 유도 문구",
     "tone": "전문적이고 신뢰감 있는 톤",
     "personalization_score": 8
@@ -432,7 +464,7 @@ class EmailCopywriter:
   "finance_curiosity": {{
     "product": "국내커머스채널 재무자동화 솔루션",
     "subject": "제목 (7단어/41자 이내)",
-    "body": "본문 (150-250단어, QVC 공식 적용)",
+    "body": "본문 (200-300단어)",
     "cta": "구체적인 행동 유도 문구",
     "tone": "호기심을 자극하는 질문형 톤",
     "personalization_score": 9
@@ -440,14 +472,14 @@ class EmailCopywriter:
 }}
 
 각 이메일은 반드시 다음 구조를 따라야 합니다:
-1. 개인화된 인사 및 회사 관련 언급
-2. 핵심 질문 또는 문제 제기
+1. 개인화된 인사 및 회사 관련 언급 (검증된 템플릿 패턴 활용)
+2. 핵심 질문 또는 문제 제기 (회사별 Pain Points 활용)
 3. PortOne의 구체적 가치 제안 (수치 포함)
-4. 고객 혜택 중심의 설명
+4. YouTube 영상 링크 제공
 5. 명확하고 실행 가능한 CTA
-6. 전문적인 서명
+6. 전문적인 서명 (명함 정보)
 
-**중요:** 각 스타일별로 완전히 다른 접근 방식과 내용으로 작성하되, 모든 이메일이 {company_name}에 특화된 개인화 요소를 포함해야 합니다.
+**중요:** 각 스타일별로 완전히 다른 접근 방식과 내용으로 작성하되, 모든 이메일이 {company_name}에 특화된 개인화 요소를 포함하고 제공된 템플릿 패턴을 참고해야 합니다.
         """
         
         payload = {
@@ -599,27 +631,61 @@ class EmailCopywriter:
             }
     
     def _extract_personalization_elements(self, company_data, research_data):
-        """회사 데이터에서 개인화 요소 추출"""
+        """회사 데이터에서 개인화 요소 추출 (한국어 템플릿 패턴 기반)"""
         elements = []
         
         company_name = company_data.get('회사명', '')
+        ceo_name = company_data.get('대표자명', '담당자님')
+        website = company_data.get('홈페이지링크', '')
+        
+        # 직급별 맞춤 인사말 결정
+        position_title = '담당자님'
+        if '대표' in ceo_name or 'CEO' in ceo_name:
+            position_title = '대표님'
+        elif '이사' in ceo_name or '임원' in ceo_name:
+            position_title = '이사님'
+        elif '전무' in ceo_name or '상무' in ceo_name:
+            position_title = '전무님'
+        
         if company_name:
             elements.append(f"- {company_name}의 최근 성장과 발전에 주목하고 있습니다")
+            elements.append(f"- 인사말에 '{position_title}' 호칭 사용 ('{ceo_name}' 기반)")
         
-        website = company_data.get('홈페이지링크', '')
         if website:
             elements.append(f"- 웹사이트({website})를 통해 귀사의 비즈니스 방향성을 확인했습니다")
+            elements.append(f"- '우연히 {company_name}의 온라인 스토어를 방문했다가, 깊은 인상을 받았습니다' 접근 가능")
         
         # 조사 데이터에서 개인화 요소 추출
         company_info = research_data.get('company_info', '')
+        pain_points = research_data.get('pain_points', '')
+        
         if '성장' in company_info or '확장' in company_info:
-            elements.append("귀사의 빠른 성장세와 시장 확장 계획이 인상적입니다")
+            elements.append("- 빠른 성장세와 시장 확장 계획을 언급 가능")
+            elements.append("- '매출이 10억, 30억을 넘어서며 성장할수록' 매출 구간 변경 이슈 접근 가능")
         
         if '디지털' in company_info or '기술' in company_info:
-            elements.append("디지털 혁신과 기술 도입에 대한 귀사의 적극적인 자세를 높이 평가합니다")
+            elements.append("- 디지털 혁신과 기술 도입 관심도를 강조 가능")
+            elements.append("- 결제 시스템 개발 리소스 문제 접근 추천")
+        
+        if '커머스' in company_info or '온라인' in company_info or '쇼핑' in company_info:
+            elements.append("- 커머스/온라인 비즈니스 관련 접근 가능")
+            elements.append("- 네이버페이, 카카오, 카페24 등 채널별 정산 이슈 언급 가능")
+            elements.append("- '현재 카페24와 같은 호스팅사를 통해 성공적으로...' 패턴 사용 추천")
+        
+        if '채용' in company_info or '인재' in company_info:
+            elements.append("- 채용 관련 컨텍스트 활용 가능")
+            elements.append("- '최근 재무/회계 담당자 채용을 진행하시는 것을 보고...' 패턴 사용 추천")
+        
+        # Pain Points 기반 개인화
+        if '데이터' in pain_points or '정산' in pain_points:
+            elements.append("- 정산/데이터 매핑 문제 중심 접근 추천")
+        
+        if '개발' in pain_points or '리소스' in pain_points:
+            elements.append("- 개발 리소스 절약 중심 접근 추천")
         
         if not elements:
-            elements.append(f"{company_name}의 지속적인 발전과 혁신 노력에 관심을 갖고 있습니다")
+            elements.append(f"- {company_name}의 지속적인 발전과 혁신 노력에 관심")
+            elements.append(f"- 기본 '{position_title}' 호칭 사용")
         
         return '\n'.join(elements)
     
@@ -676,86 +742,118 @@ class EmailCopywriter:
             }
     
     def generate_fallback_emails(self, company_name):
-        """실제 API 실패 시 사용할 폴백 이메일 생성"""
+        """실제 API 실패 시 사용할 한국어 템플릿 기반 폴백 이메일 생성"""
         return {
             'opi_professional': {
                 'subject': f'{company_name} 결제 인프라 최적화 제안',
-                'body': f'''안녕하세요, {company_name} 담당자님!
+                'body': f'''안녕하세요, {company_name} 담당자님. 코리아포트원 오준호입니다.
 
-{company_name}의 결제 시스템 개발에 많은 리소스가 소요되고 계시지 않나요?
+혹시 대표님께서도 예측 불가능한 결제 시스템 장애, PG사 정책 변화로 인한 수수료 변동문제,
+혹은 해외 시장 진출 시의 결제 문제에 대한 장기적인 대비책을 고민하고 계신가요?
 
-PortOne의 One Payment Infra는 85% 개발 리소스를 절약하고 2주 만에 구축 가능한 솔루션입니다.
+저희 포트원은 단 하나의 연동으로 여러 PG사 통합 관리, 결제 안정성 강화, 비용 최적화,
+그리고 글로벌 확장성까지 제공하는 솔루션입니다.
 
-• 통합 결제 API로 개발 시간 단축
-• 스마트 라우팅으로 결제 성공률 향상
-• 100만원 상당 무료 컨설팅 제공
+https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브영상 보내드립니다.
+1분짜리 소리없는 영상이니 부담없이 서비스를 확인해 보시기 바랍니다.
 
-15분 간단한 데모로 {company_name}만의 맞춤형 혜택을 보여드리겠습니다.
+만약 이러한 고민을 해결하고 대표님의 사업 성장에만 집중하고 싶으시다면,
+미팅을 통해 저희가 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.
+다음 주 중 편하신 시간을 알려주시면 감사하겠습니다.
 
-언제 시간 되실까요?
-
-감사합니다.
-PortOne 영업팀'''
+오준호 Junho Oh
+Sales team
+Sales Manager
+E ocean@portone.io
+M 010 5001 2143
+서울시 성동구 성수이로 20길 16 JK타워 4층
+https://www.portone.io'''
             },
             'opi_curiosity': {
-                'subject': f'{company_name} 결제 개발, 정말 6개월 필요할까요?',
-                'body': f'''안녕하세요, {company_name} 담당자님!
+                'subject': f'{company_name} 결제 시스템, 정말 효율적인가요?',
+                'body': f'''안녕하세요, {company_name} 담당자님. PortOne 오준호입니다.
 
-혹시 결제 시스템 개발에 6개월 이상 계획하고 계신가요?
+혹시 대표님께서도 단일 PG사 종속으로 인한 리스크관리,
+여러 PG사 연동 시 발생하는 개발/유지보수 부담에 대한 고민을 하고계신가요?
 
-대부분 기업이 그렇게 생각하시는데, PortOne을 사용한 고객사들은 평균 2주 만에 런칭했습니다.
+포트원은 단 한 번의 API 연동으로 50개 이상의 PG사를 통합하고,
+개발 리소스를 획기적으로 줄여주는 솔루션입니다.
 
-어떻게 가능할까요?
-• 85% 코드 절약 가능한 통합 API
-• 검증된 결제 모듈 제공
-• 전담 기술 지원팀 배정
+https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브영상 보내드립니다.
+1분짜리 소리없는 영상이니 부담없이 서비스를 확인해 보시기 바랍니다.
 
-{company_name}도 빠른 런칭이 가능한지 확인해보시겠어요?
+만약 이러한 기술적 고민을 해결하고 대표님 팀의 귀한 리소스가
+본질적인 서비스 개발에만 집중되기를 바라신다면,
+미팅을 통해 저희가 어떻게 기여할 수 있을지 깊이 있는 대화를 나누고 싶습니다.
+다음 주 중 편하신 시간을 알려주시면 감사하겠습니다.
 
-15분 데모로 보여드리겠습니다.
-
-감사합니다.
-PortOne 영업팀'''
+오준호 Junho Oh
+Sales team
+Sales Manager
+E ocean@portone.io
+M 010 5001 2143
+서울시 성동구 성수이로 20길 16 JK타워 4층
+https://www.portone.io'''
             },
             'finance_professional': {
                 'subject': f'{company_name} 커머스 재무 자동화 솔루션',
-                'body': f'''안녕하세요, {company_name} 담당자님!
+                'body': f'''안녕하세요, {company_name} 담당자님. PortOne 오준호 매니저입니다.
 
-다중 커머스 채널 운영으로 재무 관리에 어려움을 겪고 계시지 않나요?
+현재 카페24와 같은 호스팅사를 통해 성공적으로 온라인 비즈니스를 운영하고 계시는데
+네이버페이, 쿠팡 등 오픈마켓에서 들어오는 매출과 실제 입금액이 맞는지 확인하는
+'정산' 업무에 생각보다 많은 시간을 쏟고 있지는 않으신가요?
 
-저희 국내커머스채널 재무자동화 솔루션은:
+많은 대표님들이 이 과정에서 발생하는 누락된 매출과 숨겨진 수수료 때문에 골머리를 앓고 계십니다.
 
-• 네이버/카카오/카페24 데이터 자동 통합
-• 실시간 정산 및 세무 처리
-• 90% 업무 시간 단축 효과
-• 15% 수익성 개선 달성
+저희 PortOne의 커머스 재무 자동화 솔루션은 여러 채널의 정산 내역을 클릭 한 번으로 대사하여,
+수작업으로 인한 실수를 원천적으로 막고 숨어있던 비용을 찾아드립니다.
 
-{company_name}의 현재 채널별 데이터를 어떻게 효율적으로 관리할 수 있는지 보여드리겠습니다.
+https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브영상 보내드립니다.
+1분짜리 소리없는 영상이니 부담없이 서비스를 확인해 보시기 바랍니다.
 
-30분 데모 일정 잡아주시겠어요?
+단 15분만 투자해주신다면, 미팅을 통해 {company_name}의 재무 현황에서
+지금 당장 개선할 수 있는 부분을 데이터로 명확히 보여드리겠습니다.
+다음 주 중 편하신 시간 회신부탁드립니다.
 
 감사합니다.
-PortOne 영업팀'''
+오준호 드림
+
+오준호 Junho Oh
+Sales team
+Sales Manager
+E ocean@portone.io
+M 010 5001 2143
+서울시 성동구 성수이로 20길 16 JK타워 4층
+https://www.portone.io'''
             },
             'finance_curiosity': {
                 'subject': f'{company_name} 정산 업무, 하루 몇 시간 소요되나요?',
-                'body': f'''안녕하세요, {company_name} 담당자님!
+                'body': f'''안녕하세요, {company_name} 담당자님. PortOne 오준호 매니저입니다.
 
-혹시 네이버/카카오/카페24 정산 작업에 하루 몇 시간씩 투입하고 계신가요?
+우연히 {company_name}의 온라인 스토어를 방문했다가, 깊은 인상을 받았습니다.
+이렇게 훌륭한 제품을 만드시는 만큼, 사업도 빠르게 성장하고 있으리라 생각합니다.
 
-대부분 커머스 기업이 채널별 데이터 정리에만 3-4시간을 소비합니다.
+혹시 사업 규모가 커지면서, 예전에는 간단했던 매출 정산 업무가 점점 더 복잡하고 부담스러워지는 단계에 접어들지는 않으셨나요?
+많은 기업들이 저희 포트원 솔루션을 통해 매일 몇 시간씩 걸리던 정산 업무를 단 5분 만에 끝내고, 아낀 시간을 다시 제품 개발과 마케팅에 투자하고 있습니다.
 
-만약 이 시간을 90% 줄일 수 있다면?
-• 자동 데이터 매핑 및 정산
-• 실시간 수익성 분석
-• 세무 서류 자동 생성
+https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브영상 보내드립니다.
+1분짜리 소리없는 영상이니 부담없이 서비스를 확인해 보시기 바랍니다.
 
-{company_name}도 이런 자동화가 가능한지 궁금하시지 않나요?
+다음 주 중 미팅가능한 시간을 알려주신다면
+{company_name}의 성공 스토리에 PortOne이 어떻게 기여할 수 있을지, 잠시 이야기 나누고 싶습니다.
 
-30분 데모로 실제 효과를 보여드리겠습니다.
+긍정적일 회신 부탁드립니다.
 
 감사합니다.
-PortOne 영업팀'''
+오준호 드림
+
+오준호 Junho Oh
+Sales team
+Sales Manager
+E ocean@portone.io
+M 010 5001 2143
+서울시 성동구 성수이로 20길 16 JK타워 4층
+https://www.portone.io'''
             }
         }
 
