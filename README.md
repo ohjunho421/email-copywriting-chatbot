@@ -5,7 +5,7 @@ PortOne의 One Payment Infra 제품을 위한 AI 기반 개인화 영업 이메�
 ## ✨ 주요 기능
 
 - 🔍 **Perplexity AI**: 최신 회사 정보 및 뉴스 수집
-- 🤖 **Claude Opus**: 고품질 개인화 이메일 문안 생성
+- 🤖 **Claude Opus 4.1**: 고품질 개인화 이메일 문안 생성
 - 📊 **3가지 스타일**: 전문적 톤, 친근한 톤, 호기심 유발형
 - 📋 **일괄 처리**: CSV 파일로 여러 회사 동시 처리
 - 🎨 **HTML 변환**: 전문적인 이메일 템플릿으로 변환
@@ -84,7 +84,7 @@ python3 -m http.server 8000
 - **Backend**: Python Flask, Flask-CORS
 - **AI Services**: 
   - Perplexity AI (sonar-pro 모델)
-  - Claude Opus (claude-3-opus-20240229)
+  - Claude Opus 4.1 (AWS Bedrock)
 - **Dependencies**: requests, python-dotenv
 
 ## ⚙️ 환경 설정
@@ -92,7 +92,9 @@ python3 -m http.server 8000
 `.env` 파일에 API 키 설정:
 ```env
 PERPLEXITY_API_KEY=your_perplexity_api_key
-CLAUDE_API_KEY=your_claude_api_key
+AWS_ACCESS_KEY_ID=your_aws_access_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+AWS_REGION=us-east-1
 ```
 
 ## 🔒 보안

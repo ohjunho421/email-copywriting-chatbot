@@ -169,7 +169,7 @@ class EmailCopywritingChatbot {
         }
 
         this.showLoading(true);
-        this.addBotMessage('🚀 Perplexity로 최신 정보를 수집하고 Claude Opus로 메일 문안을 생성하고 있습니다...');
+        this.addBotMessage('🚀 Google Gemini 2.5 Pro로 개인화된 메일 문안을 생성하고 있습니다...');
 
         try {
             // 모든 회사 처리
@@ -181,7 +181,7 @@ class EmailCopywritingChatbot {
                 this.addBotMessage(`⚠️ 많은 수의 회사를 처리하므로 시간이 오래 걸릴 수 있습니다. 잠시만 기다려주세요...`);
             }
             
-            // 백엔드 API로 일괄 처리 요청
+            // 백엔드 API로 일괄 처리 요청 (Gemini 사용)
             const response = await fetch('http://localhost:5001/api/batch-process', {
                 method: 'POST',
                 headers: {
@@ -266,16 +266,20 @@ class EmailCopywritingChatbot {
 
     generateEmailVariations(company, profile, recentInfo) {
         const companyName = company['회사명'];
-        const contactName = company['대표자명'] || '담당자';
+        const contactName = company['대표자명'] || company['담당자명'] || '담당자';
+        const contactPosition = company['직책'] || company['직급'] || '';
         const email = company['메일주소'] || company['대표이메일'];
         
         const variations = [];
+        
+        // 개인화된 인사말 생성
+        const personalizedGreeting = this.generatePersonalizedGreeting(contactName, contactPosition, companyName);
         
         // 1. 호기심 유발형 (Zendesk 모범 사례)
         variations.push({
             type: '호기심 유발형',
             subject: this.generateCuriositySubject(companyName, profile),
-            body: this.generateCuriosityBody(companyName, contactName, profile, recentInfo),
+            body: this.generateCuriosityBody(companyName, personalizedGreeting, profile, recentInfo),
             personalizationScore: this.calculatePersonalizationScore(company, profile, recentInfo, 'curiosity')
         });
         
@@ -283,7 +287,7 @@ class EmailCopywritingChatbot {
         variations.push({
             type: '가치 제안 중심형',
             subject: this.generateValueSubject(companyName, profile),
-            body: this.generateValueBody(companyName, contactName, profile, recentInfo),
+            body: this.generateValueBody(companyName, personalizedGreeting, profile, recentInfo),
             personalizationScore: this.calculatePersonalizationScore(company, profile, recentInfo, 'value')
         });
         
@@ -291,11 +295,42 @@ class EmailCopywritingChatbot {
         variations.push({
             type: '문제 해결형',
             subject: this.generateProblemSolvingSubject(companyName, profile),
-            body: this.generateProblemSolvingBody(companyName, contactName, profile, recentInfo),
+            body: this.generateProblemSolvingBody(companyName, personalizedGreeting, profile, recentInfo),
             personalizationScore: this.calculatePersonalizationScore(company, profile, recentInfo, 'problem')
         });
         
         return variations;
+    }
+
+    generatePersonalizedGreeting(contactName, contactPosition, companyName) {
+        // 이름과 직책을 활용한 개인화된 인사말 생성
+        let greeting = '';
+        
+        if (contactName && contactName !== '담당자') {
+            // 직책이 있는 경우
+            if (contactPosition) {
+                // 직책에 따른 존칭 처리
+                if (contactPosition.includes('대표') || contactPosition.includes('CEO') || contactPosition.includes('사장')) {
+                    greeting = `안녕하세요, ${companyName} ${contactPosition} ${contactName}님.`;
+                } else if (contactPosition.includes('이사') || contactPosition.includes('부장') || contactPosition.includes('팀장') || contactPosition.includes('매니저')) {
+                    greeting = `안녕하세요, ${companyName} ${contactPosition} ${contactName}님.`;
+                } else {
+                    greeting = `안녕하세요, ${companyName} ${contactPosition} ${contactName}님.`;
+                }
+            } else {
+                // 직책 정보가 없는 경우 이름만으로 인사
+                if (contactName.includes('대표') || contactName.includes('CEO') || contactName.includes('사장')) {
+                    greeting = `안녕하세요, ${companyName} ${contactName}님.`;
+                } else {
+                    greeting = `안녕하세요, ${companyName} ${contactName} 담당자님.`;
+                }
+            }
+        } else {
+            // 이름 정보가 없는 경우 기본 인사말
+            greeting = `안녕하세요, ${companyName} 담당자님.`;
+        }
+        
+        return greeting;
     }
 
     generateCuriositySubject(companyName, profile) {
@@ -308,7 +343,7 @@ class EmailCopywritingChatbot {
         return subjects[Math.floor(Math.random() * subjects.length)];
     }
 
-    generateCuriosityBody(companyName, contactName, profile, recentInfo) {
+    generateCuriosityBody(companyName, personalizedGreeting, profile, recentInfo) {
         const painPoint = profile.painPoints[Math.floor(Math.random() * profile.painPoints.length)];
         const valueProps = Object.values(this.portOneValueProps).filter(prop => 
             prop.industries.includes('all') || 
@@ -317,7 +352,7 @@ class EmailCopywritingChatbot {
         );
         const selectedProp = valueProps[Math.floor(Math.random() * valueProps.length)];
         
-        return `${contactName}님,
+        return `${personalizedGreeting}
 
 ${recentInfo.recentNews}
 
@@ -344,8 +379,8 @@ ${companyName}에 맞는 결제 인프라 구축 방안을 15분 통화로 설�
         return subjects[Math.floor(Math.random() * subjects.length)];
     }
 
-    generateValueBody(companyName, contactName, profile, recentInfo) {
-        return `${contactName}님,
+    generateValueBody(companyName, personalizedGreeting, profile, recentInfo) {
+        return `${personalizedGreeting}
 
 ${recentInfo.recentNews}
 
@@ -379,10 +414,10 @@ ${companyName}도 동일한 결과를 얻을 수 있습니다.
         return subjects[Math.floor(Math.random() * subjects.length)];
     }
 
-    generateProblemSolvingBody(companyName, contactName, profile, recentInfo) {
+    generateProblemSolvingBody(companyName, personalizedGreeting, profile, recentInfo) {
         const painPoint = profile.painPoints[Math.floor(Math.random() * profile.painPoints.length)];
         
-        return `${contactName}님,
+        return `${personalizedGreeting}
 
 ${recentInfo.recentNews}
 
@@ -486,6 +521,8 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                 'opi_curiosity': 'OPI - 호기심 유발형',
                                 'finance_professional': '재무자동화 - 전문적 톤',
                                 'finance_curiosity': '재무자동화 - 호기심 유발형',
+                                'game_d2c_professional': '게임 D2C - 전문적 톤',
+                                'game_d2c_curiosity': '게임 D2C - 호기심 유발형',
                                 // 기존 호환성
                                 'professional': '전문적 톤',
                                 'curiosity': '호기심 유발형',
@@ -511,7 +548,10 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                 } catch (e) {
                     console.error('이메일 파싱 오류:', e);
                     // 완전 실패 시 기본 템플릿 제공
-                    emailVariations = this.createFallbackVariations(result.company['회사명']);
+                    const contactName = result.company['대표자명'] || result.company['담당자명'] || '담당자';
+                    const contactPosition = result.company['직책'] || result.company['직급'] || '';
+                    const personalizedGreeting = this.generatePersonalizedGreeting(contactName, contactPosition, result.company['회사명']);
+                    emailVariations = this.createFallbackVariations(result.company['회사명'], personalizedGreeting);
                 }
             }
             
@@ -531,9 +571,12 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                     ${result.research.company_info ? `
                         <div class="mt-2">
                             <small><strong>🔍 조사 결과:</strong></small>
-                            <div class="small text-muted" style="max-height: 100px; overflow-y: auto;">
-                                ${result.research.company_info.substring(0, 200)}...
+                            <div class="small text-muted research-content" style="max-height: 300px; overflow-y: auto; white-space: pre-wrap; border: 1px solid #e9ecef; padding: 10px; border-radius: 5px; background-color: #f8f9fa;">
+                                ${result.research.company_info}
                             </div>
+                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="toggleResearchContent(this)">
+                                <i class="fas fa-expand-alt"></i> 전체 내용 보기
+                            </button>
                         </div>
                     ` : ''}
                 </div>
@@ -694,34 +737,38 @@ ${variation.body}
     }
     
     // 완전 실패 시 기본 템플릿 생성 (4개 이메일)
-    createFallbackVariations(companyName) {
+    createFallbackVariations(companyName, personalizedGreeting = null) {
+        // 개인화된 인사말이 없으면 기본 인사말 생성
+        if (!personalizedGreeting) {
+            personalizedGreeting = `안녕하세요, ${companyName} 담당자님.`;
+        }
         return [
             {
                 type: 'OPI - 전문적 톤',
                 product: 'One Payment Infra',
                 subject: `${companyName}의 결제 인프라 혁신 제안`,
-                body: `안녕하세요 ${companyName} 담당자님,\n\n귀사의 비즈니스 성장에 깊은 인상을 받았습니다.\n\nPortOne의 One Payment Infra로 85% 리소스 절감과 2주 내 구축이 가능합니다.\n\n15분 통화로 자세히 설명드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
+                body: `${personalizedGreeting}\n\n귀사의 비즈니스 성장에 깊은 인상을 받았습니다.\n\nPortOne의 One Payment Infra로 85% 리소스 절감과 2주 내 구축이 가능합니다.\n\n15분 통화로 자세히 설명드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 8.0
             },
             {
                 type: 'OPI - 호기심 유발형',
                 product: 'One Payment Infra',
                 subject: `${companyName}의 결제 시스템, 얼마나 효율적인가요?`,
-                body: `혹시 궁금한 게 있어 연락드립니다.\n\n${companyName}의 결제 시스템이 비즈니스 성장 속도를 따라가고 있나요?\n\nPG사 관리에 낭비되는 시간은 얼마나 될까요?\n\nPortOne으로 85% 리소스 절감과 15% 성공률 향상이 가능합니다.\n\n10분만 시간 내주실 수 있나요?\n\n감사합니다.\nPortOne 팀`,
+                body: `${personalizedGreeting}\n\n${companyName}의 결제 시스템이 비즈니스 성장 속도를 따라가고 있나요?\n\nPG사 관리에 낭비되는 시간은 얼마나 될까요?\n\nPortOne으로 85% 리소스 절감과 15% 성공률 향상이 가능합니다.\n\n10분만 시간 내주실 수 있나요?\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 9.0
             },
             {
                 type: '재무자동화 - 전문적 톤',
                 product: '국내커머스채널 재무자동화 솔루션',
                 subject: `${companyName}의 재무마감 자동화 제안`,
-                body: `안녕하세요 ${companyName} 담당자님,\n\n귀사의 다채널 커머스 운영에 깊은 인상을 받았습니다.\n\n현재 네이버스마트스토어, 카카오스타일, 카페24 등 채널별 재무마감에 월 수십 시간을 소비하고 계신가요? PortOne의 재무자동화 솔루션으로 90% 이상 단축하고 100% 데이터 정합성을 확보할 수 있습니다.\n\n브랜드별/채널별 매출보고서와 부가세신고자료까지 자동화로 제공해드립니다.\n\n감사합니다.\nPortOne 팀`,
+                body: `${personalizedGreeting}\n\n귀사의 다채널 커머스 운영에 깊은 인상을 받았습니다.\n\n현재 네이버스마트스토어, 카카오스타일, 카페24 등 채널별 재무마감에 월 수십 시간을 소비하고 계신가요? PortOne의 재무자동화 솔루션으로 90% 이상 단축하고 100% 데이터 정합성을 확보할 수 있습니다.\n\n브랜드별/채널별 매출보고서와 부가세신고자료까지 자동화로 제공해드립니다.\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 8.0
             },
             {
                 type: '재무자동화 - 호기심 유발형',
                 product: '국내커머스채널 재무자동화 솔루션',
                 subject: `${companyName}의 재무팀, 얼마나 효율적인가요?`,
-                body: `혹시 궁금한 게 있어 연락드립니다.\n\n${companyName}의 재무팀이 네이버, 카카오, 카페24 등 채널별 데이터를 엑셀로 매번 매핑하는 데 얼마나 많은 시간을 쓰고 있나요? 구매확정내역과 정산내역이 매칭이 안 되어 고생하시지 않나요?\n\nPortOne의 재무자동화 솔루션으로 이 모든 문제를 해결할 수 있습니다. 90% 이상 시간 단축과 100% 데이터 정합성 보장이 가능합니다.\n\n15분만 시간 내주실 수 있나요?\n\n감사합니다.\nPortOne 팀`,
+                body: `${personalizedGreeting}\n\n${companyName}의 재무팀이 네이버, 카카오, 카페24 등 채널별 데이터를 엑셀로 매번 매핑하는 데 얼마나 많은 시간을 쓰고 있나요? 구매확정내역과 정산내역이 매칭이 안 되어 고생하시지 않나요?\n\nPortOne의 재무자동화 솔루션으로 이 모든 문제를 해결할 수 있습니다. 90% 이상 시간 단축과 100% 데이터 정합성 보장이 가능합니다.\n\n15분만 시간 내주실 수 있나요?\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 9.0
             }
         ];
@@ -917,7 +964,16 @@ async function refineEmailCopy(companyIndex, variationIndex) {
 
 // 텍스트 복사 함수 (개선된 버전)
 function copyTextToClipboard(subject, body) {
-    const fullText = `제목: ${subject}\n\n${body}`;
+    // 1. <br> 태그를 줄바꿈 문자(\n)로 변환합니다.
+    const bodyWithNewlines = body.replace(/<br\s*\/?>/gi, '\n');
+
+    // 2. 임시 DOM 요소를 사용해 나머지 HTML 태그를 제거합니다.
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = bodyWithNewlines;
+    const plainBody = tempDiv.textContent || tempDiv.innerText || "";
+
+    // 3. 순수 텍스트로 제목과 본문을 조합합니다.
+    const fullText = `제목: ${subject}\n\n${plainBody}`;
     
     // 최신 브라우저의 Clipboard API 사용
     if (navigator.clipboard && window.isSecureContext) {
@@ -1206,6 +1262,23 @@ function showCopySuccess(message) {
     toast.addEventListener('hidden.bs.toast', () => {
         document.body.removeChild(toast);
     });
+}
+
+// 조사 내용 전체 보기/접기 토글 함수
+function toggleResearchContent(button) {
+    const contentDiv = button.previousElementSibling;
+    const icon = button.querySelector('i');
+    const text = button.lastChild;
+    
+    if (contentDiv.style.maxHeight === '300px' || !contentDiv.style.maxHeight) {
+        contentDiv.style.maxHeight = 'none';
+        icon.className = 'fas fa-compress-alt';
+        text.textContent = ' 접기';
+    } else {
+        contentDiv.style.maxHeight = '300px';
+        icon.className = 'fas fa-expand-alt';
+        text.textContent = ' 전체 내용 보기';
+    }
 }
 
 // 챗봇 초기화
