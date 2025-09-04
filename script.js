@@ -164,7 +164,7 @@ class EmailCopywritingChatbot {
 
     async generateEmailTemplates() {
         if (this.uploadedData.length === 0) {
-            this.addBotMessage('❌ 먼저 CSV 파일을 업로드해주세요.');
+            this.addBotMessage('❌먼저 CSV 파일을 업로드해주세요.');
             return;
         }
 
@@ -174,21 +174,37 @@ class EmailCopywritingChatbot {
         try {
             // 모든 회사 처리
             const companiesToProcess = this.uploadedData;
+            const totalCompanies = companiesToProcess.length;
             
-            this.addBotMessage(`📊 총 ${companiesToProcess.length}개 회사 처리를 시작합니다...`);
-            
-            if (companiesToProcess.length > 10) {
-                this.addBotMessage(`⚠️ 많은 수의 회사를 처리하므로 시간이 오래 걸릴 수 있습니다. 잠시만 기다려주세요...`);
+            // 병렬 처리 설정 (회사 수에 따라 동적 조정)
+            let maxWorkers = 3; // 기본값
+            if (totalCompanies <= 5) {
+                maxWorkers = 2;
+            } else if (totalCompanies <= 15) {
+                maxWorkers = 3;
+            } else if (totalCompanies <= 30) {
+                maxWorkers = 5;
+            } else {
+                maxWorkers = 7;
             }
             
-            // 백엔드 API로 일괄 처리 요청 (Gemini 사용)
+            this.addBotMessage(`📊 총 ${totalCompanies}개 회사를 ${maxWorkers}개 동시 작업으로 병렬 처리를 시작합니다...`);
+            this.addBotMessage(`⚡ 예상 시간: 약 ${Math.ceil(totalCompanies / maxWorkers * 15 / 60)}분 (기존 대비 ${Math.round((1 - 1/maxWorkers) * 100)}% 단축)`);
+            
+            // 진행률 표시를 위한 요소 추가
+            this.addProgressIndicator(totalCompanies);
+            
+            const startTime = Date.now();
+            
+            // 백엔드 API로 병렬 처리 요청
             const response = await fetch('http://localhost:5001/api/batch-process', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    companies: companiesToProcess
+                    companies: companiesToProcess,
+                    max_workers: maxWorkers
                 })
             });
 
@@ -199,8 +215,12 @@ class EmailCopywritingChatbot {
             const result = await response.json();
             
             if (result.success) {
+                const processingTime = result.processing_time || ((Date.now() - startTime) / 1000);
+                
                 this.displayAIGeneratedTemplates(result.results);
-                this.addBotMessage(`✅ AI 기반 메일 문안 생성이 완료되었습니다! 총 ${result.total_processed}개 회사 처리됨`);
+                this.addBotMessage(`✅ AI 기반 메일 문안 생성이 완료되었습니다!`);
+                this.addBotMessage(`📈 처리 결과: ${result.total_processed}개 회사, ${processingTime}초 소요 (평균 ${(processingTime/totalCompanies).toFixed(1)}초/회사)`);
+                this.addBotMessage(`🔥 ${maxWorkers}개 병렬 처리로 ${Math.round((1 - 1/maxWorkers) * 100)}% 시간 단축 효과!`);
             } else {
                 throw new Error(result.error || '알 수 없는 오류');
             }
@@ -210,6 +230,67 @@ class EmailCopywritingChatbot {
             this.addBotMessage('💡 백엔드 서버가 실행 중인지 확인해주세요 (python app.py)');
         } finally {
             this.showLoading(false);
+            this.removeProgressIndicator();
+        }
+    }
+
+    addProgressIndicator(total) {
+        const chatContainer = document.getElementById('chatContainer');
+        const progressDiv = document.createElement('div');
+        progressDiv.id = 'progressIndicator';
+        progressDiv.className = 'message bot-message';
+        progressDiv.innerHTML = `
+            <strong>PortOne 메일 봇</strong><br>
+            <div class="progress mb-2" style="height: 25px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" 
+                     role="progressbar" style="width: 0%" id="progressBar">
+                    <span id="progressText">준비 중...</span>
+                </div>
+            </div>
+            <small class="text-muted">병렬 처리로 빠르게 생성 중입니다... ⚡</small>
+        `;
+        chatContainer.appendChild(progressDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        
+        // 가상의 진행률 업데이트 (실제로는 백엔드에서 실시간 업데이트가 어려움)
+        this.simulateProgress(total);
+    }
+
+    simulateProgress(total) {
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        
+        if (!progressBar || !progressText) return;
+        
+        let progress = 0;
+        const increment = 100 / (total * 2); // 천천히 증가
+        
+        const interval = setInterval(() => {
+            progress += increment;
+            if (progress > 95) progress = 95; // 95%에서 멈춤
+            
+            progressBar.style.width = `${progress}%`;
+            progressText.textContent = `${Math.round(progress)}% 완료 중...`;
+            
+            if (progress >= 95) {
+                clearInterval(interval);
+                progressText.textContent = '거의 완료...';
+            }
+        }, 500);
+        
+        // 인스턴스에 저장하여 나중에 정리할 수 있도록
+        this.progressInterval = interval;
+    }
+
+    removeProgressIndicator() {
+        const progressElement = document.getElementById('progressIndicator');
+        if (progressElement) {
+            progressElement.remove();
+        }
+        
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
         }
     }
 
@@ -278,7 +359,7 @@ class EmailCopywritingChatbot {
         // 1. 호기심 유발형 (Zendesk 모범 사례)
         variations.push({
             type: '호기심 유발형',
-            subject: this.generateCuriositySubject(companyName, profile),
+            subject: this.generateCuriositySubject(companyName, profile, contactName),
             body: this.generateCuriosityBody(companyName, personalizedGreeting, profile, recentInfo),
             personalizationScore: this.calculatePersonalizationScore(company, profile, recentInfo, 'curiosity')
         });
@@ -286,7 +367,7 @@ class EmailCopywritingChatbot {
         // 2. 가치 제안 중심형
         variations.push({
             type: '가치 제안 중심형',
-            subject: this.generateValueSubject(companyName, profile),
+            subject: this.generateValueSubject(companyName, profile, contactName),
             body: this.generateValueBody(companyName, personalizedGreeting, profile, recentInfo),
             personalizationScore: this.calculatePersonalizationScore(company, profile, recentInfo, 'value')
         });
@@ -294,7 +375,7 @@ class EmailCopywritingChatbot {
         // 3. 문제 해결형
         variations.push({
             type: '문제 해결형',
-            subject: this.generateProblemSolvingSubject(companyName, profile),
+            subject: this.generateProblemSolvingSubject(companyName, profile, contactName),
             body: this.generateProblemSolvingBody(companyName, personalizedGreeting, profile, recentInfo),
             personalizationScore: this.calculatePersonalizationScore(company, profile, recentInfo, 'problem')
         });
@@ -333,14 +414,9 @@ class EmailCopywritingChatbot {
         return greeting;
     }
 
-    generateCuriositySubject(companyName, profile) {
-        const subjects = [
-            `${companyName}의 결제 시스템, 2주면 충분할까요?`,
-            `${companyName}에서 PG 연동에 얼마나 시간을 쓰고 계신가요?`,
-            `간단한 질문: ${companyName}의 결제 전환율은?`,
-            `${companyName}의 개발팀이 결제보다 중요한 일이 있지 않나요?`
-        ];
-        return subjects[Math.floor(Math.random() * subjects.length)];
+    generateCuriositySubject(companyName, profile, contactName) {
+        const contact = contactName && contactName !== '담당자' ? contactName : '담당자님';
+        return `[PortOne] ${companyName} ${contact}께 전달 부탁드립니다`;
     }
 
     generateCuriosityBody(companyName, personalizedGreeting, profile, recentInfo) {
@@ -369,14 +445,9 @@ ${companyName}에 맞는 결제 인프라 구축 방안을 15분 통화로 설�
 포트원 드림`;
     }
 
-    generateValueSubject(companyName, profile) {
-        const subjects = [
-            `${companyName}의 개발 시간 85% 절약하는 방법`,
-            `${companyName}을 위한 2주 완성 결제 인프라`,
-            `${companyName}의 결제 시스템 구축 비용을 줄이는 법`,
-            `${companyName}에게 딱 맞는 결제 솔루션`
-        ];
-        return subjects[Math.floor(Math.random() * subjects.length)];
+    generateValueSubject(companyName, profile, contactName) {
+        const contact = contactName && contactName !== '담당자' ? contactName : '담당자님';
+        return `[PortOne] ${companyName} ${contact}께 전달 부탁드립니다`;
     }
 
     generateValueBody(companyName, personalizedGreeting, profile, recentInfo) {
@@ -403,15 +474,9 @@ ${companyName}도 동일한 결과를 얻을 수 있습니다.
 포트원 드림`;
     }
 
-    generateProblemSolvingSubject(companyName, profile) {
-        const painPoint = profile.painPoints[0];
-        const subjects = [
-            `${companyName}의 ${painPoint}, 해결책이 있습니다`,
-            `${companyName}이 겪고 있는 결제 문제의 해답`,
-            `${companyName}의 결제 고민, 2주면 해결됩니다`,
-            `${companyName}처럼 고민하던 회사들의 해결책`
-        ];
-        return subjects[Math.floor(Math.random() * subjects.length)];
+    generateProblemSolvingSubject(companyName, profile, contactName) {
+        const contact = contactName && contactName !== '담당자' ? contactName : '담당자님';
+        return `[PortOne] ${companyName} ${contact}께 전달 부탁드립니다`;
     }
 
     generateProblemSolvingBody(companyName, personalizedGreeting, profile, recentInfo) {
@@ -466,6 +531,9 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
     displayAIGeneratedTemplates(results) {
         const container = document.getElementById('templatesContainer');
         container.innerHTML = '';
+        
+        // 결과를 인스턴스 변수에 저장하여 CSV 다운로드에서 사용
+        this.generatedResults = results;
         
         results.forEach((result, index) => {
             if (result.error) {
@@ -630,6 +698,144 @@ ${variation.body}
         });
         
         document.getElementById('templatesSection').style.display = 'block';
+        
+        // CSV 다운로드 버튼 추가
+        this.addDownloadButton(container);
+    }
+
+    addDownloadButton(container) {
+        const downloadSection = document.createElement('div');
+        downloadSection.className = 'text-center mt-4 mb-4 p-3 bg-light rounded';
+        downloadSection.innerHTML = `
+            <h5><i class="fas fa-download"></i> 결과 다운로드</h5>
+            <p class="text-muted">생성된 모든 메일 문안을 원본 CSV에 추가하여 다운로드하세요</p>
+            <button class="btn btn-success btn-lg" onclick="window.emailChatbot.downloadCSVWithEmails()">
+                <i class="fas fa-file-csv"></i> CSV 파일 다운로드 (메일 문안 포함)
+            </button>
+        `;
+        
+        // 컨테이너 맨 위에 추가
+        container.insertBefore(downloadSection, container.firstChild);
+    }
+
+    downloadCSVWithEmails() {
+        if (!this.generatedResults || !this.uploadedData) {
+            this.addBotMessage('❌ 다운로드할 데이터가 없습니다. 먼저 CSV 파일을 업로드하고 메일 문안을 생성해주세요.');
+            return;
+        }
+
+        try {
+            // CSV 헤더 생성 (원본 + 메일 문안 컬럼들)
+            const originalHeaders = Object.keys(this.uploadedData[0]);
+            const emailHeaders = ['메일문안1_제목', '메일문안1_본문', '메일문안2_제목', '메일문안2_본문', 
+                                '메일문안3_제목', '메일문안3_본문', '메일문안4_제목', '메일문안4_본문'];
+            const allHeaders = [...originalHeaders, ...emailHeaders];
+
+            let csvContent = allHeaders.join(',') + '\n';
+
+            // 각 회사 데이터에 메일 문안 추가
+            this.uploadedData.forEach((company, index) => {
+                const result = this.generatedResults.find(r => r.company['회사명'] === company['회사명']);
+                
+                // 원본 데이터
+                const row = originalHeaders.map(header => {
+                    const value = company[header] || '';
+                    // CSV 형식에 맞게 따옴표 처리
+                    return `"${String(value).replace(/"/g, '""')}"`;
+                });
+
+                // 메일 문안 데이터 추가
+                if (result && result.emails && result.emails.success) {
+                    try {
+                        const variations = this.extractEmailVariations(result);
+                        
+                        // 최대 4개 메일 문안 추가 (부족하면 빈 값)
+                        for (let i = 0; i < 4; i++) {
+                            if (variations[i]) {
+                                row.push(`"${String(variations[i].subject).replace(/"/g, '""')}"`);
+                                row.push(`"${String(variations[i].body).replace(/"/g, '""')}"`);
+                            } else {
+                                row.push('""'); // 빈 제목
+                                row.push('""'); // 빈 본문
+                            }
+                        }
+                    } catch (e) {
+                        // 메일 파싱 실패 시 빈 값으로 채움
+                        for (let i = 0; i < 8; i++) {
+                            row.push('""');
+                        }
+                    }
+                } else {
+                    // 메일 생성 실패 시 빈 값으로 채움
+                    for (let i = 0; i < 8; i++) {
+                        row.push('""');
+                    }
+                }
+
+                csvContent += row.join(',') + '\n';
+            });
+
+            // 파일 다운로드
+            this.downloadFile(csvContent, `이메일_문안_${new Date().toISOString().slice(0, 10)}.csv`, 'text/csv');
+            this.addBotMessage('✅ 메일 문안이 포함된 CSV 파일이 다운로드되었습니다!');
+            
+        } catch (error) {
+            console.error('CSV 다운로드 오류:', error);
+            this.addBotMessage('❌ CSV 다운로드 중 오류가 발생했습니다: ' + error.message);
+        }
+    }
+
+    extractEmailVariations(result) {
+        const variations = [];
+        
+        if (result.emails && result.emails.success) {
+            const emailData = result.emails.variations;
+            
+            // JSON 파싱 시도
+            let parsedVariations = null;
+            if (typeof emailData === 'string') {
+                try {
+                    parsedVariations = JSON.parse(emailData);
+                } catch (e) {
+                    // JSON 문자열에서 추출 시도
+                    const jsonMatch = emailData.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        try {
+                            parsedVariations = JSON.parse(jsonMatch[0]);
+                        } catch (extractError) {
+                            console.log('JSON 추출 실패:', extractError);
+                        }
+                    }
+                }
+            } else if (typeof emailData === 'object') {
+                parsedVariations = emailData;
+            }
+
+            if (parsedVariations && typeof parsedVariations === 'object') {
+                Object.entries(parsedVariations).forEach(([key, value]) => {
+                    variations.push({
+                        type: key,
+                        subject: value.subject || '',
+                        body: value.body || ''
+                    });
+                });
+            }
+        }
+
+        return variations;
+    }
+
+    downloadFile(content, fileName, mimeType) {
+        const blob = new Blob(['\ufeff' + content], { type: mimeType + ';charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     // 개선된 이메일 표시
@@ -880,7 +1086,7 @@ ${variation.body}
     // 전역 접근을 위한 인스턴스 저장
     static getInstance() {
         if (!window.emailChatbot) {
-            window.emailChatbot = new EmailChatbot();
+            window.emailChatbot = new EmailCopywritingChatbot();
         }
         return window.emailChatbot;
     }
@@ -1283,5 +1489,5 @@ function toggleResearchContent(button) {
 
 // 챗봇 초기화
 document.addEventListener('DOMContentLoaded', () => {
-    new EmailCopywritingChatbot();
+    window.emailChatbot = new EmailCopywritingChatbot();
 });

@@ -4,12 +4,13 @@ PortOne의 One Payment Infra 제품을 위한 AI 기반 개인화 영업 이메�
 
 ## ✨ 주요 기능
 
-- 🔍 **Perplexity AI**: 최신 회사 정보 및 뉴스 수집
-- 🤖 **Claude Opus 4.1**: 고품질 개인화 이메일 문안 생성
-- 📊 **3가지 스타일**: 전문적 톤, 친근한 톤, 호기심 유발형
-- 📋 **일괄 처리**: CSV 파일로 여러 회사 동시 처리
+- 🔍 **다중 검색 엔진**: Google Search, DuckDuckGo, Perplexity를 통한 최신 뉴스 수집
+- 🤖 **Google Gemini 2.5 Pro**: 고품질 개인화 이메일 문안 생성
+- 📊 **4가지 이메일 템플릿**: OPI, 재무자동화, 게임D2C 각 전문/호기심 톤
+- 📋 **병렬 일괄 처리**: CSV 파일로 여러 회사 동시 처리 (최적화된 성능)
 - 🎨 **HTML 변환**: 전문적인 이메일 템플릿으로 변환
 - ✨ **AI 개선**: 사용자 피드백 기반 문안 개선
+- ⚡ **실시간 뉴스**: 최신 회사 동향을 반영한 개인화된 메시지
 
 ## 🚀 빠른 시작
 
@@ -83,19 +84,32 @@ python3 -m http.server 8000
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+), Bootstrap 5
 - **Backend**: Python Flask, Flask-CORS
 - **AI Services**: 
-  - Perplexity AI (sonar-pro 모델)
-  - Claude Opus 4.1 (AWS Bedrock)
+  - Google Gemini 2.5 Pro (메인 생성 엔진)
+  - Perplexity AI (sonar-pro 모델) - 회사 조사
+  - Multi-Search Engines: Google Search API, DuckDuckGo
 - **Dependencies**: requests, python-dotenv
 
 ## ⚙️ 환경 설정
 
 `.env` 파일에 API 키 설정:
 ```env
-PERPLEXITY_API_KEY=your_perplexity_api_key
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
-AWS_REGION=us-east-1
+# 필수 API 키
+GEMINI_API_KEY=your-gemini-api-key-here
+PERPLEXITY_API_KEY=your-perplexity-api-key-here
+
+# 선택사항: 더 정확한 뉴스 검색을 위한 Google Search API
+GOOGLE_SEARCH_API_KEY=your-google-search-api-key-here
+GOOGLE_CSE_ID=your-custom-search-engine-id-here
+
+# 서버 설정
+FLASK_ENV=development
+FLASK_DEBUG=True
 ```
+
+### 🔍 다중 검색 엔진 설정
+- **기본**: Perplexity + DuckDuckGo 사용
+- **고급**: Google Search API 키 추가 시 더 정확한 실시간 뉴스 수집
+- **자동 Fallback**: API 장애 시 자동으로 다른 검색 엔진 활용
 
 ## 🔒 보안
 
