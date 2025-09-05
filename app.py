@@ -2405,11 +2405,46 @@ def generate_email_with_gemini(company_data, research_data):
     try:
         # 회사 정보 요약
         company_name = company_data.get('회사명', 'Unknown')
-        company_info = f"회사명: {company_name}"
+        
+        # 담당자 정보 추출
+        contact_name = company_data.get('대표자명', '') or company_data.get('담당자명', '') or company_data.get('이름', '')
+        contact_position = company_data.get('직책', '') or company_data.get('직급', '')
+        
+        # 담당자명과 직책 처리 (기본값 설정)
+        if not contact_name or contact_name == '담당자':
+            email_name = '담당자님'
+        else:
+            # 직책 정보가 있는 경우
+            if contact_position:
+                # 직책에 따른 적절한 호칭 처리
+                if any(keyword in contact_position for keyword in ['대표', 'CEO', '사장']):
+                    email_name = f'{contact_name} {contact_position}님'
+                elif any(keyword in contact_position for keyword in ['이사', '부장', '팀장', '매니저', '실장', '과장']):
+                    email_name = f'{contact_name} {contact_position}님'
+                elif any(keyword in contact_position for keyword in ['주임', '대리', '선임', '책임']):
+                    email_name = f'{contact_name} {contact_position}님'
+                else:
+                    # 기타 직책
+                    email_name = f'{contact_name} {contact_position}님'
+            else:
+                # 직책 정보가 없는 경우 이름만으로 처리
+                if any(title in contact_name for title in ['대표', 'CEO', '사장']):
+                    email_name = f'{contact_name}님'
+                else:
+                    email_name = f'{contact_name} 담당자님'
+        
+        # 경쟁사 정보 추출 (PortOne 이용 기업)
+        competitor_name = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '')
+        
+        company_info = f"회사명: {company_name}\n담당자: {email_name}"
+        if contact_position and contact_name:
+            company_info += f"\n직책: {contact_position}"
+        if competitor_name:
+            company_info += f"\nPortOne 이용 경쟁사: {competitor_name}"
         
         # 추가 회사 정보가 있다면 포함
         for key, value in company_data.items():
-            if key != '회사명' and value:
+            if key not in ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사'] and value:
                 company_info += f"\n{key}: {value}"
         
         # 조사 정보 및 Pain Point 요약
@@ -2422,14 +2457,16 @@ def generate_email_with_gemini(company_data, research_data):
 당신은 포트원(PortOne) 전문 세일즈 카피라이터로, 실제 검증된 한국어 영업 이메일 패턴을 완벽히 숙지하고 있습니다.
 
 **타겟 회사 정보:**
-- 회사명: {company_name}
-- 회사 정보: {research_summary}
+{company_info}
 
-**Perplexity 조사 결과:**
+**🔥 Perplexity 최신 뉴스 조사 결과 (이메일에 반드시 활용해야 함):**
 {research_summary}
 
 **업계 트렌드:**
 {industry_trends}
+
+**중요**: 위의 Perplexity 조사 결과에서 구체적인 뉴스, 사업 확장, 투자, 신제품 등의 내용을 찾아서 이메일 도입부에 반드시 활용하세요. 
+예: "최근 XX 투자 유치 소식을 보고...", "XX 사업 확장 관련해서...", "신제품 출시와 관련해서..." 등
 """
 
         prompt = f"""
@@ -2438,66 +2475,94 @@ def generate_email_with_gemini(company_data, research_data):
 **회사별 맞춤 Pain Points (조사 결과 기반):**
 {pain_points}
 
-다음 지침에 따라 4개의 설득력 있고 차별화된 이메일을 작성해주세요:
+다음 고정된 형식에 따라 4개의 설득력 있고 차별화된 이메일을 작성해주세요:
 
 **필수 요구사항:**
-1. 위에 제시된 회사별 맞춤 Pain Point를 구체적으로 언급하여 차별화
-2. "혹시 이런 문제로 고민하고 계시지 않나요?" 식의 공감형 접근
-3. 실제 수치와 구체적 혜택 제시 (85% 절감, 90% 단축, 15% 향상 등)
-4. "비슷한 고민을 가진 다른 고객사도..." 식의 사례 암시
-5. 강압적이지 않은 자연스러운 미팅/상담 제안
-6. **각 회사마다 다른 Pain Point를 활용하여 완전히 차별화된 내용 작성**
+1. **가장 중요**: 퍼플렉시티가 조사한 {company_name}의 최신 뉴스/활동을 반드시 구체적으로 언급하여 개인화
+2. 위에 제시된 회사별 맞춤 Pain Point를 구체적으로 언급하여 차별화  
+3. 고정된 서론/결론 형식 사용 (담당자의 이름과 직책이 정확히 반영되도록)
+4. 담당자의 직책에 맞는 관점으로 Pain Point와 해결책 제시
+5. 실제 수치와 구체적 혜택 제시 (85% 절감, 90% 단축, 15% 향상 등)
+6. PortOne 이용 경쟁사가 있다면 반드시 해당 기업 사례를 언급
+7. "비슷한 고민을 가진 다른 고객사도..." 식의 사례 암시
+
+**퍼플렉시티 뉴스 활용 예시:**
+- "최근 {company_name}의 [투자 유치/사업 확장/신제품 출시] 소식을 보고 연락드립니다"
+- "혹시 최근 [구체적 뉴스 내용]과 관련해서 결제 시스템 확장 고민이 있으실까요?"
+- "최근 {company_name}의 [매출 성장/글로벌 진출] 관련 소식을 접했는데, 재무 관리 부담이 늘어나고 계시지 않나요?"
+
+**직책별 맞춤 접근법:**
+- **대표/CEO/사장**: 전략적 관점, 비즈니스 성장, 투자 효율성 강조
+- **이사/부장급**: 조직 효율성, 리소스 관리, 성과 개선에 집중
+- **팀장/매니저**: 팀 운영 효율화, 업무 프로세스 개선 중심
+- **실무진 (대리/주임 등)**: 일상 업무의 구체적 어려움과 해결책 제시
+
+**PortOne 이용 경쟁사 사례 활용 지침:**
+{f"- {competitor_name}도 과거 같은 고민을 했었지만, PortOne 도입 후 개발 리소스를 절약하여 지금은 서비스 본질에 집중할 수 있게 되었습니다." if competitor_name else ""}
+{f"- {competitor_name}의 경우도 처음에는 결제 시스템 구축에 많은 시간과 비용을 투자했지만, PortOne으로 전환한 후 핵심 비즈니스에 더 많은 리소스를 투입할 수 있게 되었습니다." if competitor_name else ""}
+{f"- 같은 업계의 {competitor_name}도 비슷한 Pain Point로 어려움을 겪다가 PortOne을 통해 해결했습니다." if competitor_name else ""}
+
+**사례 언급 방식:**
+{f'- "{competitor_name}도 과거 같은 고민을 하셨지만, PortOne 도입 후 개발 리소스 85% 절약으로 지금은 서비스 본질에 집중하고 계십니다."' if competitor_name else ''}
+{f'- "실제로 {competitor_name} 같은 경우도 PortOne 도입 전에는 결제 시스템 구축에 6개월 이상 소요됐지만, 지금은 2주 내 새로운 기능을 출시할 수 있게 되었습니다."' if competitor_name else ''}
+
+**고정 서론 형식:**
+"안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다."
+
+**고정 결론 형식:**
+"<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
 
 **4개 이메일 유형:**
 
 1. **One Payment Infra - 전문적 톤**: 
-   - 결제 시스템 개발/운영의 구체적 어려움 제기
-   - "최근 기사에서 본 바와 같이..." 식으로 조사 결과 활용
-   - OPI의 구체적 해결책과 수치 제시
-   - 전문적이지만 따뜻한 톤으로 미팅 제안
+   - **필수**: "최근 {company_name}의 [구체적 뉴스/활동] 소식을 보고..." 식으로 퍼플렉시티 조사 결과 반드시 언급
+   - 해당 뉴스/활동과 연결된 결제 시스템 Pain Point 제기
+   - OPI의 핵심 해결책과 수치 (85% 리소스 절약, 2주 내 구축)
+   - **경쟁사가 있다면**: "{competitor_name}도 PortOne 도입 후<br>서비스 본질에 집중하고 계십니다" 간결하게 언급
 
 2. **One Payment Infra - 호기심 유발형**: 
-   - "혹시 결제 시스템 개발에 6개월 이상 소요되고 계신가요?" 식 질문
-   - 조사 결과에서 발견한 업계 트렌드 언급
-   - 호기심을 자극하는 질문으로 OPI 소개
-   - "어떻게 가능한지 궁금하시지 않나요?" 식 미팅 제안
+   - **필수**: "혹시 최근 [구체적 뉴스 내용]과 관련해서 결제 시스템 확장 고민이 있으실까요?" 식으로 뉴스 활용
+   - 뉴스에서 파악한 사업 확장/성장과 연결해 결제 인프라 필요성 제기
+   - **경쟁사가 있다면**: "실제로 {competitor_name}도<br>PortOne으로 해결했는데..." 호기심 유발
+   - "어떻게 가능한지 궁금하시지 않나요?" 관심 유도
 
 3. **재무자동화 솔루션 - 전문적 톤**: 
-   - 커머스 재무 관리의 구체적 Pain Point 제기
-   - "월 수십 시간의 엑셀 작업으로 고생하고 계시지 않나요?"
-   - 자동화 솔루션의 구체적 혜택과 수치
-   - 전문적이지만 공감하는 톤으로 상담 제안
+   - **필수**: "최근 {company_name}의 [매출 성장/사업 확장] 관련 소식을 접했는데..." 뉴스 기반 접근
+   - 성장에 따른 재무 관리 복잡성 증가와 Pain Point 연결
+   - **경쟁사가 있다면**: "{competitor_name}도 재무 업무 자동화로<br>90% 시간 절약하여 핵심 비즈니스 집중" 언급
+   - 자동화의 핵심 혜택 (90% 단축, 100% 정합성)
 
 4. **재무자동화 솔루션 - 호기심 유발형**: 
-   - "혹시 네이버/카카오/카페24 데이터 매핑에 어려움을 겪고 계신가요?"
-   - 조사 결과에서 발견한 업계 이슈 언급
-   - 호기심을 자극하는 질문으로 자동화 솔루션 소개
-   - "어떻게 90% 이상 단축이 가능한지 보여드릴까요?" 식 미팅 제안
+   - **필수**: "최근 [구체적 뉴스]로 사업이 확장되고 계시는데, 재무 관리는 어떻게 하고 계신가요?" 뉴스 연계 질문
+   - 성장하는 기업의 재무 업무 부담 증가 상황 공감
+   - **경쟁사가 있다면**: "{competitor_name}도 처음엔<br>같은 고민을 했었는데..." 호기심 자극
+   - "어떻게 90% 단축 가능한지 보여드릴까요?" 관심 유도
 
 **구조 및 형식:**
 - 제목: 7단어/41자 이내, 구체적 Pain Point나 혜택 언급
-- 본문: 150-250단어
-- 구성: 개인화된 인사(30단어) → Pain Point 제기(60단어) → 해결책 제시(80단어) → 미팅 제안(30단어)
-- 톤: 전문적이면서도 공감하고 도움을 주는 관점
+- 본문: 고정 서론 → Pain Point 제기(50-70단어) → 해결책 제시(50-70단어) → 경쟁사 사례/혜택(30-50단어) → 고정 결론
+- 전체 본문: 130-200단어로 간결하면서도 핵심적으로 작성
+- 줄바꿈: 의미 단위별로 자연스럽게 <br> 태그 사용 (문장이 길 때, 새로운 주제로 넘어갈 때)
+- 톤: 전문적이면서도 공감하고 도움을 주는 관점, 간결하고 임팩트 있는 표현
 
 **중요**: 어떤 설명이나 추가 텍스트 없이 오직 JSON 형태로만 응답해주세요. 다른 텍스트는 절대 포함하지 마세요.
 
 {{
   "opi_professional": {{
     "subject": "제목",
-    "body": "본문 내용"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "opi_curiosity": {{
     "subject": "제목",
-    "body": "본문 내용"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_professional": {{
     "subject": "제목",
-    "body": "본문 내용"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_curiosity": {{
     "subject": "제목",
-    "body": "본문 내용"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }}
 }}
 """
@@ -2550,16 +2615,35 @@ def generate_email_with_gemini(company_data, research_data):
                     # JSON 파싱
                     email_variations = json.loads(clean_response)
                     
-                    # 응답 형식 변환
+                    # 플레이스홀더 교체 함수
+                    def replace_placeholders(text, company_name, email_name, competitor_name=''):
+                        result = text.replace('{company_name}', company_name).replace('{email_name}', email_name)
+                        if competitor_name:
+                            result = result.replace('{competitor_name}', competitor_name)
+                        return result
+                    
+                    # 응답 형식 변환 및 플레이스홀더 교체
                     formatted_variations = {}
                     if 'opi_professional' in email_variations:
-                        formatted_variations['opi_professional'] = email_variations['opi_professional']
+                        formatted_variations['opi_professional'] = {
+                            'subject': replace_placeholders(email_variations['opi_professional']['subject'], company_name, email_name, competitor_name),
+                            'body': replace_placeholders(email_variations['opi_professional']['body'], company_name, email_name, competitor_name)
+                        }
                     if 'opi_curiosity' in email_variations:
-                        formatted_variations['opi_curiosity'] = email_variations['opi_curiosity']
+                        formatted_variations['opi_curiosity'] = {
+                            'subject': replace_placeholders(email_variations['opi_curiosity']['subject'], company_name, email_name, competitor_name),
+                            'body': replace_placeholders(email_variations['opi_curiosity']['body'], company_name, email_name, competitor_name)
+                        }
                     if 'finance_professional' in email_variations:
-                        formatted_variations['finance_professional'] = email_variations['finance_professional']
+                        formatted_variations['finance_professional'] = {
+                            'subject': replace_placeholders(email_variations['finance_professional']['subject'], company_name, email_name, competitor_name),
+                            'body': replace_placeholders(email_variations['finance_professional']['body'], company_name, email_name, competitor_name)
+                        }
                     if 'finance_curiosity' in email_variations:
-                        formatted_variations['finance_curiosity'] = email_variations['finance_curiosity']
+                        formatted_variations['finance_curiosity'] = {
+                            'subject': replace_placeholders(email_variations['finance_curiosity']['subject'], company_name, email_name, competitor_name),
+                            'body': replace_placeholders(email_variations['finance_curiosity']['body'], company_name, email_name, competitor_name)
+                        }
                     
                     return {
                         'success': True,
@@ -2621,14 +2705,13 @@ def generate_email_with_gemini(company_data, research_data):
             'timestamp': datetime.now().isoformat()
         }
 
-def refine_email_with_claude(current_email, refinement_request):
-    """Claude Opus 4.1을 사용하여 이메일 개선"""
+def refine_email_with_gemini(current_email, refinement_request):
+    """Gemini 2.5 Pro를 사용하여 이메일 개선"""
     try:
-        # Claude 클라이언트 초기화
-        claude_client = ClaudeBedrockClient()
-        
-        # AWS Bedrock 클라이언트가 초기화되지 않았거나 사용 가능한 모델이 없으면 시뮬레이션 응답 생성
-        if not claude_client.bedrock_runtime or not claude_client.model_id:
+        # Gemini API가 설정되지 않았으면 폴백 응답 생성
+        gemini_api_key = os.getenv('GEMINI_API_KEY')
+        if not gemini_api_key:
+            logger.warning("Gemini API 키가 설정되지 않았습니다")
             return f"""제목: 개선된 메일 문안 - {refinement_request} 반영
 
 안녕하세요!
@@ -2649,7 +2732,7 @@ PortOne의 One Payment Infra는 다음과 같은 혜택을 제공합니다:
 감사합니다.
 PortOne 영업팀
 
-(주의: AWS Bedrock 인증 실패로 인한 시뮬레이션 응답)"""
+(주의: Gemini API 키 미설정으로 인한 시뮬레이션 응답)"""
         
         prompt = f"""
 다음 이메일 문안을 사용자의 요청에 따라 개선해주세요.
@@ -2663,19 +2746,53 @@ PortOne 영업팀
 **개선 지침:**
 1. 사용자의 요청사항을 정확히 반영
 2. PortOne One Payment Infra 제품의 핵심 가치 유지
-3. 전문적이면서도 읽기 쉬운 문체
-4. 구체적인 혜택과 다음 단계 명시
-5. 적절한 길이 유지 (너무 길거나 짧지 않게)
+3. 전문적이면서도 읽기 쉬운 문체로 간결하게 작성
+4. 구체적인 혜택과 수치 제시 (85% 절약, 90% 단축, 15% 향상 등)
+5. 핵심 Pain Point들과 해결 방안 간결하게 언급
+6. 고정된 서론/결론 형식 유지
+7. 본문 길이: 130-200단어로 간결하면서도 핵심적으로 작성
+8. 의미 단위별로 자연스럽게 <br> 태그로 줄바꿈 (문장이 길 때, 새로운 주제 전환 시)
+
+**고정 서론 형식 (반드시 유지):**
+"<p>안녕하세요, [회사명] [담당자명].<br>PortOne 오준호 매니저입니다.</p>"
+
+**고정 결론 형식 (반드시 유지):**
+"<p><br>다음주 중 편하신 일정을 알려주시면 [회사명]의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
 
 개선된 이메일 전체를 제목과 본문을 포함하여 작성해주세요:
 """
         
-        # Claude API 호출
-        refined_content = claude_client.generate_content(prompt)
-        return refined_content
+        # Gemini API 호출
+        genai.configure(api_key=gemini_api_key)
+        model = genai.GenerativeModel('gemini-2.5-pro')
+        
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                'temperature': 0.7,
+                'max_output_tokens': 2048
+            }
+        )
+        
+        # Gemini 응답 안전성 검증
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 2:
+                logger.warning("Gemini 안전 필터로 인한 응답 차단")
+                raise Exception("콘텐츠가 안전 정책에 의해 차단되었습니다")
+            elif hasattr(candidate, 'content') and candidate.content and candidate.content.parts:
+                refined_content = candidate.content.parts[0].text.strip()
+                logger.info(f"Gemini 이메일 개선 완료 - 응답 길이: {len(refined_content)} 문자")
+                return refined_content
+            else:
+                logger.warning("Gemini 응답에서 유효한 콘텐츠를 찾을 수 없음")
+                raise Exception("응답에서 유효한 콘텐츠를 찾을 수 없습니다")
+        else:
+            logger.warning("Gemini 응답이 비어있거나 유효하지 않음")
+            raise Exception("응답이 비어있거나 유효하지 않습니다")
         
     except Exception as e:
-        logger.error(f"Claude 이메일 개선 오류: {str(e)}")
+        logger.error(f"Gemini 이메일 개선 오류: {str(e)}")
         # 오류 시 기본 개선 응답 제공
         return f"""제목: 개선된 메일 문안 - {refinement_request} 반영
 
@@ -2697,7 +2814,7 @@ PortOne의 One Payment Infra는 다음과 같은 혜택을 제공합니다:
 감사합니다.
 PortOne 영업팀
 
-(주의: API 오류로 인한 기본 응답 - {str(e)})"""
+(주의: Gemini API 오류로 인한 기본 응답 - {str(e)})"""
 
 # 전역 인스턴스 생성
 researcher = CompanyResearcher()
@@ -2879,8 +2996,8 @@ def refine_email():
                 'error': '현재 이메일 내용과 개선 요청사항이 필요합니다.'
             }), 400
         
-        # Claude Opus 4.1로 이메일 개선 요청
-        refined_email = refine_email_with_claude(current_email, refinement_request)
+        # Gemini 2.5 Pro로 이메일 개선 요청
+        refined_email = refine_email_with_gemini(current_email, refinement_request)
         
         return jsonify({
             'success': True,

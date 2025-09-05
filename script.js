@@ -4,6 +4,8 @@ class EmailCopywritingChatbot {
     constructor() {
         this.uploadedData = [];
         this.currentCompanyIndex = 0;
+        this.isRefinementMode = false;
+        this.currentRefinementTarget = null;
         this.initializeEventListeners();
         this.portOneValueProps = {
             resourceSaving: {
@@ -221,6 +223,9 @@ class EmailCopywritingChatbot {
                 this.addBotMessage(`✅ AI 기반 메일 문안 생성이 완료되었습니다!`);
                 this.addBotMessage(`📈 처리 결과: ${result.total_processed}개 회사, ${processingTime}초 소요 (평균 ${(processingTime/totalCompanies).toFixed(1)}초/회사)`);
                 this.addBotMessage(`🔥 ${maxWorkers}개 병렬 처리로 ${Math.round((1 - 1/maxWorkers) * 100)}% 시간 단축 효과!`);
+                
+                // 메일 생성 완료 후 텍스트박스 활성화
+                this.enableUserInput();
             } else {
                 throw new Error(result.error || '알 수 없는 오류');
             }
@@ -1046,6 +1051,12 @@ ${variation.body}
     }
 
     handleUserMessage(message) {
+        // 개선 모드인지 확인
+        if (this.isRefinementMode && this.currentRefinementTarget) {
+            this.processRefinementRequest(message);
+            return;
+        }
+
         const lowerMessage = message.toLowerCase();
         
         if (lowerMessage.includes('다시') || lowerMessage.includes('재생성')) {
@@ -1056,13 +1067,110 @@ ${variation.body}
 1. CSV 파일 업로드 (회사명, 이메일 등 포함)
 2. "메일 문안 생성하기" 버튼 클릭
 3. 생성된 문안 중 마음에 드는 것 선택
-4. "복사" 버튼으로 클립보드에 복사
+4. "개선 요청" 버튼 클릭 후 위 텍스트박스에 요청사항 입력
+5. "복사" 버튼으로 클립보드에 복사
 
 추가 질문이 있으시면 언제든 말씀해주세요!
             `);
         } else {
             this.addBotMessage('죄송합니다. 아직 해당 요청을 처리할 수 없습니다. "도움말"을 입력하시면 사용 방법을 안내해드립니다.');
         }
+    }
+
+    async processRefinementRequest(refinementRequest) {
+        if (!refinementRequest.trim()) {
+            this.addBotMessage('개선 요청사항을 입력해주세요.');
+            return;
+        }
+
+        this.addBotMessage(`🔄 "${refinementRequest}" 요청에 따라 이메일 문안을 개선하고 있습니다...`);
+        this.showLoading(true);
+        
+        try {
+            // 현재 이메일 내용 가져오기
+            const { companyIndex, variationIndex } = this.currentRefinementTarget;
+            const templateElement = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
+            const currentContent = templateElement ? templateElement.value : '';
+            
+            // 백엔드 API로 개선 요청
+            const response = await fetch('http://localhost:5001/api/refine-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    current_email: currentContent,
+                    refinement_request: refinementRequest
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`API 오류: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // 개선된 내용을 새로운 템플릿으로 표시
+                this.displayRefinedEmail(result.refined_email, refinementRequest);
+                this.addBotMessage('✅ 이메일 문안 개선이 완료되었습니다!');
+            } else {
+                throw new Error(result.error || '개선 요청 처리 실패');
+            }
+            
+        } catch (error) {
+            this.addBotMessage('❌ 이메일 개선 중 오류가 발생했습니다: ' + error.message);
+        } finally {
+            this.showLoading(false);
+            // 개선 모드 종료
+            this.exitRefinementMode();
+        }
+    }
+
+    enterRefinementMode(companyIndex, variationIndex) {
+        this.isRefinementMode = true;
+        this.currentRefinementTarget = { companyIndex, variationIndex };
+        
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        
+        userInput.disabled = false;
+        userInput.placeholder = '개선 요청사항을 입력하세요 (예: "더 친근하게", "기술적 내용 추가", "짧게 요약")';
+        userInput.focus();
+        sendBtn.disabled = false;
+        
+        this.addBotMessage('💡 위 텍스트박스에 개선 요청사항을 입력하고 전송 버튼을 눌러주세요!');
+    }
+
+    exitRefinementMode() {
+        this.isRefinementMode = false;
+        this.currentRefinementTarget = null;
+        
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        
+        userInput.value = '';
+        userInput.placeholder = '추가 요청사항이나 질문을 입력하세요...';
+        
+        // 이메일 생성이 완료되었으면 계속 활성화 유지
+        if (this.uploadedData.length > 0) {
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+        } else {
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+        }
+    }
+
+    enableUserInput() {
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        
+        userInput.disabled = false;
+        sendBtn.disabled = false;
+        userInput.placeholder = '추가 요청사항이나 질문을 입력하세요... (개선 요청은 각 메일의 "개선 요청" 버튼 클릭)';
+        
+        this.addBotMessage('💡 이제 추가 질문이나 요청사항을 위 텍스트박스에 입력할 수 있습니다!');
     }
 
     clearChat() {
@@ -1122,50 +1230,8 @@ async function refineEmailCopy(companyIndex, variationIndex) {
     const chatbot = window.emailChatbot;
     if (!chatbot) return;
     
-    // 사용자에게 개선 요청사항 입력받기
-    const refinementRequest = prompt('어떤 부분을 개선하고 싶으신가요?\n예: "더 친근하게", "기술적 내용 추가", "짧게 요약" 등');
-    
-    if (!refinementRequest) return;
-    
-    chatbot.addBotMessage(`🔄 "${refinementRequest}" 요청에 따라 이메일 문안을 개선하고 있습니다...`);
-    chatbot.showLoading(true);
-    
-    try {
-        // 현재 이메일 내용 가져오기
-        const templateElement = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
-        const currentContent = templateElement ? templateElement.value : '';
-        
-        // 백엔드 API로 개선 요청
-        const response = await fetch('http://localhost:5001/api/refine-email', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                current_email: currentContent,
-                refinement_request: refinementRequest
-            })
-        });
-        
-        if (!response.ok) {
-            throw new Error(`API 오류: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            // 개선된 내용을 새로운 템플릿으로 표시
-            chatbot.displayRefinedEmail(result.refined_email, refinementRequest);
-            chatbot.addBotMessage('✅ 이메일 문안 개선이 완료되었습니다!');
-        } else {
-            throw new Error(result.error || '개선 요청 처리 실패');
-        }
-        
-    } catch (error) {
-        chatbot.addBotMessage('❌ 이메일 개선 중 오류가 발생했습니다: ' + error.message);
-    } finally {
-        chatbot.showLoading(false);
-    }
+    // 개선 모드로 전환
+    chatbot.enterRefinementMode(companyIndex, variationIndex);
 }
 
 // 텍스트 복사 함수 (개선된 버전)
