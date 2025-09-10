@@ -163,6 +163,47 @@ class CompanyResearcher:
             "Content-Type": "application/json"
         }
     
+    def build_enriched_search_query(self, company_name, additional_info):
+        """기존 입력 정보를 활용해 더 정확한 검색 쿼리 생성"""
+        query_parts = [company_name]
+        
+        if additional_info:
+            # 사업자등록번호가 있으면 검색에 포함
+            business_number = (additional_info.get('사업자번호') or 
+                             additional_info.get('사업자등록번호'))
+            if business_number:
+                query_parts.append(f'사업자번호:{business_number}')
+            
+            # 대표자명이 있으면 검색에 포함
+            ceo_name = (additional_info.get('대표자명') or
+                       additional_info.get('대표자') or
+                       additional_info.get('CEO명'))
+            if ceo_name:
+                query_parts.append(f'대표:{ceo_name}')
+            
+            # 홈페이지 도메인이 있으면 site: 검색으로 포함
+            website_url = (additional_info.get('홈페이지링크') or
+                         additional_info.get('대표홈페이지') or
+                         additional_info.get('웹사이트'))
+            if website_url:
+                # URL에서 도메인만 추출
+                import re
+                domain_match = re.search(r'https?://(?:www\.)?([^/]+)', website_url)
+                if domain_match:
+                    domain = domain_match.group(1)
+                    query_parts.append(f'site:{domain}')
+            
+            # 업종 정보가 있으면 포함
+            if additional_info.get('업종'):
+                query_parts.append(additional_info.get('업종'))
+            
+            # 주요 서비스/제품 정보가 있으면 포함
+            for key in ['서비스', '제품', '주요사업']:
+                if additional_info.get(key):
+                    query_parts.append(additional_info.get(key))
+        
+        return ' '.join(query_parts)
+    
     def research_company(self, company_name, website=None, additional_info=None):
         """회사별 맞춤형 Pain Point 발굴을 위한 상세 조사 (CSV 데이터 활용 강화)"""
         try:
@@ -171,30 +212,64 @@ class CompanyResearcher:
             if website:
                 search_context += f"\n홈페이지: {website}"
             
+            # 기존 입력된 정보들을 검색에 활용할 수 있도록 확장
+            search_keywords = [company_name]  # 기본 검색 키워드
+            
             if additional_info:
-                if additional_info.get('사업자번호'):
-                    search_context += f"\n사업자번호: {additional_info.get('사업자번호')}"
+                # 사업자등록번호 (사업자번호 또는 사업자등록번호 컬럼 모두 체크)
+                business_number = (additional_info.get('사업자번호') or 
+                                 additional_info.get('사업자등록번호'))
+                if business_number:
+                    search_context += f"\n사업자번호: {business_number}"
+                    search_keywords.append(business_number)
+                
+                # 대표자명 정보 활용
+                ceo_name = (additional_info.get('대표자명') or
+                           additional_info.get('대표자') or
+                           additional_info.get('CEO명'))
+                if ceo_name:
+                    search_context += f"\n대표자명: {ceo_name}"
+                    search_keywords.append(f"{company_name} {ceo_name}")
+                
+                # 홈페이지링크 추가 검증
+                website_url = (additional_info.get('홈페이지링크') or
+                             additional_info.get('대표홈페이지') or
+                             additional_info.get('웹사이트'))
+                if website_url and not website:
+                    website = website_url
+                    search_context += f"\n홈페이지: {website_url}"
+                
+                # 기존 정보들
                 if additional_info.get('업종'):
                     search_context += f"\n업종: {additional_info.get('업종')}"
                 if additional_info.get('세일즈포인트'):
                     search_context += f"\n주요 세일즈 포인트: {additional_info.get('세일즈포인트')}"
                 if additional_info.get('규모'):
                     search_context += f"\n회사 규모: {additional_info.get('규모')}"
+                
+                # 추가 정보들도 검색에 활용
+                for key in ['업종', '분야', '서비스', '제품', '비즈니스모델']:
+                    if additional_info.get(key):
+                        search_keywords.append(f"{company_name} {additional_info.get(key)}")
+            
+            # 검색 키워드를 로그에 출력
+            logger.info(f"{company_name} 검색에 사용할 키워드들: {search_keywords}")
 
             # 웹사이트 정보를 인스턴스 변수로 저장 (웹 스크래핑용)
             if website:
                 self.company_website = website
             
-            # 다중 검색 엔진을 통한 최신 뉴스 수집
+            # 다중 검색 엔진을 통한 최신 뉴스 수집 (enriched query 활용)
             logger.info(f"{company_name} 다중 검색 엔진 뉴스 수집 시작")
-            news_results = self.search_company_news(company_name)
+            enriched_query = self.build_enriched_search_query(company_name, additional_info)
+            news_results = self.search_company_news_with_query(enriched_query, company_name)
             if news_results:
                 search_context += f"\n\n### 다중 검색 엔진 뉴스 결과:\n{news_results}"
                 logger.info(f"{company_name} 뉴스 수집 완료")
             
-            # MCP 웹 검색을 통한 정보 보강 (항상 수행)
+            # MCP 웹 검색을 통한 정보 보강 (항상 수행) - enriched query 활용
             logger.info(f"{company_name} MCP 정보 수집 시작")
-            enhanced_info = self.enhance_company_info_with_mcp(company_name, website, additional_info)
+            enhanced_info = self.enhance_company_info_with_mcp_enhanced(company_name, website, additional_info, [enriched_query])
             
             # 검색 컨텍스트에 MCP로 수집한 정보 추가
             if enhanced_info:
@@ -203,10 +278,19 @@ class CompanyResearcher:
             else:
                 logger.warning(f"{company_name} MCP 정보 수집 실패 - 기본 검색으로 진행")
             
-            # 개선된 프롬프트 - 다중 검색 엔진 정보를 종합한 분석 요청
+            # 개선된 프롬프트 - 기존 입력 정보를 활용한 정확한 검색 쿼리 생성
+            search_query = self.build_enriched_search_query(company_name, additional_info)
+            
             prompt = f"""
 다음 회사에 대한 포괄적인 정보를 조사하고 분석해주세요.
-이미 수집된 다중 검색 엔진(Google, DuckDuckGo, 웹 스크래핑)의 최신 뉴스와 정보를 참고하여 더욱 정확하고 시의성 있는 분석을 제공해주세요:
+
+*** 중요: 아래 정확한 검색 쿼리를 우선적으로 활용하여 검색하세요 ***
+검색 쿼리: {search_query}
+
+이 검색 쿼리에는 사업자등록번호, 대표자명, 공식 홈페이지 등 정확한 식별 정보가 포함되어 있습니다. 
+반드시 이 정보를 활용하여 정확한 회사를 식별하고 최신 정보를 수집해주세요.
+
+추가로 이미 수집된 다중 검색 엔진(Google, DuckDuckGo, 웹 스크래핑)의 최신 뉴스와 정보도 참고하세요:
 
 {search_context}
 
@@ -507,13 +591,16 @@ class CompanyResearcher:
         
         return greeting
     
-    def enhance_company_info_with_mcp(self, company_name, website, additional_info):
-        """MCP 도구를 활용한 회사 정보 보강 및 검증 (대폭 강화)"""
+    def enhance_company_info_with_mcp_enhanced(self, company_name, website, additional_info, search_keywords=None):
+        """확장된 키워드를 활용한 MCP 도구 정보 보강 및 검증 (대폭 강화)"""
         try:
             enhanced_data = []
             logger.info(f"{company_name} MCP 정보 보강 시작")
             
-            # 1. 다중 웹 검색 전략
+            if not search_keywords:
+                search_keywords = [company_name]
+            
+            # 1. 다중 웹 검색 전략 (확장된 키워드 활용)
             web_searches = []
             
             # 기본 웹사이트 검색
@@ -522,30 +609,45 @@ class CompanyResearcher:
                 if web_info:
                     web_searches.append(f"공식 웹사이트: {web_info}")
             
-            # 네이버 지식백과/뉴스 검색 시뮬레이션
-            naver_info = self.search_naver_sources(company_name)
-            if naver_info:
-                web_searches.append(f"네이버 정보: {naver_info}")
+            # 확장된 키워드로 네이버/구글 검색 (최대 2개 키워드)
+            primary_search_keywords = search_keywords[:2]
             
-            # 구글 검색 시뮬레이션  
-            google_info = self.search_google_sources(company_name)
-            if google_info:
-                web_searches.append(f"구글 검색: {google_info}")
+            for keyword in primary_search_keywords:
+                # 네이버 지식백과/뉴스 검색 시뮬레이션
+                naver_info = self.search_naver_sources(keyword)
+                if naver_info:
+                    web_searches.append(f"네이버 검색 ({keyword}): {naver_info}")
+                
+                # 구글 검색 시뮬레이션  
+                google_info = self.search_google_sources(keyword)
+                if google_info:
+                    web_searches.append(f"구글 검색 ({keyword}): {google_info}")
             
             if web_searches:
                 enhanced_data.append("\n".join(web_searches))
             
-            # 2. CSV 정보 기반 심화 검색
+            # 2. CSV 정보 기반 심화 검색 (확장됨)
             if additional_info:
                 csv_insights = []
                 
-                # 사업자번호 -> 업체 신뢰도 검증
-                if additional_info.get('사업자번호'):
+                # 사업자번호 -> 업체 신뢰도 검증 (사업자등록번호도 포함)
+                business_number = (additional_info.get('사업자번호') or 
+                                 additional_info.get('사업자등록번호'))
+                if business_number:
                     business_validation = self.deep_business_validation(
-                        company_name, additional_info.get('사업자번호')
+                        company_name, business_number
                     )
                     if business_validation:
                         csv_insights.append(f"사업자 심화 검증: {business_validation}")
+                
+                # 대표자명 정보 활용
+                ceo_name = (additional_info.get('대표자명') or
+                           additional_info.get('대표자') or
+                           additional_info.get('CEO명'))
+                if ceo_name:
+                    ceo_insights = self.analyze_ceo_profile(company_name, ceo_name)
+                    if ceo_insights:
+                        csv_insights.append(f"대표자 프로필 분석: {ceo_insights}")
                 
                 # 업종 -> 시장 트렌드 및 Pain Point
                 if additional_info.get('업종'):
@@ -587,6 +689,10 @@ class CompanyResearcher:
             logger.error(f"MCP 정보 보강 중 오류: {e}")
             return None
     
+    def enhance_company_info_with_mcp(self, company_name, website, additional_info):
+        """기존 호환성을 위한 함수 - 새로운 확장된 함수 호출"""
+        return self.enhance_company_info_with_mcp_enhanced(company_name, website, additional_info)
+    
     def search_naver_sources(self, company_name):
         """네이버 소스 검색 (지식백과, 뉴스 등)"""
         try:
@@ -612,6 +718,14 @@ class CompanyResearcher:
             if business_number and len(business_number.replace('-', '')) == 10:
                 return f"{company_name}({business_number})의 사업자 등록 현황, 업종 코드, 설립일자 등 공식 정보 확인"
             return f"{company_name}의 사업자번호 검증 필요"
+        except Exception as e:
+            return None
+    
+    def analyze_ceo_profile(self, company_name, ceo_name):
+        """대표자 프로필 분석"""
+        try:
+            # 실제로는 네이버 인물검색, LinkedIn, 기업 공시 등을 활용
+            return f"{company_name} {ceo_name} 대표의 경력 및 비즈니스 철학 분석을 통한 의사결정 스타일 파악"
         except Exception as e:
             return None
     
@@ -707,49 +821,51 @@ class CompanyResearcher:
             logger.error(f"웹사이트 정보 수집 오류: {e}")
             return None
     
-    def search_company_news(self, company_name):
-        """최신 뉴스 검색 (다중 검색 엔진 활용 - 품질 개선)"""
+    def search_company_news_enhanced(self, company_name, search_keywords=None):
+        """확장된 키워드를 활용한 최신 뉴스 검색 (다중 검색 엔진 활용 - 품질 개선)"""
         import concurrent.futures
-        import threading
         import time
+        
+        if not search_keywords:
+            search_keywords = [company_name]
         
         all_results = []
         search_start_time = time.time()
         
+        # 각 검색 키워드로 병렬 검색 (최대 3개 키워드)
+        primary_keywords = search_keywords[:3]  # 성능을 위해 최대 3개로 제한
+        
         # 병렬로 검색 실행 (성능 향상)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            # 검색 작업들을 병렬 실행
-            future_google = executor.submit(self.search_with_google, company_name)
-            future_duckduckgo = executor.submit(self.search_with_duckduckgo, company_name)
-            future_web = executor.submit(self.search_with_web_scraping, company_name)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(primary_keywords) * 2) as executor:
+            futures = []
             
-            # 결과 수집 (최대 15초 대기)
-            try:
-                google_result = future_google.result(timeout=10)
-                if google_result and len(google_result.strip()) > 10:
-                    all_results.append(f"📰 Google 뉴스: {google_result}")
-            except concurrent.futures.TimeoutError:
-                logger.warning(f"{company_name} Google 검색 타임아웃")
-            except Exception as e:
-                logger.warning(f"{company_name} Google 검색 오류: {e}")
+            # 각 키워드별로 Google과 DuckDuckGo 검색 실행
+            for keyword in primary_keywords:
+                futures.append(executor.submit(self.search_with_google, keyword))
+                futures.append(executor.submit(self.search_with_duckduckgo, keyword))
             
-            try:
-                duckduckgo_result = future_duckduckgo.result(timeout=8)
-                if duckduckgo_result and len(duckduckgo_result.strip()) > 10:
-                    all_results.append(f"🦆 DuckDuckGo: {duckduckgo_result}")
-            except concurrent.futures.TimeoutError:
-                logger.warning(f"{company_name} DuckDuckGo 검색 타임아웃")
-            except Exception as e:
-                logger.warning(f"{company_name} DuckDuckGo 검색 오류: {e}")
+            # 웹 스크래핑은 회사명으로만 실행
+            futures.append(executor.submit(self.search_with_web_scraping, company_name))
             
-            try:
-                web_result = future_web.result(timeout=12)
-                if web_result and len(web_result.strip()) > 10:
-                    all_results.append(f"🌐 웹 검색: {web_result}")
-            except concurrent.futures.TimeoutError:
-                logger.warning(f"{company_name} 웹 스크래핑 타임아웃")
-            except Exception as e:
-                logger.warning(f"{company_name} 웹 스크래핑 오류: {e}")
+            # 모든 future 결과 수집
+            for i, future in enumerate(futures):
+                try:
+                    result = future.result(timeout=10)
+                    if result and len(result.strip()) > 10:
+                        # 결과 소스 구분 (Google/DuckDuckGo/Web)
+                        if i < len(primary_keywords) * 2:  # Google + DuckDuckGo 결과
+                            keyword_idx = i // 2
+                            search_engine = "Google" if i % 2 == 0 else "DuckDuckGo"
+                            keyword = primary_keywords[keyword_idx]
+                            source = f"📰 {search_engine} ({keyword})"
+                        else:  # Web scraping 결과
+                            source = f"🌐 웹 검색 ({company_name})"
+                        
+                        all_results.append(f"{source}: {result}")
+                except concurrent.futures.TimeoutError:
+                    logger.warning(f"검색 타임아웃 (인덱스 {i})")
+                except Exception as e:
+                    logger.warning(f"검색 오류 (인덱스 {i}): {e}")
         
         search_elapsed = time.time() - search_start_time
         logger.info(f"{company_name} 다중 검색 완료: {len(all_results)}개 결과, {search_elapsed:.2f}초 소요")
@@ -761,6 +877,52 @@ class CompanyResearcher:
         
         # 검색 결과가 없는 경우 기본 정보 제공
         return self.generate_fallback_news_info(company_name)
+    
+    def search_company_news_with_query(self, search_query, company_name):
+        """enriched query를 사용한 뉴스 검색"""
+        import concurrent.futures
+        import time
+        
+        all_results = []
+        search_start_time = time.time()
+        
+        logger.info(f"Enriched 검색 쿼리: {search_query}")
+        
+        # 병렬로 검색 실행
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            # enriched query로 검색
+            future_google = executor.submit(self.search_with_google_query, search_query)
+            future_duckduckgo = executor.submit(self.search_with_duckduckgo_query, search_query)
+            future_web = executor.submit(self.search_with_web_scraping, company_name)  # 웹 스크래핑은 회사명으로
+            
+            futures = [future_google, future_duckduckgo, future_web]
+            sources = ["Google", "DuckDuckGo", "웹 검색"]
+            
+            # 모든 future 결과 수집
+            for i, (future, source) in enumerate(zip(futures, sources)):
+                try:
+                    result = future.result(timeout=10)
+                    if result and len(result.strip()) > 10:
+                        all_results.append(f"📰 {source}: {result}")
+                except concurrent.futures.TimeoutError:
+                    logger.warning(f"{source} 검색 타임아웃")
+                except Exception as e:
+                    logger.warning(f"{source} 검색 오류: {e}")
+        
+        search_elapsed = time.time() - search_start_time
+        logger.info(f"{company_name} enriched 검색 완료: {len(all_results)}개 결과, {search_elapsed:.2f}초 소요")
+        
+        if all_results:
+            # 결과 품질 점검 및 중복 제거
+            quality_results = self.filter_and_enhance_results(all_results, company_name)
+            return quality_results
+        
+        # 검색 결과가 없는 경우 기본 정보 제공
+        return self.generate_fallback_news_info(company_name)
+    
+    def search_company_news(self, company_name):
+        """기존 호환성을 위한 함수 - 새로운 확장된 함수 호출"""
+        return self.search_company_news_enhanced(company_name)
     
     def search_with_google(self, company_name):
         """Google Search API 활용"""
@@ -810,6 +972,52 @@ class CompanyResearcher:
             logger.warning(f"Google Search 오류: {e}")
             return None
     
+    def search_with_google_query(self, search_query):
+        """enriched query를 사용한 Google 검색"""
+        try:
+            import requests
+            from datetime import datetime, timedelta
+            
+            # Google Custom Search API 키가 있는 경우 사용
+            google_api_key = os.getenv('GOOGLE_SEARCH_API_KEY')
+            google_cse_id = os.getenv('GOOGLE_CSE_ID')
+            
+            if google_api_key and google_cse_id:
+                # enriched query 사용
+                recent_date = (datetime.now() - timedelta(days=180)).strftime('%Y-%m-%d')
+                enhanced_query = f"{search_query} 뉴스 after:{recent_date}"
+                
+                url = "https://www.googleapis.com/customsearch/v1"
+                params = {
+                    'key': google_api_key,
+                    'cx': google_cse_id,
+                    'q': enhanced_query,
+                    'num': 5,
+                    'sort': 'date',
+                    'tbm': 'nws'  # 뉴스 검색
+                }
+                
+                response = requests.get(url, params=params, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    items = data.get('items', [])
+                    
+                    if items:
+                        news_summaries = []
+                        for item in items[:3]:
+                            title = item.get('title', '')
+                            snippet = item.get('snippet', '')
+                            news_summaries.append(f"• {title} - {snippet[:100]}...")
+                        
+                        return "\n".join(news_summaries)
+            
+            # API 키가 없는 경우 enriched query를 활용한 시뮬레이션
+            return f"정확한 검색 쿼리 '{search_query}'를 활용한 Google 검색 결과: 더 구체적이고 정확한 정보 확인"
+            
+        except Exception as e:
+            logger.warning(f"Google Search 오류: {e}")
+            return None
+    
     def search_with_duckduckgo(self, company_name):
         """DuckDuckGo 검색 활용"""
         try:
@@ -842,6 +1050,43 @@ class CompanyResearcher:
                         return "; ".join(topic_texts)
             
             return f"{company_name}에 대한 DuckDuckGo 검색 완료"
+            
+        except Exception as e:
+            logger.warning(f"DuckDuckGo 검색 오류: {e}")
+            return None
+    
+    def search_with_duckduckgo_query(self, search_query):
+        """enriched query를 사용한 DuckDuckGo 검색"""
+        try:
+            import requests
+            import urllib.parse
+            
+            # enriched query 사용
+            encoded_query = urllib.parse.quote(search_query)
+            
+            # DuckDuckGo Instant Answer API
+            url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
+            response = requests.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # 추상 정보 추출
+                abstract = data.get('Abstract', '')
+                if abstract:
+                    return f"검색 결과: {abstract}"
+                
+                # 관련 주제 추출
+                related_topics = data.get('RelatedTopics', [])
+                if related_topics:
+                    topic_texts = []
+                    for topic in related_topics[:3]:
+                        if isinstance(topic, dict) and 'Text' in topic:
+                            topic_texts.append(topic['Text'])
+                    if topic_texts:
+                        return "; ".join(topic_texts)
+            
+            return f"정확한 검색 쿼리 '{search_query}'를 활용한 DuckDuckGo 검색 완료: 더 정밀한 정보 확보"
             
         except Exception as e:
             logger.warning(f"DuckDuckGo 검색 오류: {e}")

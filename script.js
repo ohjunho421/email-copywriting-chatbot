@@ -32,6 +32,21 @@ class EmailCopywritingChatbot {
                 title: '통합 관리',
                 description: '여러 PG사의 결제 내역을 한 페이지에서 통합 관리',
                 industries: ['all']
+            },
+            smartBilling: {
+                title: '스마트빌링 솔루션',
+                description: '국내 구독결제의 한계를 뛰어넘는 완전한 빌링 시스템을 제공하여 Stripe 대안으로 규제 이슈 없이 안정적인 구독 서비스 운영',
+                industries: ['saas']
+            },
+            gameWebStore: {
+                title: '게임 웹상점 구축 서비스',
+                description: '인앱결제 수수료(30%)를 피하고 직접 판매가 가능한 게임 전용 웹상점을 PG 추천부터 구축까지 원스톱으로 제공',
+                industries: ['gaming']
+            },
+            subscriptionOptimization: {
+                title: '구독 최적화',
+                description: '정기결제 실패율 최소화, 던닝 관리, 구독 변경/취소 자동화를 통한 구독 비즈니스 최적화',
+                industries: ['saas']
             }
         };
         
@@ -50,15 +65,25 @@ class EmailCopywritingChatbot {
             ],
             saas: [
                 '정기결제 관리의 복잡성',
-                '글로벌 결제 지원',
-                '구독 모델 최적화',
-                '결제 전환율 개선'
+                '국내 PG의 구독결제 한계',
+                'Stripe 사용 시 규제 및 환전 이슈',
+                '스마트빌링 시스템 구축 어려움',
+                '구독 취소/환불 관리 복잡성',
+                '글로벌 결제 지원 및 다화폐 처리'
             ],
             startup: [
                 '제한된 개발 리소스',
                 '빠른 MVP 출시 필요',
                 '비용 효율성',
                 '확장성 확보'
+            ],
+            gaming: [
+                '높은 인앱결제 수수료 부담(30%)',
+                '웹상점 구축 및 운영의 복잡성',
+                'PG사별 게임 특화 서비스 부족',
+                '게임 내 결제 전환율 개선',
+                '다양한 결제수단 지원 필요',
+                '실시간 결제 모니터링 및 관리'
             ],
             default: [
                 '결제 시스템 구축의 복잡성',
@@ -313,6 +338,9 @@ class EmailCopywritingChatbot {
             industry = 'fintech';
         } else if (serviceTypeLower.includes('saas') || serviceTypeLower.includes('구독')) {
             industry = 'saas';
+        } else if (serviceTypeLower.includes('게임') || serviceTypeLower.includes('gaming') || 
+                   serviceTypeLower.includes('모바일게임') || serviceTypeLower.includes('온라인게임')) {
+            industry = 'gaming';
         } else if (serviceTypeLower.includes('스타트업')) {
             industry = 'startup';
         }
@@ -758,7 +786,9 @@ ${variation.body}
                         for (let i = 0; i < 4; i++) {
                             if (variations[i]) {
                                 row.push(`"${String(variations[i].subject).replace(/"/g, '""')}"`);
-                                row.push(`"${String(variations[i].body).replace(/"/g, '""')}"`);
+                                // HTML을 텍스트로 변환하여 저장
+                                const plainTextBody = this.htmlToPlainText(variations[i].body);
+                                row.push(`"${String(plainTextBody).replace(/"/g, '""')}"`);
                             } else {
                                 row.push('""'); // 빈 제목
                                 row.push('""'); // 빈 본문
@@ -828,6 +858,29 @@ ${variation.body}
         }
 
         return variations;
+    }
+
+    htmlToPlainText(html) {
+        if (!html) return '';
+        
+        // HTML 태그 제거 및 특수 문자 변환
+        let text = html
+            .replace(/<br\s*\/?>/gi, '\n')           // <br> 태그를 줄바꿈으로
+            .replace(/<\/p>/gi, '\n\n')              // </p> 태그를 두 줄바꿈으로
+            .replace(/<p[^>]*>/gi, '')               // <p> 태그 제거
+            .replace(/<\/div>/gi, '\n')              // </div> 태그를 줄바꿈으로
+            .replace(/<div[^>]*>/gi, '')             // <div> 태그 제거
+            .replace(/<[^>]*>/g, '')                 // 모든 HTML 태그 제거
+            .replace(/&nbsp;/g, ' ')                 // &nbsp;를 공백으로
+            .replace(/&lt;/g, '<')                   // &lt;를 <로
+            .replace(/&gt;/g, '>')                   // &gt;를 >로
+            .replace(/&amp;/g, '&')                  // &amp;를 &로
+            .replace(/&quot;/g, '"')                 // &quot;를 "로
+            .replace(/&#39;/g, "'")                  // &#39;를 '로
+            .replace(/\n\s*\n/g, '\n\n')            // 연속된 빈 줄을 두 줄로 제한
+            .trim();                                 // 앞뒤 공백 제거
+            
+        return text;
     }
 
     downloadFile(content, fileName, mimeType) {
@@ -980,6 +1033,20 @@ ${variation.body}
                 product: '국내커머스채널 재무자동화 솔루션',
                 subject: `${companyName}의 재무팀, 얼마나 효율적인가요?`,
                 body: `${personalizedGreeting}\n\n${companyName}의 재무팀이 네이버, 카카오, 카페24 등 채널별 데이터를 엑셀로 매번 매핑하는 데 얼마나 많은 시간을 쓰고 있나요? 구매확정내역과 정산내역이 매칭이 안 되어 고생하시지 않나요?\n\nPortOne의 재무자동화 솔루션으로 이 모든 문제를 해결할 수 있습니다. 90% 이상 시간 단축과 100% 데이터 정합성 보장이 가능합니다.\n\n15분만 시간 내주실 수 있나요?\n\n감사합니다.\nPortOne 팀`,
+                personalizationScore: 9.0
+            },
+            {
+                type: 'SaaS 스마트빌링 - 전문적 톤',
+                product: '스마트빌링 솔루션',
+                subject: `${companyName}의 구독 결제 시스템 혁신 제안`,
+                body: `${personalizedGreeting}\n\n귀사의 SaaS 비즈니스에서 구독 결제 시스템으로 고민이 많으실 것 같습니다.\n\n현재 국내 PG의 구독 결제 한계와 Stripe 사용 시 발생하는 규제/환전 이슈로 어려움을 겪고 계시지 않으신가요?\n\nPortOne의 스마트빌링 솔루션으로:\n✅ 국내 구독 결제의 모든 한계 해결\n✅ Stripe 대안으로 규제 이슈 완전 회피\n✅ 던닝 관리 및 실패율 최소화 자동화\n✅ 구독 변경/취소 프로세스 완전 자동화\n\n안정적인 구독 비즈니스 운영을 위한 맞춤 컨설팅을 제공해드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
+                personalizationScore: 8.5
+            },
+            {
+                type: '게임 웹상점 - 전문적 톤',
+                product: '게임 웹상점 구축 서비스',
+                subject: `${companyName}의 인앱결제 수수료 절감 솔루션`,
+                body: `${personalizedGreeting}\n\n게임 업계의 30% 인앱결제 수수료 부담으로 고민이 많으실 것 같습니다.\n\n최근 많은 게임사들이 웹상점 구축을 통해 직접 판매를 고려하고 있지만, 구축과 운영의 복잡성 때문에 망설이고 계시지 않으신가요?\n\nPortOne의 게임 웹상점 구축 서비스로:\n🎮 게임 특화 PG 추천부터 구축까지 원스톱 제공\n💰 인앱결제 수수료 30% → 2-3%로 대폭 절감\n⚡ 실시간 결제 모니터링 및 게임 내 연동 지원\n🛡️ 게임 특성에 최적화된 보안 및 fraud 방지\n\n${companyName}의 매출 증대를 위한 웹상점 전략을 제안해드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 9.0
             }
         ];
