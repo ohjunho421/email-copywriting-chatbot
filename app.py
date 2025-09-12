@@ -205,7 +205,7 @@ class CompanyResearcher:
         return ' '.join(query_parts)
     
     def research_company(self, company_name, website=None, additional_info=None):
-        """회사별 맞춤형 Pain Point 발굴을 위한 상세 조사 (CSV 데이터 활용 강화)"""
+        """회사별 맞춤형 Pain Point 발굴을 위한 상세 조사"""
         try:
             # CSV에서 제공된 추가 정보 활용
             search_context = f"회사명: {company_name}"
@@ -444,34 +444,46 @@ class CompanyResearcher:
             content_lower = research_content.lower()
             specific_points = []
             
-            # 1. 업종/비즈니스 모델 기반 Pain Point
+            # 1. Perplexity 조사 내용에서 실제 니즈 발굴
+            # 성장/확장 관련 니즈
+            if any(word in content_lower for word in ['성장', '확장', '투자', '매출증가', 'growth', 'expansion', 'investment']):
+                if any(word in content_lower for word in ['커머스', '온라인', '쇼핑', 'ecommerce']):
+                    specific_points.append(f"{company_name}의 급성장에 따른 다중 채널 결제 데이터 통합 필요성")
+                elif any(word in content_lower for word in ['게임', 'game', '모바일']):
+                    specific_points.append(f"{company_name}의 사용자 증가에 따른 결제 인프라 확장성 이슈")
+                else:
+                    specific_points.append(f"{company_name}의 비즈니스 확장에 따른 결제 시스템 복잡성 증가")
+            
+            # 글로벌/해외진출 관련 니즈
+            if any(word in content_lower for word in ['글로벌', '해외', '수출', '진출', 'global', 'overseas', 'international']):
+                specific_points.append(f"{company_name}의 해외 진출 시 다국가 결제 수단 및 정산 복잡성")
+            
+            # 기술/개발 관련 니즈  
+            if any(word in content_lower for word in ['개발', '기술', '시스템', 'tech', 'development', 'platform']):
+                specific_points.append(f"{company_name}의 결제 시스템 개발 리소스 부담 및 전문성 부족")
+            
+            # 업종별 특화 니즈
             if any(word in content_lower for word in ['커머스', '온라인', '쇼핑', 'ecommerce', 'online']):
-                specific_points.append(f"{company_name}의 다중 커머스 채널 데이터 통합 문제")
-                specific_points.append(f"주문-결제-정산 데이터 매핑 오류로 인한 월말 마감 지연")
-            
+                specific_points.append(f"{company_name}의 다중 커머스 채널 데이터 통합 및 실시간 정산 니즈")
             elif any(word in content_lower for word in ['제조', '생산', '공장', 'manufacturing']):
-                specific_points.append(f"{company_name}의 B2B 결제 시스템 복잡한 정산 구조")
-                specific_points.append(f"대량 거래 처리 시 시스템 부하 및 지연 문제")
+                specific_points.append(f"{company_name}의 B2B 대량 거래 처리 및 복잡한 정산 구조 개선 필요")
+            elif any(word in content_lower for word in ['게임', '모바일게임', '앱게임', 'game', 'mobile']):
+                # 게임업계는 수수료가 실제 핵심 이슈
+                specific_points.append(f"{company_name}의 앱스토어 인앱결제 수수료 30% 부담 해결 필요성")
+                specific_points.append(f"D2C 웹상점 구축을 통한 수수료 절감 및 직접 고객 관계 구축")
             
-            elif any(word in content_lower for word in ['테크', '소프트웨어', '스타트업', 'tech', 'software']):
-                specific_points.append(f"{company_name}의 결제 시스템 개발에 6개월+ 소요되는 리소스 문제")
-                specific_points.append(f"빠른 성장에 따른 결제 인프라 확장성 한계")
+            # 2. 실제 비즈니스 상황에서 발굴되는 니즈
+            # 자금 관련 이슈
+            if any(word in content_lower for word in ['자금', '현금흐름', '정산', '수익성', 'cash', 'revenue', 'profit']):
+                specific_points.append(f"{company_name}의 현금흐름 관리 및 정산 자동화 필요성")
             
-            elif any(word in content_lower for word in ['게임', '모바일게임', '앱게임', 'game', 'mobile game', 'app game', '모바일앱', 'mobile app']):
-                specific_points.append(f"{company_name}의 앱스토어 인앱결제 수수료 30% 부담으로 인한 수익성 압박")
-                specific_points.append(f"D2C 웹상점 구축을 통한 인앱결제 수수료 90% 절약의 필요성")
-                specific_points.append(f"국내 25개 PG사 개별 연동 및 정산 관리의 운영 복잡성")
-                specific_points.append(f"해외 진출 시 글로벌 결제 인프라 구축 부담")
+            # 운영 효율성 이슈
+            if any(word in content_lower for word in ['효율', '자동화', '인력', '업무', 'efficiency', 'automation', 'operation']):
+                specific_points.append(f"{company_name}의 수작업 중심 재무 프로세스 자동화 니즈")
             
-            # 2. 조사 내용에서 구체적 키워드 기반 Pain Point
-            if '성장' in content_lower or 'growth' in content_lower:
-                specific_points.append(f"급속한 성장에 따른 {company_name}의 결제 시스템 병목 현상")
-            
-            if '투자' in content_lower or 'investment' in content_lower:
-                specific_points.append(f"{company_name}의 투자 유치 후 비즈니스 확장에 따른 인프라 부담")
-            
-            if '글로벌' in content_lower or 'global' in content_lower:
-                specific_points.append(f"{company_name}의 글로벌 진출 시 다국가 결제 시스템 연동 복잡성")
+            # 데이터/분석 관련 니즈
+            if any(word in content_lower for word in ['데이터', '분석', '리포트', 'data', 'analytics', 'report']):
+                specific_points.append(f"{company_name}의 실시간 매출 데이터 분석 및 인사이트 도출 필요성")
             
             # 3. 회사별 고유 Pain Point 생성 (차별화 보장)
             unique_points = [
@@ -1953,9 +1965,9 @@ class EmailCopywriter:
 
 **참고 템플릿 1: 직접적 Pain Point 접근**
 "안녕하세요, 회사명 담당자님. 코리아포트원 오준호입니다.
-혹시 대표님께서도 예측 불가능한 결제 시스템 장애, PG사 정책 변화로 인한 수수료 변동문제,
-혹은 해외 시장 진출 시의 결제 문제에 대한 장기적인 대비책을 고민하고 계신가요?
-저희 포트원은 단 하나의 연동으로 여러 PG사 통합 관리, 결제 안정성 강화, 비용 최적화,
+혹시 대표님께서도 현재 사용 중인 PG사의 높은 수수료 부담, 매출 구간 변경으로 인한 수수료 인상,
+그리고 다양한 결제 수단별 최적 PG 선택의 어려움으로 고민하고 계신가요?
+저희 포트원은 단 하나의 연동으로 국내 25개 PG사 수수료 조건 비교 분석, 최적 PG사 견적 제안,
 그리고 글로벌 확장성까지 제공하는 솔루션입니다."
 
 **참고 템플릿 2: 기술 담당자 대상**
@@ -1969,11 +1981,13 @@ class EmailCopywriter:
 만약 새로 합류한 유능한 인재가, 가장 먼저 마주할 업무가 여러 PG사 사이트를 오가며
 엑셀로 정산 내역을 맞추는 단순 반복적인 수작업이라면 어떨까요?
 저희 포트원은 이러한 불필요한 수작업을 약 90% 이상 자동화하여,
-귀한 인재가 회사의 성장에 기여할 수 있도록 핵심 재무 전략 업무에만 집중할 수 있게 돕습니다."
+귀한 인재가 회사의 성장에 기여할 수 있도록 핵심 재무 전략 업무에만 집중할 수 있게 돕습니다.
+실제로 비슷한 규모의 고객사들이 기존 대비 평균 15-30% 수수료를 절감하고 계십니다."
 
 **참고 템플릿 4: 매출 구간 변경 이슈**
 "매출이 10억, 30억을 넘어서며 성장할수록, PG사의 '영중소 구간' 변경으로 불필요한 결제 수수료를 더 내고 계실 수 있습니다.
-포트원은 국내 25개 이상 PG사와의 제휴를 통해, 회사명이 현재보다 더 낮은 수수료를 적용받을 수 있도록 즉시 도와드릴 수 있습니다."
+포트원은 국내 25개 이상 PG사와의 제휴를 통해, 회사명이 현재보다 더 낮은 수수료를 적용받을 수 있도록 즉시 도와드릴 수 있습니다.
+실제로 비슷한 규모의 고객사들이 기존 대비 평균 15-30% 수수료를 절감하고 계십니다."
 
 **참고 템플릿 5: 커머스 재무 자동화**
 "현재 카페24와 같은 호스팅사를 통해 성공적으로 온라인 비즈니스를 운영하고 계시는데
@@ -2399,10 +2413,10 @@ https://www.portone.io
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
                 'body': f'''{personalized_greeting} 코리아포트원 오준호입니다.
 
-혹시 대표님께서도 예측 불가능한 결제 시스템 장애, PG사 정책 변화로 인한 수수료 변동문제,
-혹은 해외 시장 진출 시의 결제 문제에 대한 장기적인 대비책을 고민하고 계신가요?
+혹시 대표님께서도 현재 사용 중인 PG사의 높은 수수료 부담, 매출 구간 변경으로 인한 수수료 인상,
+그리고 다양한 결제 수단별 최적 PG 선택의 어려움으로 고민하고 계신가요?
 
-저희 포트원은 단 하나의 연동으로 여러 PG사 통합 관리, 결제 안정성 강화, 비용 최적화,
+저희 포트원은 단 하나의 연동으로 국내 25개 PG사 수수료 조건 비교 분석, 최적 PG사 견적 제안,
 그리고 글로벌 확장성까지 제공하는 솔루션입니다.
 
 https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브영상 보내드립니다.
@@ -2766,7 +2780,7 @@ def generate_email_with_gemini(company_data, research_data):
 1. **One Payment Infra - 전문적 톤**: 
    - **필수**: 뉴스 내용을 직접 인용. 예: "최근 기사에서 '{company_name}가 XX억원 투자 유치'라고 봤습니다"
    - 구체적 뉴스 → 결제 시스템 확장 필요성 자연스럽게 연결
-   - OPI의 핵심 해결책과 수치 (85% 리소스 절약, 2주 내 구축)
+   - OPI의 핵심 해결책과 수치 (평균 15-30% 수수료 절감, PG사별 견적 비교 제안)
    - **경쟁사가 있다면**: "{competitor_name}도 비슷한 성장 과정에서<br>PortOne으로 결제 인프라를 안정화했습니다"
 
 2. **One Payment Infra - 호기심 유발형**: 
