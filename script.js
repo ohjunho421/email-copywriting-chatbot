@@ -380,7 +380,8 @@ class EmailCopywritingChatbot {
 
     generateEmailVariations(company, profile, recentInfo) {
         const companyName = company['회사명'];
-        const contactName = company['대표자명'] || company['담당자명'] || '담당자';
+        // N열(14번째 열)의 호칭 포함 담당자명을 우선 참조
+        const contactName = company[Object.keys(company)[13]] || company['담당자명'] || company['대표자명'] || '담당자';
         const contactPosition = company['직책'] || company['직급'] || '';
         const email = company['메일주소'] || company['대표이메일'];
         
@@ -649,7 +650,8 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                 } catch (e) {
                     console.error('이메일 파싱 오류:', e);
                     // 완전 실패 시 기본 템플릿 제공
-                    const contactName = result.company['대표자명'] || result.company['담당자명'] || '담당자';
+                    // N열(14번째 열)의 호칭 포함 담당자명을 우선 참조
+                    const contactName = result.company[Object.keys(result.company)[13]] || result.company['담당자명'] || result.company['대표자명'] || '담당자';
                     const contactPosition = result.company['직책'] || result.company['직급'] || '';
                     const personalizedGreeting = this.generatePersonalizedGreeting(contactName, contactPosition, result.company['회사명']);
                     emailVariations = this.createFallbackVariations(result.company['회사명'], personalizedGreeting);
@@ -896,6 +898,84 @@ ${variation.body}
         URL.revokeObjectURL(url);
     }
 
+    // 뉴스 분석 결과 표시
+    displayNewsAnalysisResult(result, request, newsUrl) {
+        const container = document.getElementById('templatesContainer');
+        
+        const newsDiv = document.createElement('div');
+        newsDiv.className = 'company-templates mb-4 border-info';
+        newsDiv.style.borderLeft = '4px solid #17a2b8';
+        
+        const timestamp = new Date().toLocaleTimeString('ko-KR');
+        const newsId = `news_${Date.now()}`;
+        
+        // 뉴스 URL에서 도메인 추출
+        let newsDomain = '';
+        try {
+            const url = new URL(newsUrl);
+            newsDomain = url.hostname;
+        } catch (e) {
+            newsDomain = newsUrl;
+        }
+        
+        newsDiv.innerHTML = `
+            <div class="company-info bg-light">
+                <h5><i class="fas fa-newspaper text-info"></i> 뉴스 기사 기반 메일 문안</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <small><strong>분석 기사:</strong> <a href="${newsUrl}" target="_blank">${newsDomain}</a></small><br>
+                        <small><strong>요청 내용:</strong> ${request.replace(newsUrl, '').trim() || '뉴스 기반 메일 생성'}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <small><strong>생성 시간:</strong> ${timestamp}</small><br>
+                        <small><strong>분석 방식:</strong> AI 기사 분석 + 페인 포인트 도출</small>
+                    </div>
+                </div>
+                ${result.article_summary ? `
+                    <div class="mt-2">
+                        <small><strong>📋 기사 요약:</strong></small>
+                        <div class="small text-muted" style="max-height: 100px; overflow-y: auto; border: 1px solid #e9ecef; padding: 8px; border-radius: 3px; background-color: #f8f9fa;">
+                            ${result.article_summary}
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+            
+            <div class="row">
+                <div class="col-12">
+                    <div class="email-template border-info">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">
+                                <i class="fas fa-newspaper text-info"></i> 뉴스 기반 AI 생성 문안
+                            </h6>
+                            <span class="badge bg-info">뉴스 분석</span>
+                        </div>
+                        <div class="mb-3">
+                            <div style="white-space: pre-line; font-size: 0.9em; max-height: 400px; overflow-y: auto; border: 1px solid #17a2b8; padding: 15px; border-radius: 5px; background-color: #f0f9ff;">
+                                ${result.analyzed_email}
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-sm btn-info" onclick="copyNewsEmailToClipboard('${newsId}')">
+                                <i class="fas fa-copy"></i> 뉴스 기반 문안 복사
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" onclick="window.open('${newsUrl}', '_blank')">
+                                <i class="fas fa-external-link-alt"></i> 원본 기사 보기
+                            </button>
+                        </div>
+                        <textarea id="${newsId}" style="position: absolute; left: -9999px;">${result.analyzed_email}</textarea>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 맨 위에 추가
+        container.insertBefore(newsDiv, container.firstChild);
+        
+        // 스크롤을 맨 위로 이동
+        newsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
     // 개선된 이메일 표시
     displayRefinedEmail(refinedEmail, request) {
         const container = document.getElementById('templatesContainer');
@@ -935,7 +1015,7 @@ ${variation.body}
                             </div>
                         </div>
                         <div class="d-flex gap-2">
-                            <button class="btn btn-sm btn-success" onclick="copyToClipboard('${refinedId}')">
+                            <button class="btn btn-sm btn-success" onclick="copyRefinedEmailToClipboard('${refinedId}')">
                                 <i class="fas fa-copy"></i> 개선된 문안 복사
                             </button>
                         </div>
@@ -1150,14 +1230,112 @@ ${variation.body}
             return;
         }
 
+        // URL 감지 로직
+        const urlPattern = /https?:\/\/[^\s]+/g;
+        const urls = refinementRequest.match(urlPattern);
+        
+        if (urls && urls.length > 0) {
+            // 뉴스 기사 링크가 감지된 경우
+            const newsUrl = urls[0]; // 첫 번째 URL 사용
+            await this.processNewsAnalysisRequest(refinementRequest, newsUrl);
+        } else {
+            // 일반 개선 요청 처리
+            await this.processGeneralRefinementRequest(refinementRequest);
+        }
+    }
+
+    async processNewsAnalysisRequest(refinementRequest, newsUrl) {
+        this.addBotMessage(`📰 뉴스 기사 링크를 감지했습니다: ${newsUrl}`);
+        this.addBotMessage(`🔍 기사 내용을 분석하여 페인 포인트 기반 메일을 생성하고 있습니다...`);
+        this.showLoading('뉴스 기사를 분석하고 있습니다...');
+        
+        try {
+            // 현재 이메일 내용과 회사명 가져오기
+            const { companyIndex, variationIndex } = this.currentRefinementTarget;
+            const templateElement = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
+            const currentContent = templateElement ? templateElement.value : '';
+            
+            // 회사명 추출 (결과 데이터에서)
+            let companyName = '';
+            if (this.generatedResults && this.generatedResults[companyIndex]) {
+                companyName = this.generatedResults[companyIndex].company['회사명'] || '';
+            }
+            
+            console.log('뉴스 분석 요청 데이터:', {
+                newsUrl,
+                companyName,
+                refinementRequest: refinementRequest.substring(0, 100) + '...'
+            });
+            
+            // 뉴스 분석 API 호출
+            const response = await fetch('http://localhost:5001/api/analyze-news', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    news_url: newsUrl,
+                    company_name: companyName,
+                    current_email: currentContent
+                })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('뉴스 분석 API 오류:', response.status, errorText);
+                throw new Error(`뉴스 분석 실패: ${response.status} - ${errorText}`);
+            }
+            
+            const result = await response.json();
+            console.log('뉴스 분석 결과:', result);
+            
+            if (result.success && result.analyzed_email) {
+                // 뉴스 기반 분석 결과 표시
+                this.displayNewsAnalysisResult(result, refinementRequest, newsUrl);
+                this.addBotMessage('✅ 뉴스 기사 분석을 통한 메일 문안 생성이 완료되었습니다!');
+                
+                if (result.article_summary) {
+                    this.addBotMessage(`📋 기사 요약: ${result.article_summary.substring(0, 200)}...`);
+                }
+                
+                if (result.pain_points && result.pain_points.length > 0) {
+                    this.addBotMessage(`🎯 발굴된 페인 포인트: ${result.pain_points.join(', ')}`);
+                }
+            } else {
+                console.error('뉴스 분석 실패:', result);
+                throw new Error(result.error || '뉴스 분석 처리 실패');
+            }
+            
+        } catch (error) {
+            console.error('뉴스 분석 오류:', error);
+            this.addBotMessage('❌ 뉴스 기사 분석 중 오류가 발생했습니다: ' + error.message);
+            this.addBotMessage('💡 일반 개선 요청으로 처리하겠습니다...');
+            
+            // 뉴스 분석 실패 시 일반 개선 요청으로 폴백
+            await this.processGeneralRefinementRequest(refinementRequest);
+        } finally {
+            this.hideLoading();
+            // 개선 모드 종료
+            this.exitRefinementMode();
+        }
+    }
+
+    async processGeneralRefinementRequest(refinementRequest) {
         this.addBotMessage(`🔄 "${refinementRequest}" 요청에 따라 이메일 문안을 개선하고 있습니다...`);
-        this.showLoading(true);
+        this.showLoading('이메일 문안을 개선하고 있습니다...');
         
         try {
             // 현재 이메일 내용 가져오기
             const { companyIndex, variationIndex } = this.currentRefinementTarget;
             const templateElement = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
             const currentContent = templateElement ? templateElement.value : '';
+            
+            console.log('개선 요청 데이터:', {
+                companyIndex,
+                variationIndex,
+                currentContent: currentContent.substring(0, 100) + '...',
+                refinementRequest
+            });
             
             // 백엔드 API로 개선 요청
             const response = await fetch('http://localhost:5001/api/refine-email', {
@@ -1172,23 +1350,28 @@ ${variation.body}
             });
             
             if (!response.ok) {
-                throw new Error(`API 오류: ${response.status}`);
+                const errorText = await response.text();
+                console.error('API 응답 오류:', response.status, errorText);
+                throw new Error(`API 오류: ${response.status} - ${errorText}`);
             }
             
             const result = await response.json();
+            console.log('API 응답 결과:', result);
             
-            if (result.success) {
+            if (result.success && result.refined_email) {
                 // 개선된 내용을 새로운 템플릿으로 표시
                 this.displayRefinedEmail(result.refined_email, refinementRequest);
                 this.addBotMessage('✅ 이메일 문안 개선이 완료되었습니다!');
             } else {
+                console.error('개선 실패:', result);
                 throw new Error(result.error || '개선 요청 처리 실패');
             }
             
         } catch (error) {
+            console.error('개선 요청 오류:', error);
             this.addBotMessage('❌ 이메일 개선 중 오류가 발생했습니다: ' + error.message);
         } finally {
-            this.showLoading(false);
+            this.hideLoading();
             // 개선 모드 종료
             this.exitRefinementMode();
         }
@@ -1202,11 +1385,29 @@ ${variation.body}
         const sendBtn = document.getElementById('sendBtn');
         
         userInput.disabled = false;
-        userInput.placeholder = '개선 요청사항을 입력하세요 (예: "더 친근하게", "기술적 내용 추가", "짧게 요약")';
+        userInput.placeholder = '개선 요청사항을 상세히 입력하세요 (예: "제목을 더 임팩트있게 바꾸고, 본문은 친근한 톤으로 작성해주세요. 기술적인 수치보다는 비즈니스 가치에 집중해서 써주세요")';
         userInput.focus();
         sendBtn.disabled = false;
         
-        this.addBotMessage('💡 위 텍스트박스에 개선 요청사항을 입력하고 전송 버튼을 눌러주세요!');
+        this.addBotMessage(`💡 위 텍스트박스에 개선 요청사항을 상세히 입력하고 전송 버튼을 눌러주세요!
+
+📝 **일반 개선 요청:**
+• "제목을 더 임팩트있게 바꿔주세요"
+• "본문 톤을 친근하게 바꾸고 기술적 수치는 줄여주세요"
+• "인사말을 더 격식있게 하고 결론 부분을 강하게 마무리해주세요"
+• "전체적으로 더 짧게 요약하되 핵심 가치는 유지해주세요"
+
+🎨 **외적 형식 요청:**
+• "핵심 내용을 볼드체로 강조해주세요"
+• "혜택 부분을 불릿 포인트로 만들어주세요"
+• "CTA 부분을 버튼 스타일로 해주세요"
+• "중요한 수치는 큰 글씨로 표시해주세요"
+
+🆕 **뉴스 기사 링크 분석 (NEW!):**
+• 뉴스 기사 URL을 포함하여 입력하면 자동으로 기사를 분석합니다
+• 기사 내용에서 페인 포인트를 도출하여 맞춤형 메일을 생성합니다
+• 예: "https://news.example.com/article 이 기사를 바탕으로 메일을 작성해주세요"
+• 업계 트렌드와 이슈를 반영한 더욱 설득력 있는 메일 문안을 제공합니다`);
     }
 
     exitRefinementMode() {
@@ -1217,10 +1418,10 @@ ${variation.body}
         const sendBtn = document.getElementById('sendBtn');
         
         userInput.value = '';
-        userInput.placeholder = '추가 요청사항이나 질문을 입력하세요...';
+        userInput.placeholder = '추가 요청사항이나 질문을 입력하세요... (개선 요청은 각 메일의 "개선 요청" 버튼 클릭)';
         
         // 이메일 생성이 완료되었으면 계속 활성화 유지
-        if (this.uploadedData.length > 0) {
+        if (this.uploadedData && this.uploadedData.length > 0) {
             userInput.disabled = false;
             sendBtn.disabled = false;
         } else {
@@ -1303,21 +1504,16 @@ async function refineEmailCopy(companyIndex, variationIndex) {
 
 // 텍스트 복사 함수 (개선된 버전)
 function copyTextToClipboard(subject, body) {
-    // 1. <br> 태그를 줄바꿈 문자(\n)로 변환합니다.
-    const bodyWithNewlines = body.replace(/<br\s*\/?>/gi, '\n');
-
-    // 2. 임시 DOM 요소를 사용해 나머지 HTML 태그를 제거합니다.
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = bodyWithNewlines;
-    const plainBody = tempDiv.textContent || tempDiv.innerText || "";
-
-    // 3. 순수 텍스트로 제목과 본문을 조합합니다.
-    const fullText = `제목: ${subject}\n\n${plainBody}`;
+    // 1. HTML 태그를 완전히 제거하고 순수 텍스트로 변환
+    const plainTextBody = htmlToPlainText(body);
+    
+    // 2. 순수 텍스트로 제목과 본문을 조합
+    const fullText = `제목: ${subject}\n\n${plainTextBody}`;
     
     // 최신 브라우저의 Clipboard API 사용
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(fullText).then(() => {
-            showCopySuccess('텍스트가 클립보드에 복사되었습니다!');
+            showCopySuccess('📋 텍스트가 클립보드에 복사되었습니다!');
         }).catch(err => {
             console.error('복사 실패:', err);
             fallbackCopyTextToClipboard(fullText);
@@ -1326,6 +1522,42 @@ function copyTextToClipboard(subject, body) {
         // 폴백 방법
         fallbackCopyTextToClipboard(fullText);
     }
+}
+
+// HTML을 순수 텍스트로 변환하는 개선된 함수
+function htmlToPlainText(html) {
+    if (!html) return '';
+    
+    // HTML 태그 제거 및 특수 문자 변환 (더 정교한 처리)
+    let text = html
+        // 먼저 블록 레벨 태그들을 줄바꿈으로 변환
+        .replace(/<\/?(div|p|h[1-6]|li|tr|td|th|section|article|header|footer|nav|aside|main)[^>]*>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')           // <br> 태그를 줄바꿈으로
+        .replace(/<\/li>/gi, '\n')               // </li> 태그를 줄바꿈으로
+        .replace(/<li[^>]*>/gi, '• ')            // <li> 태그를 불릿으로
+        .replace(/<\/ol>/gi, '\n')               // </ol> 태그를 줄바꿈으로
+        .replace(/<\/ul>/gi, '\n')               // </ul> 태그를 줄바꿈으로
+        .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '$1')  // <strong> 태그 내용만 유지
+        .replace(/<b[^>]*>(.*?)<\/b>/gi, '$1')            // <b> 태그 내용만 유지
+        .replace(/<em[^>]*>(.*?)<\/em>/gi, '$1')          // <em> 태그 내용만 유지
+        .replace(/<i[^>]*>(.*?)<\/i>/gi, '$1')            // <i> 태그 내용만 유지
+        .replace(/<a[^>]*>(.*?)<\/a>/gi, '$1')            // <a> 태그 내용만 유지
+        .replace(/<[^>]*>/g, '')                          // 모든 HTML 태그 제거
+        .replace(/&nbsp;/g, ' ')                          // &nbsp;를 공백으로
+        .replace(/&lt;/g, '<')                            // &lt;를 <로
+        .replace(/&gt;/g, '>')                            // &gt;를 >로
+        .replace(/&amp;/g, '&')                           // &amp;를 &로
+        .replace(/&quot;/g, '"')                          // &quot;를 "로
+        .replace(/&#39;/g, "'")                           // &#39;를 '로
+        .replace(/&hellip;/g, '...')                      // &hellip;를 ...로
+        .replace(/&mdash;/g, '—')                         // &mdash;를 —로
+        .replace(/&ndash;/g, '–')                         // &ndash;를 –로
+        .replace(/\n\s*\n\s*\n/g, '\n\n')                // 3개 이상 연속 줄바꿈을 2개로 제한
+        .replace(/^\s+|\s+$/g, '')                        // 앞뒤 공백 제거
+        .replace(/[ \t]+/g, ' ')                          // 연속된 공백을 하나로
+        .trim();                                          // 최종 trim
+        
+    return text;
 }
 
 // 폴백 복사 함수
@@ -1571,6 +1803,46 @@ function downloadHtmlFile(subject) {
     URL.revokeObjectURL(url);
     
     showCopySuccess('HTML 파일이 다운로드되었습니다!');
+}
+
+// 뉴스 기반 이메일 복사 함수
+function copyNewsEmailToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        const emailContent = element.value;
+        const plainTextContent = htmlToPlainText(emailContent);
+        
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(plainTextContent).then(() => {
+                showCopySuccess('📰 뉴스 기반 메일 문안이 텍스트로 복사되었습니다!');
+            }).catch(err => {
+                console.error('복사 실패:', err);
+                fallbackCopyTextToClipboard(plainTextContent);
+            });
+        } else {
+            fallbackCopyTextToClipboard(plainTextContent);
+        }
+    }
+}
+
+// 개선된 이메일 복사 함수
+function copyRefinedEmailToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        const emailContent = element.value;
+        const plainTextContent = htmlToPlainText(emailContent);
+        
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(plainTextContent).then(() => {
+                showCopySuccess('✨ 개선된 메일 문안이 텍스트로 복사되었습니다!');
+            }).catch(err => {
+                console.error('복사 실패:', err);
+                fallbackCopyTextToClipboard(plainTextContent);
+            });
+        } else {
+            fallbackCopyTextToClipboard(plainTextContent);
+        }
+    }
 }
 
 // 복사 성공 메시지 표시

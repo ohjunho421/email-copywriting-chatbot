@@ -163,6 +163,129 @@ class CompanyResearcher:
             "Content-Type": "application/json"
         }
     
+    def extract_emails_from_html(self, html_content):
+        """HTML에서 이메일 주소 추출 - 단순화된 버전"""
+        emails = set()
+        
+        try:
+            # HTML을 텍스트로 변환
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            text_content = soup.get_text()
+            
+            # 기본 이메일 패턴으로 검색
+            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+            found_emails = re.findall(email_pattern, text_content, re.IGNORECASE)
+            
+            # 결과 정제
+            for email in found_emails:
+                if '@' in email and '.' in email and len(email) > 5:
+                    emails.add(email.lower())
+            
+            return list(emails)
+            
+        except Exception as e:
+            print(f"이메일 추출 중 오류: {e}")
+            return []
+    
+    def extract_business_number_from_html(self, html_content):
+        """HTML에서 사업자등록번호 추출"""
+        business_numbers = set()
+        
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            text_content = soup.get_text()
+            
+            # 사업자등록번호 패턴들
+            business_patterns = [
+                r'\b\d{3}-\d{2}-\d{5}\b',  # 123-45-67890
+                r'\b\d{10}\b',             # 1234567890 (연속 10자리)
+                r'사업자.*?등록.*?번호.*?[:：]\s*(\d{3}-\d{2}-\d{5})',
+                r'사업자.*?번호.*?[:：]\s*(\d{3}-\d{2}-\d{5})',
+                r'등록.*?번호.*?[:：]\s*(\d{3}-\d{2}-\d{5})',
+            ]
+            
+            for pattern in business_patterns:
+                found_numbers = re.findall(pattern, text_content, re.IGNORECASE)
+                for number in found_numbers:
+                    # 하이픈 제거하고 10자리인지 확인
+                    clean_number = re.sub(r'[^0-9]', '', number)
+                    if len(clean_number) == 10:
+                        # 표준 형식으로 변환 (123-45-67890)
+                        formatted = f"{clean_number[:3]}-{clean_number[3:5]}-{clean_number[5:]}"
+                        business_numbers.add(formatted)
+            
+            return list(business_numbers)
+            
+        except Exception as e:
+            print(f"사업자번호 추출 중 오류: {e}")
+            return []
+    
+    def find_privacy_policy_links(self, html_content, base_url):
+        """개인정보 처리방침 페이지 링크 찾기"""
+        privacy_links = set()
+        
+        try:
+            from bs4 import BeautifulSoup
+            import urllib.parse
+            
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # 개인정보 처리방침 관련 키워드
+            privacy_keywords = [
+                '개인정보', '처리방침', 'privacy', 'policy', 
+                '개인정보보호', '개인정보처리', '프라이버시'
+            ]
+            
+            # 모든 링크 검사
+            links = soup.find_all('a', href=True)
+            for link in links:
+                href = link.get('href', '')
+                text = link.get_text().strip()
+                
+                # 키워드가 포함된 링크 찾기
+                for keyword in privacy_keywords:
+                    if keyword in text.lower() or keyword in href.lower():
+                        # 상대 경로를 절대 경로로 변환
+                        full_url = urllib.parse.urljoin(base_url, href)
+                        privacy_links.add(full_url)
+                        break
+            
+            return list(privacy_links)
+            
+        except Exception as e:
+            print(f"개인정보 처리방침 링크 찾기 중 오류: {e}")
+            return []
+    
+    def crawl_privacy_policy_page(self, privacy_url):
+        """개인정보 처리방침 페이지에서 상세 정보 추출"""
+        try:
+            response = requests.get(privacy_url, timeout=10, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            })
+            
+            if response.status_code == 200:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(response.content, 'html.parser')
+                text_content = soup.get_text()
+                
+                # 개인정보 처리방침에서 추출할 정보들
+                info = {
+                    'emails': self.extract_emails_from_html(response.content),
+                    'business_numbers': self.extract_business_number_from_html(response.content),
+                    'contact_info': self.extract_contact_info_from_text(text_content)
+                }
+                
+                return info
+            
+        except Exception as e:
+            print(f"개인정보 처리방침 페이지 크롤링 중 오류: {e}")
+            
+        return None
+    
+    
+    
     def build_enriched_search_query(self, company_name, additional_info):
         """기존 입력 정보를 활용해 더 정확한 검색 쿼리 생성"""
         query_parts = [company_name]
@@ -1099,10 +1222,10 @@ class CompanyResearcher:
                         return "; ".join(topic_texts)
             
             return f"정확한 검색 쿼리 '{search_query}'를 활용한 DuckDuckGo 검색 완료: 더 정밀한 정보 확보"
-            
+        
         except Exception as e:
-            logger.warning(f"DuckDuckGo 검색 오류: {e}")
-            return None
+            logger.warning(f"이메일 추출 오류: {e}")
+            return []
     
     def search_with_web_scraping(self, company_name):
         """웹 스크래핑을 통한 추가 정보 수집"""
@@ -2659,57 +2782,90 @@ https://www.portone.io'''
             print(f"🔧 JSON 재구성 실패: {e}")
             return None
 
+
 def generate_email_with_gemini(company_data, research_data):
     """Gemini 2.5 Pro를 사용하여 개인화된 이메일 생성"""
     try:
         # 회사 정보 요약
         company_name = company_data.get('회사명', 'Unknown')
         
-        # 담당자 정보 추출
-        contact_name = company_data.get('대표자명', '') or company_data.get('담당자명', '') or company_data.get('이름', '')
-        contact_position = company_data.get('직책', '') or company_data.get('직급', '')
+        # sales_item 열 확인 (서비스별 문안 생성 결정)
+        sales_item = company_data.get('sales_item', '').lower().strip()
+        logger.info(f"Sales item 확인: '{sales_item}' for {company_name}")
         
-        # 담당자명과 직책 처리 (기본값 설정)
-        if not contact_name or contact_name == '담당자':
-            email_name = '담당자님'
-        else:
-            # 직책 정보가 있는 경우
-            if contact_position:
-                # 직책에 따른 적절한 호칭 처리
-                if any(keyword in contact_position for keyword in ['대표', 'CEO', '사장']):
-                    email_name = f'{contact_name} {contact_position}님'
-                elif any(keyword in contact_position for keyword in ['이사', '부장', '팀장', '매니저', '실장', '과장']):
-                    email_name = f'{contact_name} {contact_position}님'
-                elif any(keyword in contact_position for keyword in ['주임', '대리', '선임', '책임']):
-                    email_name = f'{contact_name} {contact_position}님'
-                else:
-                    # 기타 직책
-                    email_name = f'{contact_name} {contact_position}님'
+        # 담당자 정보 추출
+        # N열(14번째 열)의 호칭 포함 담당자명을 우선 참조 (이미 완성된 호칭)
+        column_keys = list(company_data.keys())
+        email_name = ''
+        if len(column_keys) >= 14:
+            email_name = company_data.get(column_keys[13], '').strip()  # N열 (0-based index 13)
+        
+        # N열이 비어있거나 없으면 기존 로직 사용
+        if not email_name:
+            contact_name = company_data.get('담당자명', '') or company_data.get('대표자명', '') or company_data.get('이름', '')
+            contact_position = company_data.get('직책', '') or company_data.get('직급', '')
+            
+            # 담당자명과 직책 처리 (기본값 설정)
+            if not contact_name or contact_name == '담당자':
+                email_name = '담당자님'
             else:
-                # 직책 정보가 없는 경우 이름만으로 처리
-                if any(title in contact_name for title in ['대표', 'CEO', '사장']):
-                    email_name = f'{contact_name}님'
+                # 직책 정보가 있는 경우
+                if contact_position:
+                    # 직책에 따른 적절한 호칭 처리
+                    if any(keyword in contact_position for keyword in ['대표', 'CEO', '사장']):
+                        email_name = f'{contact_name} {contact_position}님'
+                    elif any(keyword in contact_position for keyword in ['이사', '부장', '팀장', '매니저', '실장', '과장']):
+                        email_name = f'{contact_name} {contact_position}님'
+                    elif any(keyword in contact_position for keyword in ['주임', '대리', '선임', '책임']):
+                        email_name = f'{contact_name} {contact_position}님'
+                    else:
+                        # 기타 직책
+                        email_name = f'{contact_name} {contact_position}님'
                 else:
-                    email_name = f'{contact_name} 담당자님'
+                    # 직책 정보가 없는 경우 이름만으로 처리
+                    if any(title in contact_name for title in ['대표', 'CEO', '사장']):
+                        email_name = f'{contact_name}님'
+                    else:
+                        email_name = f'{contact_name} 담당자님'
         
         # 경쟁사 정보 추출 (PortOne 이용 기업)
         competitor_name = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '')
         
         company_info = f"회사명: {company_name}\n담당자: {email_name}"
-        if contact_position and contact_name:
-            company_info += f"\n직책: {contact_position}"
         if competitor_name:
             company_info += f"\nPortOne 이용 경쟁사: {competitor_name}"
         
         # 추가 회사 정보가 있다면 포함
         for key, value in company_data.items():
-            if key not in ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사'] and value:
+            # N열 담당자명도 제외 목록에 추가 (중복 방지)
+            excluded_keys = ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사']
+            if len(column_keys) >= 14:
+                excluded_keys.append(column_keys[13])  # N열 키도 제외
+            if key not in excluded_keys and value:
                 company_info += f"\n{key}: {value}"
         
         # 조사 정보 및 Pain Point 요약
         research_summary = research_data.get('company_info', '조사 정보 없음')
         pain_points = research_data.get('pain_points', '일반적인 Pain Point')
         industry_trends = research_data.get('industry_trends', '')
+        
+        # sales_item에 따른 서비스 결정
+        services_to_generate = []
+        if sales_item:
+            if 'opi' in sales_item:
+                services_to_generate = ['opi_professional', 'opi_curiosity']
+                logger.info(f"OPI 서비스 문안만 생성: {company_name}")
+            elif 'recon' in sales_item or 'finance' in sales_item or '재무' in sales_item:
+                services_to_generate = ['finance_professional', 'finance_curiosity']
+                logger.info(f"재무자동화 서비스 문안만 생성: {company_name}")
+            else:
+                # 알 수 없는 sales_item인 경우 기본 4개 생성
+                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                logger.info(f"알 수 없는 sales_item '{sales_item}', 기본 4개 문안 생성: {company_name}")
+        else:
+            # sales_item이 없으면 기존처럼 4개 모두 생성
+            services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+            logger.info(f"sales_item 없음, 기본 4개 문안 생성: {company_name}")
         
         # 기본 context 정의
         context = f"""
@@ -2729,15 +2885,25 @@ def generate_email_with_gemini(company_data, research_data):
 - "최근 기사에서 '{company_name}가 100억원 투자를 유치했다'고 봤습니다. 사업 확장에 따른 결제 인프라 확장 계획도 있으실 텐데..."
 - "'{company_name}의 3분기 매출이 전년 대비 150% 증가했다'는 소식을 들었습니다. 급속한 성장에 따른 재무 관리 부담이 늘어나고 계시지 않나요?"
 - "'{company_name}가 일본 시장에 진출한다'는 뉴스를 봤습니다. 해외 진출 시 현지 결제 시스템 연동이 복잡하실 텐데..."
+
 """
 
+        # 생성할 서비스에 따른 프롬프트 조정
+        if len(services_to_generate) == 2:
+            if 'opi' in services_to_generate[0]:
+                service_focus = "One Payment Infra (OPI) 서비스에 집중한 2개의"
+            else:
+                service_focus = "재무자동화 솔루션에 집중한 2개의"
+        else:
+            service_focus = "4개의 설득력 있고 차별화된"
+        
         prompt = f"""
 {context}
 
 **회사별 맞춤 Pain Points (조사 결과 기반):**
 {pain_points}
 
-다음 고정된 형식에 따라 4개의 설득력 있고 차별화된 이메일을 작성해주세요:
+다음 고정된 형식에 따라 {service_focus} 이메일을 작성해주세요:
 
 **필수 요구사항:**
 1. **가장 중요**: 퍼플렉시티가 조사한 {company_name}의 최신 뉴스/활동을 반드시 구체적으로 언급하여 개인화
@@ -2775,7 +2941,7 @@ def generate_email_with_gemini(company_data, research_data):
 **고정 결론 형식:**
 "<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
 
-**4개 이메일 유형:**
+**이메일 유형 (요청된 서비스에 따라 선택적 생성):**
 
 1. **One Payment Infra - 전문적 톤**: 
    - **필수**: 뉴스 내용을 직접 인용. 예: "최근 기사에서 '{company_name}가 XX억원 투자 유치'라고 봤습니다"
@@ -2809,6 +2975,8 @@ def generate_email_with_gemini(company_data, research_data):
 - 톤: 전문적이면서도 공감하고 도움을 주는 관점, 간결하고 임팩트 있는 표현
 
 **중요**: 어떤 설명이나 추가 텍스트 없이 오직 JSON 형태로만 응답해주세요. 다른 텍스트는 절대 포함하지 마세요.
+
+**생성할 서비스**: {', '.join(services_to_generate)}
 
 {{
   "opi_professional": {{
@@ -2885,32 +3053,26 @@ def generate_email_with_gemini(company_data, research_data):
                             result = result.replace('{competitor_name}', competitor_name)
                         return result
                     
-                    # 응답 형식 변환 및 플레이스홀더 교체
+                    # 응답 형식 변환 및 플레이스홀더 교체 (요청된 서비스만)
                     formatted_variations = {}
-                    if 'opi_professional' in email_variations:
-                        formatted_variations['opi_professional'] = {
-                            'subject': replace_placeholders(email_variations['opi_professional']['subject'], company_name, email_name, competitor_name),
-                            'body': replace_placeholders(email_variations['opi_professional']['body'], company_name, email_name, competitor_name)
-                        }
-                    if 'opi_curiosity' in email_variations:
-                        formatted_variations['opi_curiosity'] = {
-                            'subject': replace_placeholders(email_variations['opi_curiosity']['subject'], company_name, email_name, competitor_name),
-                            'body': replace_placeholders(email_variations['opi_curiosity']['body'], company_name, email_name, competitor_name)
-                        }
-                    if 'finance_professional' in email_variations:
-                        formatted_variations['finance_professional'] = {
-                            'subject': replace_placeholders(email_variations['finance_professional']['subject'], company_name, email_name, competitor_name),
-                            'body': replace_placeholders(email_variations['finance_professional']['body'], company_name, email_name, competitor_name)
-                        }
-                    if 'finance_curiosity' in email_variations:
-                        formatted_variations['finance_curiosity'] = {
-                            'subject': replace_placeholders(email_variations['finance_curiosity']['subject'], company_name, email_name, competitor_name),
-                            'body': replace_placeholders(email_variations['finance_curiosity']['body'], company_name, email_name, competitor_name)
-                        }
+                    
+                    for service in services_to_generate:
+                        if service in email_variations:
+                            subject = replace_placeholders(email_variations[service]['subject'], company_name, email_name, competitor_name)
+                            body = replace_placeholders(email_variations[service]['body'], company_name, email_name, competitor_name)
+                            
+                            
+                            formatted_variations[service] = {
+                                'subject': subject,
+                                'body': body
+                            }
+                            logger.info(f"서비스 '{service}' 문안 생성 완료: {company_name}")
                     
                     return {
                         'success': True,
                         'variations': formatted_variations,
+                        'services_generated': services_to_generate,
+                        'sales_item': sales_item if sales_item else 'all',
                         'timestamp': datetime.now().isoformat(),
                         'model': 'gemini-2.5-pro-exp'
                     }
@@ -2998,29 +3160,57 @@ PortOne 영업팀
 (주의: Gemini API 키 미설정으로 인한 시뮬레이션 응답)"""
         
         prompt = f"""
-다음 이메일 문안을 사용자의 요청에 따라 개선해주세요.
+다음 이메일 문안을 사용자의 상세한 요청에 따라 개선해주세요.
 
 **현재 이메일:**
 {current_email}
 
-**개선 요청:**
+**사용자의 개선 요청:**
 {refinement_request}
 
 **개선 지침:**
-1. 사용자의 요청사항을 정확히 반영
-2. PortOne One Payment Infra 제품의 핵심 가치 유지
-3. 전문적이면서도 읽기 쉬운 문체로 간결하게 작성
-4. 구체적인 혜택과 수치 제시 (85% 절약, 90% 단축, 15% 향상 등)
-5. 핵심 Pain Point들과 해결 방안 간결하게 언급
-6. 고정된 서론/결론 형식 유지
-7. 본문 길이: 130-200단어로 간결하면서도 핵심적으로 작성
-8. 의미 단위별로 자연스럽게 <br> 태그로 줄바꿈 (문장이 길 때, 새로운 주제 전환 시)
+1. 사용자의 요청사항을 세밀하게 분석하고 모든 요구사항을 정확히 반영
+2. 장문의 요청이라도 각 포인트를 놓치지 않고 체계적으로 적용
+3. 요청에서 언급된 톤앤매너, 스타일, 내용 변경사항을 우선적으로 반영
+4. PortOne One Payment Infra 제품의 핵심 가치는 유지하되, 사용자 요청이 우선
+5. 요청된 문체나 접근 방식에 맞춰 전문적 또는 친근한 톤 조절
+6. 사용자가 요청한 구체적인 수치나 정보가 있다면 반드시 포함
+7. 요청된 길이나 구조 변경사항 적극 반영
+8. 사용자가 특정 표현이나 문구 변경을 요청했다면 정확히 적용
+9. 의미 단위별로 자연스럽게 <br> 태그로 줄바꿈
+10. 사용자 요청이 기본 형식과 충돌하는 경우, 사용자 요청을 우선시
 
-**고정 서론 형식 (반드시 유지):**
+**외적 형식 및 디자인 요청 처리:**
+11. HTML 태그 수정 요청: 사용자가 특정 HTML 태그나 스타일 변경을 요청하면 정확히 적용
+12. 레이아웃 변경: 문단 구성, 줄바꿈, 들여쓰기 등의 레이아웃 요청 반영
+13. 시각적 강조: 볼드체(**텍스트**), 이탤릭체(*텍스트*), 밑줄 등의 강조 요청 적용
+14. 목록 형식: 번호 목록, 불릿 포인트, 체크리스트 등의 형식 변경 요청 처리
+15. 색상/스타일 힌트: HTML에서 가능한 텍스트 색상이나 스타일 클래스 적용
+16. 테이블 형식: 정보를 표 형태로 정리 요청 시 HTML 테이블로 구성
+17. 이미지/아이콘 힌트: 텍스트로 이미지나 아이콘 위치 표시 (예: [이미지 위치], 📧 등)
+18. 버튼/링크 스타일: CTA 버튼이나 링크의 HTML 스타일 변경 요청 처리
+
+**기본 서론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
 "<p>안녕하세요, [회사명] [담당자명].<br>PortOne 오준호 매니저입니다.</p>"
 
-**고정 결론 형식 (반드시 유지):**
+**기본 결론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
 "<p><br>다음주 중 편하신 일정을 알려주시면 [회사명]의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+
+**중요 주의사항:**
+- 사용자가 구체적으로 "제목을 이렇게 바꿔줘", "인사말을 이렇게 해줘", "마무리를 이렇게 해줘" 등의 요청을 했다면 반드시 그대로 적용
+- 사용자가 "더 짧게", "더 길게", "친근하게", "격식있게" 등의 톤 변경을 요청했다면 전체적으로 적용
+- 사용자가 특정 내용 추가/삭제를 요청했다면 정확히 반영
+- 사용자 요청이 애매하거나 불분명한 경우에만 기본 형식 유지
+
+**외적 형식 요청 예시:**
+- "볼드체로 강조해줘" → <strong> 또는 <b> 태그 사용
+- "불릿 포인트로 만들어줘" → <ul><li> 형식으로 변경
+- "번호 목록으로 해줘" → <ol><li> 형식으로 변경
+- "표로 정리해줘" → <table> 형식으로 구성
+- "버튼 스타일로 해줘" → <button> 또는 스타일이 적용된 <a> 태그 사용
+- "색깔을 넣어줘" → style="color:" 속성 추가
+- "중앙 정렬해줘" → style="text-align:center" 적용
+- "큰 글씨로 해줘" → <h1>, <h2> 태그나 style="font-size:" 사용
 
 개선된 이메일 전체를 제목과 본문을 포함하여 작성해주세요:
 """
@@ -3033,7 +3223,7 @@ PortOne 영업팀
             prompt,
             generation_config={
                 'temperature': 0.7,
-                'max_output_tokens': 2048
+                'max_output_tokens': 4096  # 장문 요청 처리를 위해 토큰 수 증가
             }
         )
         
@@ -3048,15 +3238,15 @@ PortOne 영업팀
                 logger.info(f"Gemini 이메일 개선 완료 - 응답 길이: {len(refined_content)} 문자")
                 return refined_content
             else:
-                logger.warning("Gemini 응답에서 유효한 콘텐츠를 찾을 수 없음")
-                raise Exception("응답에서 유효한 콘텐츠를 찾을 수 없습니다")
-        else:
-            logger.warning("Gemini 응답이 비어있거나 유효하지 않음")
-            raise Exception("응답이 비어있거나 유효하지 않습니다")
+                logger.warning("Gemini 응답에 유효한 콘텐츠가 없습니다")
+                raise Exception("응답 콘텐츠가 비어있습니다")
+        
+        # 응답이 없는 경우 폴백
+        logger.warning("Gemini 응답이 없어 폴백 응답 생성")
+        raise Exception("Gemini 응답 없음")
         
     except Exception as e:
         logger.error(f"Gemini 이메일 개선 오류: {str(e)}")
-        # 오류 시 기본 개선 응답 제공
         return f"""제목: 개선된 메일 문안 - {refinement_request} 반영
 
 안녕하세요!
@@ -3065,7 +3255,7 @@ PortOne 영업팀
 
 PortOne의 One Payment Infra는 다음과 같은 혜택을 제공합니다:
 
-• 개발 리소스 80% 절약
+• 개발 리소스 85% 절약
 • 2주 내 빠른 도입
 • 무료 전문 컨설팅
 • 스마트 라우팅으로 결제 성공률 향상
@@ -3096,6 +3286,19 @@ def research_company():
         
         # Perplexity로 회사 정보 조사
         research_result = researcher.research_company(company_name, website)
+        
+        # 회사 정보를 캐시에 저장 (뉴스 분석에서 재사용)
+        if research_result and research_result.get('success'):
+            company_info = {
+                'company_name': company_name,
+                'industry': research_result.get('industry', ''),
+                'business_description': research_result.get('business_description', ''),
+                'company_size': research_result.get('company_size', ''),
+                'special_notes': research_result.get('pain_points', ''),
+                'website': website,
+                'research_timestamp': datetime.now().isoformat()
+            }
+            save_company_info_cache(company_name, company_info)
         
         return jsonify(research_result)
         
@@ -3275,6 +3478,75 @@ def refine_email():
             'error': str(e)
         }), 500
 
+@app.route('/api/analyze-news', methods=['POST'])
+def analyze_news():
+    """뉴스 기사 링크를 분석하여 페인 포인트 기반 메일 생성"""
+    try:
+        data = request.json
+        news_url = data.get('news_url', '')
+        company_name = data.get('company_name', '')
+        current_email = data.get('current_email', '')
+        
+        if not news_url:
+            return jsonify({
+                'success': False,
+                'error': '뉴스 기사 URL이 필요합니다.'
+            }), 400
+        
+        # URL 유효성 검사
+        if not is_valid_url(news_url):
+            return jsonify({
+                'success': False,
+                'error': '유효하지 않은 URL입니다.'
+            }), 400
+        
+        # 뉴스 기사 내용 스크래핑
+        logger.info(f"뉴스 분석 요청 - URL: {news_url}, 회사: {company_name}")
+        article_content = scrape_news_article(news_url)
+        
+        if not article_content:
+            logger.error(f"뉴스 스크래핑 실패: {news_url}")
+            return jsonify({
+                'success': False,
+                'error': '기사 내용을 가져올 수 없습니다. URL을 확인해주세요.'
+            }), 400
+        
+        logger.info(f"뉴스 스크래핑 성공 - 제목: {article_content.get('title', '')[:50]}..., 본문 길이: {len(article_content.get('content', ''))}자")
+        
+        # 기사 내용 관련성 검증
+        relevance_score = check_article_relevance(article_content, company_name)
+        logger.info(f"기사 관련성 점수: {relevance_score}/10")
+        
+        # 회사 정보 조회 (기존 조사 결과 활용)
+        company_info = get_existing_company_info(company_name)
+        if company_info:
+            logger.info(f"기존 회사 정보 발견: {company_name}")
+        
+        # 기사 내용 기반 페인 포인트 분석 및 메일 생성
+        analyzed_email = generate_email_from_news_analysis(
+            article_content, 
+            company_name, 
+            current_email,
+            news_url,
+            company_info,
+            relevance_score
+        )
+        
+        return jsonify({
+            'success': True,
+            'analyzed_email': analyzed_email,
+            'article_summary': article_content.get('summary', ''),
+            'pain_points': article_content.get('pain_points', []),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"뉴스 분석 중 오류: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """서비스 상태 확인"""
@@ -3283,9 +3555,610 @@ def health_check():
         'timestamp': datetime.now().isoformat(),
         'services': {
             'perplexity': bool(os.getenv('PERPLEXITY_API_KEY')),
+            'gemini': bool(os.getenv('GEMINI_API_KEY')),
             'claude': bool(os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY'))
         }
     })
+
+# 뉴스 분석 관련 함수들을 먼저 정의
+def is_valid_url(url):
+    """URL 유효성 검사"""
+    import re
+    url_pattern = re.compile(
+        r'^https?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
+        r'localhost|'  # localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+        r'(?::\d+)?'  # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    return url_pattern.match(url) is not None
+
+def extract_content_from_soup(soup, url):
+    """BeautifulSoup 객체에서 제목과 본문 추출"""
+    # 한국 주요 뉴스 사이트별 특화 선택자
+    site_specific_selectors = {
+        'naver.com': {
+            'title': ['h2#title', 'h3.tts_head', '.media_end_head_headline'],
+            'content': ['#dic_area', '.go_trans._article_content', '#articleBodyContents']
+        },
+        'daum.net': {
+            'title': ['.tit_view', '.txt_tit'],
+            'content': ['.article_view', '.news_view']
+        },
+        'chosun.com': {
+            'title': ['.article-header h1', '.news_title_text'],
+            'content': ['.par', '.news_text']
+        },
+        'joins.com': {
+            'title': ['.headline', '.article_title'],
+            'content': ['#article_body', '.article_content']
+        },
+        'donga.com': {
+            'title': ['.title', '.news_title'],
+            'content': ['.news_view', '.article_txt']
+        }
+    }
+    
+    # 일반적인 선택자 (모든 사이트 대응)
+    general_selectors = {
+        'title': [
+            'h1', 'h2', '.title', '.headline', '.article-title', '.news-title',
+            '.post-title', '.entry-title', '[data-cy="article-headline"]',
+            '.tit_view', '.news_ttl', '.article_head', '.news_headline'
+        ],
+        'content': [
+            'article', '.article-content', '.news-content', '.post-content',
+            '.entry-content', '.content', '#content', '.article-body',
+            '.news-body', '.post-body', '.story-body', '.article-text',
+            '[data-module="ArticleContent"]', '.article_body', '.news_content',
+            '.view_txt', '.news_view', '.article_txt', '.par', '#newsContent'
+        ]
+    }
+    
+    title = ''
+    content = ''
+    
+    # 사이트별 특화 선택자 시도
+    domain = url.lower()
+    site_selectors = None
+    for site, selectors in site_specific_selectors.items():
+        if site in domain:
+            site_selectors = selectors
+            break
+    
+    # 제목 추출
+    title_selectors = site_selectors['title'] if site_selectors else general_selectors['title']
+    for selector in title_selectors:
+        try:
+            title_elem = soup.select_one(selector)
+            if title_elem:
+                title = title_elem.get_text().strip()
+                if len(title) > 5:  # 의미있는 제목인지 확인
+                    logger.info(f"제목 추출 성공: {title[:50]}...")
+                    break
+        except Exception as e:
+            logger.debug(f"제목 선택자 {selector} 실패: {e}")
+            continue
+    
+    # 본문 추출
+    content_selectors = site_selectors['content'] if site_selectors else general_selectors['content']
+    for selector in content_selectors:
+        try:
+            content_elem = soup.select_one(selector)
+            if content_elem:
+                # 불필요한 요소 제거 (더 포괄적)
+                unwanted_selectors = [
+                    'script', 'style', 'nav', 'header', 'footer', 'aside',
+                    '.ad', '.advertisement', '.social-share', '.related-articles',
+                    '.comment', '.reply', '.share', '.tag', '.category',
+                    '.author', '.date', '.source', '.copyright', '.ad_area',
+                    '.related_news', '.more_news', '.sns_area', '.util_area'
+                ]
+                
+                for unwanted_selector in unwanted_selectors:
+                    for unwanted in content_elem.select(unwanted_selector):
+                        unwanted.decompose()
+                
+                content = content_elem.get_text().strip()
+                content = ' '.join(content.split())  # 공백 정리
+                
+                if len(content) > 300:  # 충분한 내용이 있는 경우만
+                    logger.info(f"본문 추출 성공: {len(content)}자 (선택자: {selector})")
+                    break
+        except Exception as e:
+            logger.debug(f"본문 선택자 {selector} 실패: {e}")
+            continue
+    
+    # 본문이 여전히 짧으면 전체 텍스트에서 추출 시도
+    if len(content) < 300:
+        logger.warning("본문이 짧아서 전체 텍스트에서 추출 시도")
+        # 불필요한 태그 제거
+        for unwanted_tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
+            unwanted_tag.decompose()
+        
+        # 모든 p 태그 내용 수집
+        paragraphs = soup.find_all('p')
+        if paragraphs:
+            content = ' '.join([p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 20])
+        
+        # 여전히 부족하면 전체 텍스트
+        if len(content) < 300:
+            content = soup.get_text()
+            content = ' '.join(content.split())
+    
+    # 최종 검증
+    if not title:
+        # 메타 태그에서 제목 추출 시도
+        meta_title = soup.find('meta', property='og:title')
+        if meta_title:
+            title = meta_title.get('content', '').strip()
+        else:
+            title_tag = soup.find('title')
+            if title_tag:
+                title = title_tag.get_text().strip()
+    
+    # 텍스트 정리 및 길이 제한
+    content = content.replace('\n', ' ').replace('\t', ' ')
+    content = ' '.join(content.split())  # 중복 공백 제거
+    
+    logger.info(f"BeautifulSoup 스크래핑 결과 - 제목: {len(title)}자, 본문: {len(content)}자")
+    
+    return title, content
+
+def scrape_news_article(url):
+    """뉴스 기사 내용 스크래핑 (Selenium 포함 강화된 버전)"""
+    try:
+        logger.info(f"뉴스 기사 스크래핑 시작: {url}")
+        
+        # 먼저 일반 requests로 시도
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ko-KR,ko;q=0.8,en-US;q=0.5,en;q=0.3',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # 기본 스크래핑 시도
+        title, content = extract_content_from_soup(soup, url)
+        
+        # 내용이 부족하면 Selenium 시도 (조선일보 등 JavaScript 사이트)
+        if (not title or len(content) < 200) and ('chosun.com' in url or 'joins.com' in url):
+            logger.info("기본 스크래핑 실패, Selenium으로 재시도")
+            title, content = scrape_with_selenium(url)
+        
+        if not title and len(content) < 100:
+            logger.error("스크래핑 실패: 제목과 본문 모두 부족")
+            return None
+            
+        return {
+            'title': title or '제목 없음',
+            'content': content[:3000],  # 최대 3000자로 확장
+            'url': url,
+            'scraped_length': len(content)
+        }
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"HTTP 요청 오류: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"뉴스 기사 스크래핑 오류: {str(e)}")
+        return None
+
+def scrape_with_selenium(url):
+    """Selenium을 사용한 동적 사이트 스크래핑"""
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        import time
+        
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_argument('--window-size=1920,1080')
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.get(url)
+        
+        # 페이지 로딩 대기
+        time.sleep(3)
+        
+        # 조선일보 특화 선택자
+        if 'chosun.com' in url:
+            try:
+                # 제목 대기 및 추출
+                title_element = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "h1, .article-header h1, .news_title_text"))
+                )
+                title = title_element.text.strip()
+                
+                # 본문 추출
+                content_selectors = [
+                    ".story-news__article",
+                    ".article-body", 
+                    ".news-article-memo",
+                    "[data-type='article-body']",
+                    ".par"
+                ]
+                
+                content = ""
+                for selector in content_selectors:
+                    try:
+                        elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                        if elements:
+                            content = " ".join([elem.text.strip() for elem in elements])
+                            if len(content) > 200:
+                                break
+                    except:
+                        continue
+                
+                # 여전히 내용이 부족하면 모든 p 태그 수집
+                if len(content) < 200:
+                    p_elements = driver.find_elements(By.TAG_NAME, "p")
+                    content = " ".join([p.text.strip() for p in p_elements if len(p.text.strip()) > 20])
+                
+            except Exception as e:
+                logger.warning(f"Selenium 조선일보 특화 추출 실패: {e}")
+                # 일반적인 방법으로 폴백
+                title = driver.find_element(By.TAG_NAME, "h1").text.strip() if driver.find_elements(By.TAG_NAME, "h1") else ""
+                content = driver.find_element(By.TAG_NAME, "body").text.strip()
+        
+        driver.quit()
+        
+        logger.info(f"Selenium 스크래핑 성공 - 제목: {len(title)}자, 본문: {len(content)}자")
+        return title, content
+        
+    except ImportError:
+        logger.warning("Selenium이 설치되지 않았습니다. pip install selenium 실행 필요")
+        return "", ""
+    except Exception as e:
+        logger.error(f"Selenium 스크래핑 오류: {str(e)}")
+        return "", ""
+
+def check_article_relevance(article_content, company_name):
+    """기사 내용과 PortOne 솔루션의 관련성 검증"""
+    try:
+        title = article_content.get('title', '')
+        content = article_content.get('content', '')
+        
+        # PortOne 관련 키워드들
+        portone_keywords = [
+            '결제', '페이먼트', '핀테크', '이커머스', '커머스', '온라인쇼핑', 
+            '정산', '수수료', '매출', '수익', '비즈니스', '스타트업', '기업',
+            '디지털', '플랫폼', '서비스', '시스템', '인프라', '솔루션',
+            '글로벌', '해외진출', '확장', '성장', '투자', '자금조달'
+        ]
+        
+        # 관련성 없는 키워드들 (감점 요소)
+        irrelevant_keywords = [
+            '연예', '방송', '드라마', '영화', '음악', '게임콘텐츠', '웹툰',
+            '스포츠', '정치', '사회', '문화', '예술', '여행', '음식'
+        ]
+        
+        text = (title + ' ' + content).lower()
+        
+        # 관련 키워드 점수 계산
+        relevant_count = sum(1 for keyword in portone_keywords if keyword in text)
+        irrelevant_count = sum(1 for keyword in irrelevant_keywords if keyword in text)
+        
+        # 기본 점수 5점에서 시작
+        score = 5
+        
+        # 관련 키워드 가점 (최대 4점)
+        score += min(4, relevant_count * 0.5)
+        
+        # 비관련 키워드 감점 (최대 -3점)
+        score -= min(3, irrelevant_count * 1)
+        
+        # 회사명이 기사에 직접 언급되면 가점
+        if company_name.lower() in text:
+            score += 2
+        
+        # 0-10 범위로 제한
+        score = max(0, min(10, score))
+        
+        return round(score, 1)
+        
+    except Exception as e:
+        logger.error(f"기사 관련성 검증 오류: {str(e)}")
+        return 5.0  # 기본값
+
+def get_existing_company_info(company_name):
+    """기존 회사 조사 결과 조회"""
+    try:
+        # 메모리에서 회사 정보 검색 (간단한 캐시 구현)
+        if hasattr(get_existing_company_info, 'cache'):
+            if company_name in get_existing_company_info.cache:
+                logger.info(f"캐시에서 회사 정보 발견: {company_name}")
+                return get_existing_company_info.cache[company_name]
+        
+        # 파일 시스템에서 검색 (최근 조사 결과)
+        import os
+        import json
+        from datetime import datetime, timedelta
+        
+        cache_dir = "/tmp/company_cache"
+        if not os.path.exists(cache_dir):
+            return None
+            
+        cache_file = os.path.join(cache_dir, f"{company_name.replace(' ', '_')}.json")
+        
+        if os.path.exists(cache_file):
+            # 파일이 24시간 이내에 생성된 경우만 사용
+            file_time = datetime.fromtimestamp(os.path.getmtime(cache_file))
+            if datetime.now() - file_time < timedelta(hours=24):
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    company_info = json.load(f)
+                    logger.info(f"파일 캐시에서 회사 정보 발견: {company_name}")
+                    return company_info
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"기존 회사 정보 조회 오류: {str(e)}")
+        return None
+
+def save_company_info_cache(company_name, company_info):
+    """회사 정보를 캐시에 저장"""
+    try:
+        import os
+        import json
+        
+        # 메모리 캐시
+        if not hasattr(get_existing_company_info, 'cache'):
+            get_existing_company_info.cache = {}
+        get_existing_company_info.cache[company_name] = company_info
+        
+        # 파일 캐시
+        cache_dir = "/tmp/company_cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        cache_file = os.path.join(cache_dir, f"{company_name.replace(' ', '_')}.json")
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(company_info, f, ensure_ascii=False, indent=2)
+            
+        logger.info(f"회사 정보 캐시 저장: {company_name}")
+        
+    except Exception as e:
+        logger.error(f"회사 정보 캐시 저장 오류: {str(e)}")
+
+def generate_email_from_news_analysis(article_content, company_name, current_email, news_url, company_info=None, relevance_score=5.0):
+    """뉴스 기사 분석을 통한 페인 포인트 기반 메일 생성"""
+    try:
+        gemini_api_key = os.getenv('GEMINI_API_KEY')
+        if not gemini_api_key:
+            logger.warning("Gemini API 키가 설정되지 않았습니다")
+            return generate_fallback_news_email(article_content, company_name, current_email, news_url)
+        
+        # 회사 정보 컨텍스트 구성
+        company_context = ""
+        if company_info:
+            company_context = f"""
+**회사 정보 (기존 조사 결과):**
+- 회사명: {company_info.get('company_name', company_name)}
+- 업종: {company_info.get('industry', '정보 없음')}
+- 주요 사업: {company_info.get('business_description', '정보 없음')}
+- 규모: {company_info.get('company_size', '정보 없음')}
+- 특이사항: {company_info.get('special_notes', '정보 없음')}
+"""
+        
+        # Perplexity를 통한 추가 분석 (선택적)
+        additional_context = ""
+        try:
+            perplexity_analysis = analyze_news_with_perplexity(article_content, company_name)
+            if perplexity_analysis:
+                additional_context = f"\n\n**Perplexity 추가 분석:**\n{perplexity_analysis}"
+        except Exception as e:
+            logger.warning(f"Perplexity 분석 실패: {str(e)}")
+        
+        # 관련성에 따른 접근 방식 결정
+        if relevance_score < 4.0:
+            approach_instruction = """
+**⚠️ 낮은 관련성 기사 처리 지침:**
+- 기사 내용을 억지로 PortOne 솔루션과 연결하지 마세요
+- 대신 일반적인 비즈니스 트렌드나 시장 변화 관점에서 접근
+- "최근 업계 동향을 보면..." 식으로 자연스럽게 시작
+- PortOne 솔루션은 간략하게 소개하고 상담 제안에 집중
+"""
+        else:
+            approach_instruction = """
+**✅ 높은 관련성 기사 처리 지침:**
+- 기사 내용과 PortOne 솔루션의 연관성을 구체적으로 제시
+- 기사에서 도출한 Pain Point를 중심으로 솔루션 제안
+- 최신성과 시급성을 강조하여 설득력 강화
+"""
+        
+        prompt = f"""
+다음 뉴스 기사를 분석하여 {company_name}에게 보낼 개인화된 영업 메일을 작성해주세요.
+
+**기사 관련성 점수: {relevance_score}/10**
+{approach_instruction}
+
+**뉴스 기사 정보:**
+- 제목: {article_content.get('title', '')}
+- URL: {news_url}
+- 내용: {article_content.get('content', '')}
+- 분석 시점: 2025년 9월 17일
+{additional_context}
+
+**현재 메일 문안 (참고용):**
+{current_email}
+{company_context}
+
+**메일 작성 지침:**
+1. **관련성 기반 접근**: 
+   - 관련성 점수가 4점 미만이면 억지 연결 금지
+   - 자연스러운 비즈니스 트렌드 관점에서 접근
+   - 관련성이 높으면 구체적 연관성 제시
+
+2. **회사 정보 활용**: 
+   - 기존 조사 결과가 있으면 반드시 활용
+   - 회사의 업종, 규모, 특성에 맞춘 개인화
+   - 일반적인 템플릿 메일 지양
+
+3. **Pain Point 중심 구성**: 
+   - 실제 업계 이슈에서 도출한 구체적 어려움
+   - "혹시 이런 문제로 고민하고 계시지 않나요?" 식 공감 접근
+   - 억지스러운 문제 제기 금지
+
+4. **PortOne 솔루션 제안**:
+   - OPI: 85% 리소스 절감, 2주 구축
+   - 재무자동화: 90% 업무 시간 단축
+   - 게임 웹상점: 인앱결제 수수료 해결
+   - 스마트빌링: 글로벌 결제 지원
+
+5. **이메일 구조**:
+   - 개인화된 인사 (30단어)
+   - Pain Point 제기 (60단어) 
+   - 해결책 제시 (80단어)
+   - 자연스러운 미팅 제안 (30단어)
+
+**주의사항:**
+- 총 200-250단어 내외
+- 제목 7단어/41자 이내
+- HTML 태그 사용 (<br>, <strong>, <em>)
+- 관련성이 낮으면 기사 내용 최소 언급
+
+다음 형식으로 작성해주세요:
+
+제목: [개인화된 제목]
+
+[HTML 형식의 메일 본문]
+"""
+        
+        # Gemini API 호출
+        import google.generativeai as genai
+        genai.configure(api_key=gemini_api_key)
+        
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        response = model.generate_content(prompt)
+        
+        if response and response.text:
+            return response.text
+        else:
+            logger.error("Gemini API 응답이 비어있습니다")
+            return generate_fallback_news_email(article_content, company_name, current_email, news_url)
+            
+    except Exception as e:
+        logger.error(f"뉴스 기반 메일 생성 오류: {str(e)}")
+        return generate_fallback_news_email(article_content, company_name, current_email, news_url)
+
+def analyze_news_with_perplexity(article_content, company_name):
+    """Perplexity AI를 통한 뉴스 분석 (최신성 가중치 적용)"""
+    try:
+        perplexity_api_key = os.getenv('PERPLEXITY_API_KEY')
+        if not perplexity_api_key:
+            logger.warning("Perplexity API 키가 설정되지 않았습니다")
+            return None
+        
+        # 현재 날짜 기준 최신성 강조 프롬프트
+        current_date = "2025년 9월"
+        
+        prompt = f"""
+다음 뉴스 기사를 분석하여 {company_name}과 같은 기업들이 현재 직면할 수 있는 페인 포인트와 비즈니스 기회를 도출해주세요.
+
+**분석 기준 (최신성 우선):**
+- 현재 시점: {current_date}
+- 최신 업계 동향과 트렌드 우선 분석
+- 긴급성과 시급성이 높은 이슈 중심 검토
+
+**뉴스 기사:**
+제목: {article_content.get('title', '')}
+내용: {article_content.get('content', '')}
+
+**분석 요청사항:**
+1. **최신 업계 동향 분석**: {current_date} 기준으로 이 뉴스가 업계에 미치는 즉각적 영향
+2. **현재 진행형 페인 포인트**: 지금 이 순간 기업들이 겪고 있는 구체적인 어려움
+3. **시급한 대응 필요성**: 빠른 시일 내 해결해야 할 과제들
+4. **결제/핀테크 연관성**: 결제 시스템, 재무 자동화, 커머스 관련 이슈
+5. **비즈니스 기회**: 현재 상황에서 즉시 활용 가능한 솔루션 니즈
+
+**응답 형식:**
+- 300단어 내외
+- 최신성과 긴급성 중심의 분석
+- 구체적이고 실행 가능한 인사이트 제공
+- "현재", "지금", "최근", "2025년 들어" 등의 시간적 표현 활용
+"""
+        
+        headers = {
+            'Authorization': f'Bearer {perplexity_api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        data = {
+            'model': 'llama-3.1-sonar-large-128k-online',
+            'messages': [
+                {
+                    'role': 'user',
+                    'content': prompt
+                }
+            ],
+            'max_tokens': 500,
+            'temperature': 0.3
+        }
+        
+        response = requests.post(
+            'https://api.perplexity.ai/chat/completions',
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content']
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Perplexity 뉴스 분석 오류: {str(e)}")
+        return None
+
+def generate_fallback_news_email(article_content, company_name, current_email, news_url):
+    """API 실패 시 폴백 뉴스 기반 메일 생성 (최신성 강조)"""
+    title = article_content.get('title', '최신 업계 동향')
+    current_date = "2025년 9월"
+    
+    return f"""제목: {company_name} 최신 업계 동향 대응 방안
+
+<p>안녕하세요, {company_name} 담당자님.<br>
+PortOne 오준호 매니저입니다.</p>
+
+<p>방금 전 "<strong>{title}</strong>" 관련 뉴스를 봤는데,<br>
+{current_date} 들어 이런 업계 변화가 가속화되고 있어<br>
+{company_name}에서도 현재 이런 고민이 있으실 것 같아 연락드립니다.</p>
+
+<p><strong>지금 이 시점에서</strong> 많은 기업들이 겪고 있는 현실적인 어려움들:<br>
+• 급변하는 시장 환경에 즉시 대응해야 하는 시스템 구축 압박<br>
+• 현재 진행형인 결제 인프라 현대화 및 효율성 개선 필요성<br>
+• 당장 필요한 운영 비용 절감과 서비스 품질 향상의 딜레마</p>
+
+<p><strong>PortOne의 One Payment Infra</strong>로 <em>지금 바로</em> 이런 문제들을 해결할 수 있습니다:<br>
+✅ <strong>85% 리소스 절감</strong> - 즉시 개발 및 운영 부담 대폭 감소<br>
+✅ <strong>2주 내 구축 완료</strong> - 업계 변화 속도에 맞춘 신속한 대응<br>
+✅ <strong>100만원 상당 무료 컨설팅</strong> - 현재 상황 맞춤 전문가 분석</p>
+
+<p><strong>이번 주 중</strong> 편하신 일정을 알려주시면<br>
+{company_name}이 현재 직면한 과제에 포트원이<br>
+어떻게 즉시 도움을 드릴 수 있을지 구체적인 방안을 제안해드리겠습니다.</p>
+
+<p>감사합니다.<br>
+오준호 드림</p>
+
+<p><small>참고 뉴스 (9월 17일 확인): <a href="{news_url}">{title}</a></small></p>"""
 
 if __name__ == '__main__':
     # API 키 확인
@@ -3301,6 +4174,8 @@ if __name__ == '__main__':
     logger.info("- POST /api/generate-email: 이메일 생성")
     logger.info("- POST /api/batch-process: 일괄 처리")
     logger.info("- POST /api/refine-email: 이메일 개선")
-    logger.info("- GET /api/health: 상태 확인")
+    logger.info("- POST /api/analyze-news: 뉴스 기사 분석 (NEW!)")
+    logger.info("- POST /api/test-scraping: 뉴스 스크래핑 테스트")
+    logger.info("- GET /api/health: 서비스 상태 확인")
     
     app.run(debug=True, host='0.0.0.0', port=5001)
