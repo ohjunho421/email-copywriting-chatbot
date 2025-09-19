@@ -658,9 +658,52 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                 }
             }
             
+            // 이메일 주소 추출 (다양한 컬럼명 지원)
+            const possibleEmailColumns = [
+                '대표이메일', '이메일', '회사이메일', '담당자이메일', 
+                'email', 'Email', 'EMAIL', 'e-mail', 'E-mail', 'E-MAIL',
+                '메일', '메일주소', '이메일주소', 'mail', 'Mail', 'MAIL'
+            ];
+            
+            let emailAddress = '';
+            for (const column of possibleEmailColumns) {
+                if (result.company[column] && result.company[column].trim() !== '') {
+                    emailAddress = result.company[column].trim();
+                    console.log(`이메일 주소 발견: ${column} = ${emailAddress}`);
+                    break;
+                }
+            }
+            
+            // 디버깅: CSV 컬럼 확인
+            console.log('=== 이메일 디버깅 시작 ===');
+            console.log('CSV 컬럼들:', Object.keys(result.company));
+            console.log('대표이메일 값:', result.company['대표이메일']);
+            console.log('전체 회사 데이터:', result.company);
+            
+            // 모든 가능한 이메일 컬럼 값 확인
+            possibleEmailColumns.forEach(column => {
+                const value = result.company[column];
+                console.log(`${column}: "${value}" (타입: ${typeof value})`);
+            });
+            
+            console.log('최종 선택된 이메일 주소:', emailAddress);
+            console.log('=== 이메일 디버깅 끝 ===');
+            
             companyDiv.innerHTML = `
                 <div class="company-info">
                     <h5><i class="fas fa-building"></i> ${result.company['회사명']}</h5>
+                    ${emailAddress ? `
+                        <p class="mb-2" style="background-color: #f8f9fa; padding: 8px; border-radius: 4px; border-left: 3px solid #007bff;">
+                            <i class="fas fa-envelope text-primary"></i> <strong>대표이메일:</strong> 
+                            <a href="mailto:${emailAddress}" class="text-primary text-decoration-none" title="메일 보내기" style="font-weight: 500;">
+                                ${emailAddress}
+                            </a>
+                        </p>
+                    ` : `
+                        <p class="mb-2 text-muted">
+                            <i class="fas fa-envelope-open"></i> <small>이메일 정보 없음</small>
+                        </p>
+                    `}
                     <div class="row">
                         <div class="col-md-6">
                             <small><strong>🔍 Perplexity 조사:</strong> ${result.research.success ? '완료' : '실패'}</small><br>
@@ -717,6 +760,15 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                     <button class="btn btn-sm btn-outline-secondary" onclick="refineEmailCopy(${index}, ${vIndex})">
                                         <i class="fas fa-edit"></i> 개선 요청
                                     </button>
+                                    ${emailAddress ? `
+                                        <button class="btn btn-sm btn-outline-info" onclick="copyToClipboard('${emailAddress}')" title="이메일 주소 복사">
+                                            <i class="fas fa-envelope"></i> 이메일 복사
+                                        </button>
+                                    ` : `
+                                        <button class="btn btn-sm btn-outline-warning" onclick="alert('이메일 주소가 없습니다. CSV 파일의 대표이메일 컬럼을 확인해주세요.')" title="이메일 없음">
+                                            <i class="fas fa-exclamation-triangle"></i> 이메일 없음
+                                        </button>
+                                    `}
                                 </div>
                                 <textarea id="ai_template_${index}_${vIndex}" style="position: absolute; left: -9999px;">
 제목: ${variation.subject}
@@ -1892,7 +1944,54 @@ function toggleResearchContent(button) {
     }
 }
 
+// 이메일 주소 클립보드 복사 함수
+function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        // 최신 브라우저에서 Clipboard API 사용
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('이메일 주소가 클립보드에 복사되었습니다!', 'success');
+        }).catch(err => {
+            console.error('클립보드 복사 실패:', err);
+            fallbackCopyTextToClipboard(text);
+        });
+    } else {
+        // 구형 브라우저 지원
+        fallbackCopyTextToClipboard(text);
+    }
+}
+
+// 구형 브라우저용 클립보드 복사 함수
+function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    
+    // 화면에 보이지 않게 설정
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+    
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showToast('이메일 주소가 클립보드에 복사되었습니다!', 'success');
+        } else {
+            showToast('클립보드 복사에 실패했습니다.', 'error');
+        }
+    } catch (err) {
+        console.error('클립보드 복사 실패:', err);
+        showToast('클립보드 복사에 실패했습니다.', 'error');
+    }
+    
+    document.body.removeChild(textArea);
+}
+
 // 챗봇 초기화
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 Script.js 로드됨 - 현재 시간:', new Date().toLocaleTimeString());
     window.emailChatbot = new EmailCopywritingChatbot();
 });

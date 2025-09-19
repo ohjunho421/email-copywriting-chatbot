@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortOne 이메일 문안 선택</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        .company-info {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .main-content {
+            padding: 30px;
+        }
+        
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+        
+        .step {
+            display: flex;
+            align-items: center;
+            margin: 0 20px;
+        }
+        
+        .step-number {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .step.active .step-number {
+            background: #4f46e5;
+            color: white;
+        }
+        
+        .email-variants {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .variant-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .variant-card:hover {
+            border-color: #4f46e5;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.15);
+        }
+        
+        .variant-card.selected {
+            border-color: #4f46e5;
+            background: #f8fafc;
+        }
+        
+        .variant-title {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 10px;
+        }
+        
+        .variant-description {
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+        }
+        
+        .variant-preview {
+            background: #f9fafb;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            max-height: 150px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .variant-preview::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: linear-gradient(transparent, #f9fafb);
+        }
+        
+        .editor-section {
+            display: none;
+            margin-top: 30px;
+            padding: 30px;
+            background: #f8fafc;
+            border-radius: 12px;
+        }
+        
+        .editor-section.active {
+            display: block;
+        }
+        
+        .editor-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #1f2937;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #374151;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+        
+        .form-textarea {
+            min-height: 300px;
+            resize: vertical;
+            font-family: inherit;
+            line-height: 1.6;
+        }
+        
+        .refinement-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .refinement-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .btn-primary {
+            background: #4f46e5;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #4338ca;
+            transform: translateY(-1px);
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #4f46e5;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .alert-success {
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+        }
+        
+        .alert-error {
+            background: #fee2e2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+        
+        .preview-section {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .email-preview {
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 20px;
+            background: #fafafa;
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+        }
+        
+        .email-subject {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            color: #1f2937;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 PortOne 개인화 이메일 생성</h1>
+            <div class="company-info">
+                <h3>{{ session_data.company_data.get('회사명', 'Unknown') }}</h3>
+                <p>{{ session_data.services_generated|length }}개의 맞춤 문안이 생성되었습니다</p>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <!-- 단계 표시 -->
+            <div class="step-indicator">
+                <div class="step active">
+                    <div class="step-number">1</div>
+                    <span>문안 선택</span>
+                </div>
+                <div class="step" id="step-2">
+                    <div class="step-number">2</div>
+                    <span>편집 & 개선</span>
+                </div>
+                <div class="step" id="step-3">
+                    <div class="step-number">3</div>
+                    <span>발송</span>
+                </div>
+            </div>
+            
+            <!-- 문안 선택 섹션 -->
+            <div id="selection-section">
+                <h2 style="text-align: center; margin-bottom: 30px; color: #1f2937;">
+                    원하는 이메일 문안을 선택해주세요
+                </h2>
+                
+                <div class="email-variants">
+                    {% for service_key, email_data in session_data.email_variations.items() %}
+                    <div class="variant-card" data-service="{{ service_key }}">
+                        <div class="variant-title">
+                            {% if 'opi_professional' in service_key %}
+                                🎯 OPI 전문적 톤
+                            {% elif 'opi_curiosity' in service_key %}
+                                🤔 OPI 호기심 유발형
+                            {% elif 'finance_professional' in service_key %}
+                                💼 재무자동화 전문적 톤
+                            {% elif 'finance_curiosity' in service_key %}
+                                💡 재무자동화 호기심 유발형
+                            {% endif %}
+                        </div>
+                        <div class="variant-description">
+                            {% if 'professional' in service_key %}
+                                직접적이고 전문적인 접근으로 구체적인 혜택을 제시합니다
+                            {% else %}
+                                질문과 호기심을 유발하여 자연스럽게 관심을 끌어냅니다
+                            {% endif %}
+                        </div>
+                        <div class="variant-preview">
+                            {{ email_data.body|safe }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" id="select-email" disabled>
+                        선택한 문안으로 계속하기
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 편집 섹션 -->
+            <div id="editor-section" class="editor-section">
+                <div class="editor-title">📝 이메일 편집 및 개선</div>
+                
+                <div class="form-group">
+                    <label class="form-label">이메일 제목 (통일된 형식)</label>
+                    <input type="text" class="form-input" id="email-subject" readonly 
+                           value="[PortOne] {{ session_data.company_data.get('회사명', '') }} 담당자님께 전달 부탁드립니다">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">이메일 본문</label>
+                    <textarea class="form-input form-textarea" id="email-body" placeholder="이메일 본문을 편집하세요..."></textarea>
+                </div>
+                
+                <div class="refinement-section">
+                    <h4 style="margin-bottom: 15px;">🤖 AI로 문안 개선하기</h4>
+                    <input type="text" class="refinement-input" id="refinement-request" 
+                           placeholder="예: '더 친근하게 만들어줘', '긴급성을 강조해줘', '수치를 더 부각시켜줘'">
+                    <button class="btn btn-secondary" id="refine-email">AI로 개선하기</button>
+                </div>
+                
+                <div class="preview-section">
+                    <h4 style="margin-bottom: 15px;">📧 미리보기</h4>
+                    <div class="email-preview">
+                        <div class="email-subject" id="preview-subject"></div>
+                        <div id="preview-body"></div>
+                    </div>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" id="back-to-selection">← 문안 다시 선택</button>
+                    <button class="btn btn-success" id="send-email">이메일 발송하기</button>
+                </div>
+            </div>
+            
+            <!-- 로딩 -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>처리 중입니다...</p>
+            </div>
+            
+            <!-- 알림 -->
+            <div id="alerts"></div>
+        </div>
+    </div>
+
+    <!-- 서버 데이터를 JSON으로 전달 -->
+    <script type="application/json" id="server-data">
+        {
+            "sessionId": "{{ session_id }}",
+            "emailVariations": {{ session_data.email_variations|tojson|safe }}
+        }
+    </script>
+    
+    <script type="text/javascript">
+        // 서버에서 전달된 데이터 파싱
+        const serverData = JSON.parse(document.getElementById('server-data').textContent);
+        const sessionId = serverData.sessionId;
+        const emailVariations = serverData.emailVariations;
+        
+        let selectedService = null;
+        let currentEmailData = null;
+        
+        // 문안 선택 이벤트
+        document.querySelectorAll('.variant-card').forEach(card => {
+            card.addEventListener('click', function() {
+                // 기존 선택 해제
+                document.querySelectorAll('.variant-card').forEach(c => c.classList.remove('selected'));
+                
+                // 새로운 선택
+                this.classList.add('selected');
+                selectedService = this.dataset.service;
+                
+                // 버튼 활성화
+                document.getElementById('select-email').disabled = false;
+            });
+        });
+        
+        // 선택 완료 버튼
+        document.getElementById('select-email').addEventListener('click', function() {
+            if (!selectedService) return;
+            
+            currentEmailData = emailVariations[selectedService];
+            
+            // 편집기에 데이터 로드
+            document.getElementById('email-body').value = currentEmailData.body;
+            updatePreview();
+            
+            // 섹션 전환
+            document.getElementById('selection-section').style.display = 'none';
+            document.getElementById('editor-section').classList.add('active');
+            
+            // 단계 표시 업데이트
+            document.getElementById('step-2').classList.add('active');
+        });
+        
+        // 뒤로가기 버튼
+        document.getElementById('back-to-selection').addEventListener('click', function() {
+            document.getElementById('editor-section').classList.remove('active');
+            document.getElementById('selection-section').style.display = 'block';
+            document.getElementById('step-2').classList.remove('active');
+        });
+        
+        // 본문 편집 시 미리보기 업데이트
+        document.getElementById('email-body').addEventListener('input', updatePreview);
+        
+        function updatePreview() {
+            const subject = document.getElementById('email-subject').value;
+            const body = document.getElementById('email-body').value;
+            
+            document.getElementById('preview-subject').textContent = subject;
+            document.getElementById('preview-body').innerHTML = body;
+        }
+        
+        // AI 개선 기능
+        document.getElementById('refine-email').addEventListener('click', async function() {
+            const refinementRequest = document.getElementById('refinement-request').value.trim();
+            if (!refinementRequest) {
+                showAlert('개선 요청사항을 입력해주세요.', 'error');
+                return;
+            }
+            
+            showLoading(true);
+            
+            try {
+                const response = await fetch('/api/refine-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        current_email: document.getElementById('email-body').value,
+                        refinement_request: refinementRequest
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('email-body').value = result.refined_email;
+                    updatePreview();
+                    showAlert('이메일이 성공적으로 개선되었습니다!', 'success');
+                    document.getElementById('refinement-request').value = '';
+                } else {
+                    showAlert('개선 중 오류가 발생했습니다: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('네트워크 오류가 발생했습니다.', 'error');
+            }
+            
+            showLoading(false);
+        });
+        
+        // 최종 발송
+        document.getElementById('send-email').addEventListener('click', async function() {
+            if (!confirm('이메일을 발송하시겠습니까?')) return;
+            
+            showLoading(true);
+            
+            const finalEmail = {
+                subject: document.getElementById('email-subject').value,
+                body: document.getElementById('email-body').value
+            };
+            
+            try {
+                // 실제 환경에서는 Apps Script 콜백 URL을 사용
+                const callbackUrl = 'https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec';
+                
+                const response = await fetch('/api/send-final-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        selected_email: finalEmail,
+                        callback_url: callbackUrl
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('step-3').classList.add('active');
+                    showAlert('이메일이 성공적으로 발송되었습니다!', 'success');
+                    
+                    // 5초 후 창 닫기
+                    setTimeout(() => {
+                        window.close();
+                    }, 5000);
+                } else {
+                    showAlert('발송 중 오류가 발생했습니다: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('네트워크 오류가 발생했습니다.', 'error');
+            }
+            
+            showLoading(false);
+        });
+        
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+        
+        function showAlert(message, type) {
+            const alertsContainer = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            
+            alertsContainer.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+        
+        // 초기 미리보기 업데이트
+        updatePreview();
+    </script>
+</body>
+</html>
