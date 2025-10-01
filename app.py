@@ -664,7 +664,7 @@ class CompanyResearcher:
                 "B2B 대금 결제 시 복잡한 승인 절차로 인한 지연",
                 "월 수천건 거래 처리로 인한 시스템 과부하",
                 "공급업체 대금 지급 지연으로 인한 신뢰도 하락",
-                "대리점/대리사 수수료 정산 오류로 인한 분쟁",
+                # "대리점/대리사 수수료 정산 오류로 인한 분쟁",
                 "수출 대금 회수 지연으로 인한 현금흐름 악화",
                 "재고 데이터와 주문 데이터 불일치로 인한 혼란",
                 "ERP 시스템과 결제 시스템 연동 실패"
@@ -673,12 +673,12 @@ class CompanyResearcher:
         elif any(keyword in company_lower for keyword in ['서비스', '컴설팅', '대행', 'service', 'consulting', '에이전시']):
             pain_pool = [
                 "고객사 20개 이상의 서로 다른 결제 시스템 연동",
-                "프로젝트별 비용 정산에 주마다 20시간 소요",
+                # "프로젝트별 비용 정산에 주마다 20시간 소요",
                 "고객사 요구로 매번 다른 결제 시스템 개발",
-                "수수료 정산 오류로 인한 고객사와의 분쟁",
+                # "수수료 정산 오류로 인한 고객사와의 분쟁",
                 "월별 수익 분석에 엑셀로 3일 소요",
                 "다양한 결제 수단 지원으로 인한 개발 비용 증가",
-                "고객사별 정산 주기 달라 관리 어려움"
+                # "고객사별 정산 주기 달라 관리 어려움"
             ]
         
         else:
@@ -868,7 +868,7 @@ class CompanyResearcher:
         """업종별 심화 인사이트"""
         try:
             deep_insights = {
-                '이커머스': f"{company_name}는 이커머스 업체로서 네이버페이/카카오페이/토스페이 등 다중 PG 연동과 정산 자동화가 핵심 이슈. 특히 마케팅비 정산, 반품/환불 처리, 세금계산서 발행 등이 주요 Pain Point",
+                '이커머스': f"{company_name}는 이커머스 업체로서 네이버페이/카카오페이/토스페이 등 다중 PG 연동과 정산 자동화가 핵심 이슈. 특히 반품/환불 처리, 세금계산서 발행 등이 주요 Pain Point",
                 '핀테크': f"{company_name}는 핀테크 기업으로서 금융위원회 규제 준수와 동시에 결제 편의성 제고가 필요. PCI-DSS 인증, 전자금융거래법 준수, 실시간 거래 모니터링이 핵심",
                 '제조업': f"{company_name}는 제조업체로서 B2B 대량 거래의 결제/정산 복잡성이 주요 과제. 외상매출, 어음 결제, 수출 대금 회수, ERP 연동이 핵심 요구사항",
                 'SaaS': f"{company_name}는 SaaS 기업으로서 구독 결제의 안정성과 글로벌 확장성이 중요. 정기결제 실패율 최소화, 다국가 통화 지원, 과금 모델 유연성이 핵심",
@@ -4043,7 +4043,7 @@ def generate_email_from_news_analysis(article_content, company_name, current_ema
         import google.generativeai as genai
         genai.configure(api_key=gemini_api_key)
         
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        model = genai.GenerativeModel('gemini-2.5-pro')
         response = model.generate_content(prompt)
         
         if response and response.text:
