@@ -7,7 +7,7 @@ import asyncio
 import concurrent.futures
 from functools import partial
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 import boto3
@@ -405,51 +405,49 @@ class CompanyResearcher:
             search_query = self.build_enriched_search_query(company_name, additional_info)
             
             prompt = f"""
-다음 회사에 대한 포괄적인 정보를 조사하고 분석해주세요.
+다음 회사에 대한 최신 정보를 웹에서 직접 검색하여 조사하고 분석해주세요.
 
-*** 중요: 아래 정확한 검색 쿼리를 우선적으로 활용하여 검색하세요 ***
+🔍 **필수: 실시간 웹 검색을 통해 최신 뉴스 기사를 반드시 찾아주세요**
+
 검색 쿼리: {search_query}
 
 이 검색 쿼리에는 사업자등록번호, 대표자명, 공식 홈페이지 등 정확한 식별 정보가 포함되어 있습니다. 
-반드시 이 정보를 활용하여 정확한 회사를 식별하고 최신 정보를 수집해주세요.
+반드시 이 정보를 활용하여:
+1. **최근 6개월 이내의 뉴스 기사**를 우선적으로 검색
+2. 공식 보도자료, 언론 기사, 업계 뉴스 사이트에서 정보 수집
+3. 구체적인 날짜와 출처를 포함하여 인용
 
-추가로 이미 수집된 다중 검색 엔진(Google, DuckDuckGo, 웹 스크래핑)의 최신 뉴스와 정보도 참고하세요:
-
+추가로 이미 수집된 다중 검색 엔진의 정보도 참고:
 {search_context}
 
 다음 구조로 정보를 정리해주세요:
 
-## 1. 기업 개요 (Corporate Overview)
+## 1. 최신 뉴스 및 활동 (Recent News & Activities) 🔴 **가장 중요**
+**반드시 실제 뉴스 기사를 검색하여 다음 정보 포함:**
+- 📰 **기사 제목과 날짜** (예: "2024년 10월 시리즈 A 투자 유치" - 2024.10.15)
+- 📰 **신제품 출시, 투자 유치, 사업 확장 관련 구체적 뉴스**
+- 📰 **조직 변화, 파트너십, 수상 이력 등**
+- 🔗 **뉴스 출처** (가능한 경우 URL 포함)
+
+## 2. 기업 개요 (Corporate Overview)
 - 주력 사업 분야와 핵심 제품/서비스
 - 대상 고객층 및 시장 포지셔닝  
 - 추정 매출 규모 및 성장 단계
-- 최신 비즈니스 동향 (위의 수집된 뉴스 정보 활용)
-
-## 2. 최신 뉴스 및 활동 분석 (Recent News Analysis)
-- 수집된 뉴스 정보 기반 최신 동향 분석
-- 신제품 출시, 투자 유치, 사업 확장 소식
-- 조직 변화나 주요 파트너십 체결
-- 향후 성장 전략 및 방향성
 
 ## 3. 결제/정산 관련 Pain Points (Payment & Settlement Challenges)
 - 현재 결제 시스템의 추정 복잡도
 - 다중 채널 운영 시 예상되는 정산 문제
-- 결제 실패나 시스템 장애 리스크
 - 업계 특성상 겪을 수 있는 결제 관련 어려움
 
 ## 4. 업계별 기술 트렌드 (Industry Tech Trends)
 - 해당 업계의 디지털 전환 현황
 - 결제 인프라 혁신 사례
-- 경쟁사들의 기술 도입 동향
-- 시장에서의 경쟁력 및 차별화 요소
 
 ## 5. PortOne 솔루션 적합성 (PortOne Solution Fit)
 - One Payment Infra(OPI) 적합성 분석
 - 재무 자동화 솔루션 필요성 정도
-- 게임 D2C 솔루션 적용 가능성 (게임 업계인 경우)
-- 예상 도입 우선순위 및 의사결정 요소
 
-이미 수집된 다중 검색 엔진의 최신 정보를 종합하여 정확하고 시의성 있는 분석을 제공하고, 각 섹션을 명확히 구분하여 구체적인 근거와 함께 응답해주세요.
+**중요**: 반드시 웹 검색을 통해 실제 최신 뉴스와 기사를 찾아서 인용하고, 구체적인 날짜와 출처를 명시해주세요. 추측이나 일반적인 내용이 아닌, 실제 검색된 사실 기반 정보를 제공해주세요.
 """
             
             data = {
@@ -477,7 +475,26 @@ class CompanyResearcher:
             
             if response.status_code == 200:
                 result = response.json()
-                raw_content = result['choices'][0]['message']['content']
+                
+                # 안전한 응답 추출
+                if 'choices' in result and len(result['choices']) > 0:
+                    raw_content = result['choices'][0]['message']['content']
+                    logger.info(f"{company_name} Perplexity 응답 수신: {len(raw_content)} 문자")
+                else:
+                    logger.error(f"{company_name} Perplexity 응답 형식 오류: {result}")
+                    raise Exception("Perplexity API 응답 형식이 올바르지 않습니다")
+                
+                # Citations (출처) 추출
+                citations = result.get('citations', [])
+                if citations:
+                    logger.info(f"{company_name} Perplexity citations 발견: {len(citations)}개")
+                    # Citations를 응답에 추가
+                    citations_text = "\n\n## 📚 참고 출처 (Citations)\n"
+                    for i, citation in enumerate(citations[:5], 1):  # 최대 5개만
+                        citations_text += f"{i}. {citation}\n"
+                    raw_content += citations_text
+                else:
+                    logger.warning(f"{company_name} Perplexity citations 없음 - 실제 검색 결과가 부족할 수 있음")
                 
                 # 응답 포맷팅 및 가독성 개선
                 formatted_content = self.format_perplexity_response(raw_content, company_name)
@@ -1021,7 +1038,7 @@ class CompanyResearcher:
         all_results = []
         search_start_time = time.time()
         
-        logger.info(f"Enriched 검색 쿼리: {search_query}")
+        logger.info(f"{company_name} Enriched 검색 쿼리: {search_query}")
         
         # 병렬로 검색 실행
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
@@ -1037,15 +1054,26 @@ class CompanyResearcher:
             for i, (future, source) in enumerate(zip(futures, sources)):
                 try:
                     result = future.result(timeout=10)
-                    if result and len(result.strip()) > 10:
-                        all_results.append(f"📰 {source}: {result}")
+                    if result:
+                        # 결과 검증
+                        result_str = str(result).strip()
+                        if len(result_str) > 10:  # 최소 길이 확인
+                            # 이모지 추가
+                            emoji = "📰" if source == "Google" else ("🦆" if source == "DuckDuckGo" else "🌐")
+                            formatted_result = f"{emoji} {source}: {result_str}"
+                            all_results.append(formatted_result)
+                            logger.info(f"{company_name} {source} 검색 성공: {len(result_str)} 문자")
+                        else:
+                            logger.warning(f"{company_name} {source} 결과가 너무 짧음: {result_str}")
+                    else:
+                        logger.warning(f"{company_name} {source} 검색 결과 없음")
                 except concurrent.futures.TimeoutError:
-                    logger.warning(f"{source} 검색 타임아웃")
+                    logger.warning(f"{company_name} {source} 검색 타임아웃 (10초 초과)")
                 except Exception as e:
-                    logger.warning(f"{source} 검색 오류: {e}")
+                    logger.warning(f"{company_name} {source} 검색 오류: {str(e)}")
         
         search_elapsed = time.time() - search_start_time
-        logger.info(f"{company_name} enriched 검색 완료: {len(all_results)}개 결과, {search_elapsed:.2f}초 소요")
+        logger.info(f"{company_name} enriched 검색 완료: {len(all_results)}개 원본 결과, {search_elapsed:.2f}초 소요")
         
         if all_results:
             # 결과 품질 점검 및 중복 제거
@@ -1053,6 +1081,7 @@ class CompanyResearcher:
             return quality_results
         
         # 검색 결과가 없는 경우 기본 정보 제공
+        logger.warning(f"{company_name} 모든 검색 엔진에서 결과 없음 - Fallback 정보 사용")
         return self.generate_fallback_news_info(company_name)
     
     def search_company_news(self, company_name):
@@ -1286,44 +1315,81 @@ class CompanyResearcher:
     def filter_and_enhance_results(self, all_results, company_name):
         """검색 결과 품질 필터링 및 향상"""
         try:
+            if not all_results:
+                logger.warning(f"{company_name}: 필터링할 결과가 없음")
+                return self.generate_fallback_news_info(company_name)
+            
             enhanced_results = []
             seen_content = set()
             
             for result in all_results:
-                # 결과 내용 추출 (이모지와 헤더 제거)
-                content = result.split(': ', 1)[1] if ': ' in result else result
-                content_lower = content.lower()
-                
-                # 품질 검사
-                if len(content.strip()) < 20:  # 너무 짧은 결과 제외
-                    continue
+                try:
+                    # 안전한 결과 내용 추출
+                    if isinstance(result, str) and result.strip():
+                        # 이모지와 헤더 제거
+                        if ': ' in result:
+                            parts = result.split(': ', 1)
+                            content = parts[1] if len(parts) > 1 else result
+                        else:
+                            content = result
+                        
+                        content = content.strip()
+                        content_lower = content.lower()
+                        
+                        # 품질 검사 - 최소 길이 확인
+                        if len(content) < 15:
+                            logger.debug(f"너무 짧은 결과 제외: {content[:50]}")
+                            continue
+                        
+                        # 무의미한 결과 제거
+                        skip_phrases = [
+                            '검색 결과',
+                            '더 구체적이고 정확한 정보',
+                            'api 키가 없는 경우',
+                            '시뮬레이션'
+                        ]
+                        if any(phrase in content_lower for phrase in skip_phrases):
+                            logger.debug(f"무의미한 결과 제외: {content[:50]}")
+                            continue
+                        
+                        # 중복 내용 제거 (유사도 기반)
+                        is_duplicate = False
+                        for seen in seen_content:
+                            if self.calculate_similarity(content_lower, seen) > 0.7:
+                                is_duplicate = True
+                                logger.debug(f"중복 결과 제외: {content[:50]}")
+                                break
+                        
+                        if not is_duplicate:
+                            seen_content.add(content_lower)
+                            enhanced_results.append(result)
+                            logger.debug(f"유효한 결과 추가: {content[:100]}")
                     
-                # 중복 내용 제거 (유사도 기반)
-                is_duplicate = False
-                for seen in seen_content:
-                    if self.calculate_similarity(content_lower, seen) > 0.7:
-                        is_duplicate = True
-                        break
-                
-                if not is_duplicate:
-                    seen_content.add(content_lower)
-                    enhanced_results.append(result)
+                except Exception as e:
+                    logger.warning(f"개별 결과 처리 오류: {e} - {result[:100] if isinstance(result, str) else result}")
+                    continue
             
             if enhanced_results:
                 # 최신성 순서로 정렬 (Google 뉴스 우선)
                 enhanced_results.sort(key=lambda x: (
-                    0 if '📰 Google' in x else
-                    1 if '🦆 DuckDuckGo' in x else
-                    2 if '🌐 웹' in x else 3
+                    0 if '📰 Google' in str(x) else
+                    1 if '🦆 DuckDuckGo' in str(x) or 'DuckDuckGo' in str(x) else
+                    2 if '🌐 웹' in str(x) or '웹 검색' in str(x) else 3
                 ))
                 
-                return "\n\n".join(enhanced_results)
+                result_text = "\n\n".join(enhanced_results)
+                logger.info(f"{company_name}: {len(enhanced_results)}개 유효 결과 반환")
+                return result_text
             
-            return f"{company_name} 관련 정보 수집 완료 (품질 필터링 적용)"
+            logger.warning(f"{company_name}: 필터링 후 유효 결과 없음")
+            return self.generate_fallback_news_info(company_name)
             
         except Exception as e:
-            logger.warning(f"결과 필터링 오류: {e}")
-            return "\n\n".join(all_results)
+            logger.error(f"결과 필터링 오류: {e}", exc_info=True)
+            # 오류 발생 시에도 원본 결과 반환 시도
+            if all_results and len(all_results) > 0:
+                return "\n\n".join([str(r) for r in all_results if r])
+            return self.generate_fallback_news_info(company_name)
     
     def calculate_similarity(self, text1, text2):
         """두 텍스트 간 유사도 계산 (간단한 Jaccard 유사도)"""
@@ -2955,20 +3021,21 @@ def generate_email_with_gemini(company_data, research_data):
    - **경쟁사가 있다면**: "실제로 {competitor_name}도 급성장할 때<br>같은 고민을 했었는데..." 호기심 유발
    - "어떻게 해결했는지 궁금하시지 않나요?" 관심 유도
 
-3. **재무자동화 솔루션 - 전문적 톤**: 
+3. **재무자동화 솔루션 (Recon) - 전문적 톤**: 
    - **필수**: 성장/확장 뉴스를 구체적으로 인용. 예: "'{company_name}가 신사업 부문 진출'이라는 소식을 들었습니다"
    - 사업 다각화 → 복잡해지는 재무 관리 자연스럽게 연결
    - **경쟁사가 있다면**: "{competitor_name}도 사업 확장 시<br>재무 자동화로 90% 시간 절약했습니다"
-   - 자동화의 핵심 혜택 (90% 단축, 100% 정합성)
+   - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "PG사의 각기다른 양식에도 정확하게 데이터를 통합하고 주문건당 정산여부 파악이 가능합니다. 이를 통해 ERP연동도 가능하기 때문에 재무팀의 반복적인 수작업을 90% 이상 단축하고, 휴먼에러를 줄여 확보된 리소스를 더 가치 있는 성장 전략에 집중하실 수 있습니다"
 
-4. **재무자동화 솔루션 - 호기심 유발형**: 
+4. **재무자동화 솔루션 (Recon) - 호기심 유발형**: 
    - **필수**: 구체적 뉴스로 시작하는 질문. 예: "'{company_name} 해외 진출' 뉴스를 봤는데, 다국가 재무 관리는 어떻게 하실 계획인가요?"
    - 확장에 따른 재무 복잡성 증가 공감 표현
    - **경쟁사가 있다면**: "{competitor_name}도 글로벌 진출 시<br>재무 통합 관리로 큰 도움을 받았는데..." 호기심 자극
+   - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "여러 PG사의 다른 데이터 형식도 자동으로 통합하고, ERP 연동으로 재무팀 업무를 90% 이상 줄여드릴 수 있습니다. 휴먼에러도 제거하고요"
    - "구체적으로 어떤 도움이 되는지 보여드릴까요?" 관심 유도
 
 **구조 및 형식:**
-- 제목: 7단어/41자 이내, 구체적 Pain Point나 혜택 언급
+- 제목: 고정 형식 사용 ("[PortOne] {company_name} {email_name}께 전달 부탁드립니다") - 본문에 제목 포함하지 말것
 - 본문: 고정 서론 → Pain Point 제기(50-70단어) → 해결책 제시(50-70단어) → 경쟁사 사례/혜택(30-50단어) → 고정 결론
 - 전체 본문: 130-200단어로 간결하면서도 핵심적으로 작성
 - 줄바꿈: 의미 단위별로 자연스럽게 <br> 태그 사용 (문장이 길 때, 새로운 주제로 넘어갈 때)
@@ -2980,19 +3047,15 @@ def generate_email_with_gemini(company_data, research_data):
 
 {{
   "opi_professional": {{
-    "subject": "제목",
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "opi_curiosity": {{
-    "subject": "제목",
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_professional": {{
-    "subject": "제목",
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_curiosity": {{
-    "subject": "제목",
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }}
 }}
@@ -3058,9 +3121,11 @@ def generate_email_with_gemini(company_data, research_data):
                     
                     for service in services_to_generate:
                         if service in email_variations:
-                            subject = replace_placeholders(email_variations[service]['subject'], company_name, email_name, competitor_name)
-                            body = replace_placeholders(email_variations[service]['body'], company_name, email_name, competitor_name)
+                            # 고정 제목 사용
+                            subject = f'[PortOne] {company_name} {email_name}께 전달 부탁드립니다'
                             
+                            # body만 플레이스홀더 교체
+                            body = replace_placeholders(email_variations[service]['body'], company_name, email_name, competitor_name)
                             
                             formatted_variations[service] = {
                                 'subject': subject,
@@ -3159,16 +3224,149 @@ PortOne 영업팀
 
 (주의: Gemini API 키 미설정으로 인한 시뮬레이션 응답)"""
         
+        # URL이 포함되어 있는지 확인하고 스크래핑
+        article_context = ""
+        import re
+        url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+        urls = re.findall(url_pattern, refinement_request)
+        
+        if urls:
+            logger.info(f"개선 요청에서 URL 발견: {len(urls)}개")
+            for url in urls[:3]:  # 최대 3개 URL까지 처리
+                try:
+                    logger.info(f"URL 내용 스크래핑 시도: {url}")
+                    article_data = scrape_news_article(url)
+                    
+                    if article_data:
+                        article_context += f"\n\n### 📰 참고 기사 정보 (출처: {url})\n"
+                        article_context += f"**제목**: {article_data.get('title', '제목 없음')}\n"
+                        article_context += f"**본문**: {article_data.get('content', '')[:1500]}\n"
+                        logger.info(f"URL 스크래핑 성공: {article_data.get('title', '')[:50]}")
+                    else:
+                        logger.warning(f"URL 스크래핑 실패: {url}")
+                        article_context += f"\n\n### ⚠️ 기사 URL 제공됨: {url}\n(자동 스크래핑 실패 - 수동으로 내용 확인 필요)\n"
+                except Exception as e:
+                    logger.error(f"URL 처리 중 오류: {str(e)}")
+                    article_context += f"\n\n### ⚠️ 기사 URL: {url}\n(처리 오류: {str(e)})\n"
+        
         prompt = f"""
-다음 이메일 문안을 사용자의 상세한 요청에 따라 개선해주세요.
+당신은 B2B SaaS 세일즈 전문가입니다. 다음 이메일 문안을 개선하는 임무를 수행하세요.
 
 **현재 이메일:**
 {current_email}
 
 **사용자의 개선 요청:**
 {refinement_request}
+{article_context}
 
-**개선 지침:**
+**⚠️ 중요: 아래 기사 정보가 제공되었다면 MUST DO 체크리스트를 반드시 준수하세요**
+
+### 🎯 MUST DO 체크리스트 (뉴스 기사가 제공된 경우)
+
+✅ **1단계: 기사 분석 (필수)**
+- [ ] 기사 제목과 본문에서 구체적 사실 3가지 이상 추출
+- [ ] 회사의 신규 사업/제품/투자/확장 계획 파악
+- [ ] 언급된 수치 (금액, 매장 수, 목표 등) 정확히 기록
+
+✅ **2단계: Pain Point 도출 (필수 - 최소 2개)**
+- [ ] 기사 내용 기반으로 회사가 직면할 결제/정산 관련 과제 2개 이상 구체적으로 추론
+- [ ] 예시: "6,000개 매장 → 대규모 거래 데이터 통합 관리 어려움"
+- [ ] 일반적인 문제가 아닌 **이 회사만의 구체적 상황**에 맞춘 Pain Point
+
+✅ **3단계: PortOne 솔루션 매핑 (필수 - 각 Pain Point마다)**
+- [ ] Pain Point 1 → PortOne 해결책 (OPI/재무자동화/스마트라우팅)
+- [ ] Pain Point 2 → PortOne 해결책
+- [ ] 각 솔루션에 구체적 수치 포함 (85% 절감, 2주 구축, 90% 단축 등)
+
+✅ **4단계: 이메일 구조 검증 (필수)**
+- [ ] 기사 내용 언급 (30-40단어)
+- [ ] Pain Point 제기 (50-70단어)
+- [ ] PortOne 솔루션 제시 with 불릿 포인트 (60-80단어)
+- [ ] 미팅 제안 (30-40단어)
+
+**❌ 절대 금지사항:**
+- 기사를 단순히 "최근 소식 접했습니다"로만 언급
+- Pain Point 없이 바로 제품 소개
+- 일반적인 "결제 시스템 필요하시죠?" 식 접근
+- PortOne 솔루션 구체적 설명 없이 "도움 드릴 수 있습니다"로만 마무리
+
+---
+
+### 🎯 URL/뉴스 기사 분석이 제공된 경우 (최우선)
+
+1. **기사 내용 깊이 있게 분석**:
+   - 기사에서 언급된 회사의 **새로운 사업**, **제품 출시**, **확장 계획**, **투자 유치** 등을 파악
+   - 이러한 움직임이 의미하는 **비즈니스 성장 시그널** 이해
+   - 기사에 나온 구체적 **수치, 규모, 목표**를 정확히 기억
+
+2. **Pain Point 추론 - 3단계 분석**:
+   
+   **[1단계] 비즈니스 성장이 가져오는 운영 부담 파악**
+   - 새 사업/제품 출시 → 결제 시스템 다양화 필요
+   - 매출 확대 → 거래량 급증으로 인한 시스템 부하
+   - 신규 채널 진출 → 멀티 채널 결제 통합 이슈
+   - 투자 유치 → 빠른 확장 속도에 IT 리소스 부족
+   
+   **[2단계] 구체적인 Pain Point 도출**
+   - "이마트24가 자체브랜드 출시" → POS/온라인 결제 동시 처리 복잡도 증가
+   - "전국 6,000개 매장" → 대규모 결제 데이터 실시간 통합 관리 어려움
+   - "옐로우 브랜드로 경쟁력 강화" → 빠른 출시를 위해 결제 개발 시간 단축 필요
+   
+   **[3단계] 수신자가 공감할 수 있는 표현으로 전환**
+   - ❌ "결제 시스템 개발이 어렵죠?" (너무 일반적)
+   - ✅ "새로운 PL 브랜드 출시를 준비하시는 시점에서, 온오프라인 통합 결제와 정산 자동화가 큰 과제가 아닐까요?"
+
+3. **PortOne 솔루션을 자연스럽게 연결**:
+   
+   **Pain Point → Solution 매핑 예시**
+   
+   | 기사 내용 | Pain Point | PortOne 솔루션 |
+   |---------|-----------|---------------|
+   | 자체브랜드 출시 | 빠른 출시 일정, 결제 개발 부담 | OPI로 2주 내 결제 시스템 구축 |
+   | 6,000개 매장 | 대규모 거래 데이터 통합 관리 | 통합 대시보드로 실시간 모니터링 |
+   | 커머스 확장 | 여러 PG사 계약/관리 복잡 | 스마트 라우팅으로 최적 결제 경로 자동 선택 |
+   | 재무 효율화 | 정산 데이터 수작업 처리 | 재무자동화로 정산 프로세스 90% 단축 |
+
+4. **이메일 문안 구조 (Pain Point 중심)**:
+
+   ```
+   📧 인사 (20-30단어)
+   안녕하세요, [회사명] [담당자명]님.
+   PortOne 오준호 매니저입니다.
+   
+   📰 기사 기반 컨텍스트 (30-40단어)  
+   최근 [회사명]의 [구체적 사업/제품]에 대한 소식을 접했습니다.
+   [기사에서 언급된 구체적 수치나 목표]는 정말 인상적이었습니다.
+   
+   💡 공감형 Pain Point 제기 (50-70단어)
+   이런 빠른 성장 속에서 [구체적 pain point 1]과 
+   [구체적 pain point 2]가 큰 과제가 아닐까 생각됩니다.
+   
+   특히 [기사 내용과 연결된 구체적 상황]을 준비하시는 시점에서,
+   [기술적/운영적 어려움]을 경험하고 계실 것 같습니다.
+   
+   ✅ 솔루션 제시 (60-80단어)
+   PortOne의 [구체적 제품명]은 이런 문제를 해결해드릴 수 있습니다:
+   
+   • [Pain Point 1 해결] → [구체적 기능]으로 [결과/수치]
+   • [Pain Point 2 해결] → [구체적 기능]으로 [결과/수치]  
+   • [추가 혜택] → [차별화 포인트]
+   
+   🤝 자연스러운 미팅 제안 (30-40단어)
+   [회사명]의 [기사에서 언급된 목표]를 더 빠르게 달성하실 수 있도록
+   15분 간단한 데모로 구체적인 도움을 드리고 싶습니다.
+   
+   다음주 중 편한 시간 알려주시면 감사하겠습니다.
+   ```
+
+5. **반드시 지켜야 할 원칙**:
+   - 기사 내용을 **단순 언급**이 아닌 **Pain Point 분석의 근거**로 활용
+   - "결제 시스템이 필요하시죠?" 같은 일반적 접근 금지
+   - 기사에서 발견한 **구체적 사실**을 바탕으로 **맞춤형 제안**
+   - 수치는 정확하게: PortOne 솔루션 수치는 "85% 절감", "2주 내 구축", "90% 단축" 등 실제 값 사용
+
+### 📝 일반 개선 요청인 경우
+
 1. 사용자의 요청사항을 세밀하게 분석하고 모든 요구사항을 정확히 반영
 2. 장문의 요청이라도 각 포인트를 놓치지 않고 체계적으로 적용
 3. 요청에서 언급된 톤앤매너, 스타일, 내용 변경사항을 우선적으로 반영
@@ -3212,7 +3410,85 @@ PortOne 영업팀
 - "중앙 정렬해줘" → style="text-align:center" 적용
 - "큰 글씨로 해줘" → <h1>, <h2> 태그나 style="font-size:" 사용
 
-개선된 이메일 전체를 제목과 본문을 포함하여 작성해주세요:
+---
+
+### 🎬 실행 프로세스 (URL/뉴스 기사가 있는 경우)
+
+**단계 1: 기사 분석**
+위에 제공된 "참고 기사 정보"를 면밀히 분석하세요.
+- 회사명, 제품/서비스명, 사업 내용
+- 투자 금액, 매출 목표, 매장 수, 확장 계획 등 구체적 수치
+- 출시 시기, 목표 시장, 경쟁 전략
+
+**단계 2: Pain Point 추론**
+기사 내용을 바탕으로 이 회사가 현재 직면했거나 곧 직면할 결제/정산 관련 과제를 **3가지 이상** 도출하세요.
+
+예시:
+- 자체브랜드 출시 → 신규 SKU 대량 추가로 인한 정산 복잡도 증가
+- 전국 매장 확대 → 오프라인/온라인 채널 통합 결제 필요
+- 빠른 출시 일정 → IT 개발 리소스 부족, 외부 솔루션 필요
+
+**단계 3: PortOne 솔루션 매핑**
+각 Pain Point에 대해 PortOne이 제공할 수 있는 **구체적 해결책**을 연결하세요.
+- OPI (One Payment Infra): 통합 결제 시스템, 2주 내 구축, 개발 리소스 85% 절감
+- 재무자동화: 정산 데이터 자동화, 90% 시간 단축, 실시간 대시보드
+- 스마트 라우팅: 여러 PG사 자동 선택, 결제 성공률 15% 향상
+
+**단계 4: 이메일 작성**
+위 분석을 바탕으로 **HTML 형식**의 이메일 본문을 작성하세요.
+
+⚠️ **중요**: 
+- 제목은 생성하지 마세요 (본문만 작성)
+- HTML 태그 사용: <p>, <br>, <strong>, <ul>, <li> 등
+- 기사 내용을 단순 언급이 아닌 Pain Point 근거로 활용
+- 구체적 수치와 사실 기반 설득
+
+**출력 형식:**
+```html
+<p>안녕하세요, [회사명] [담당자명]님.<br>
+PortOne 오준호 매니저입니다.</p>
+
+<p>최근 [기사에서 발견한 구체적 사실]에 대한 소식을 접했습니다.<br>
+[구체적 수치/목표]는 정말 인상적이었습니다.</p>
+
+<p>이런 빠른 성장과 [구체적 사업 확장] 과정에서<br>
+[Pain Point 1]과 [Pain Point 2]가<br>
+중요한 과제가 될 것으로 생각됩니다.</p>
+
+<p>PortOne의 [제품명]은 이런 문제를 해결해드릴 수 있습니다:</p>
+
+<ul>
+<li><strong>[Pain Point 1 해결]</strong>: [구체적 기능]으로 [수치 결과]</li>
+<li><strong>[Pain Point 2 해결]</strong>: [구체적 기능]으로 [수치 결과]</li>
+<li><strong>[추가 혜택]</strong>: [차별화 포인트]</li>
+</ul>
+
+<p>[회사명]의 [기사에서 언급된 목표]를 더 빠르게 달성하실 수 있도록<br>
+15분 간단한 데모로 구체적인 도움을 드리고 싶습니다.</p>
+
+<p>다음주 중 편하신 일정을 알려주시면<br>
+[회사명]의 성장에 포트원이 어떻게 기여할 수 있을지<br>
+이야기 나누고 싶습니다.</p>
+
+<p>감사합니다.<br>
+오준호 드림</p>
+```
+
+---
+
+### ⚠️ 최종 검증 (출력 전 반드시 확인)
+
+기사 정보가 제공되었다면, 작성한 이메일이 다음을 포함하는지 확인하세요:
+
+1. ✅ 기사에서 발견한 **구체적 사실** (회사명, 사업, 수치 등) 명시
+2. ✅ **최소 2개**의 구체적 Pain Point 제기
+3. ✅ 각 Pain Point에 대한 **PortOne 솔루션** (OPI/재무자동화/스마트라우팅)
+4. ✅ 솔루션에 **구체적 수치** 포함 (85% 절감, 2주 구축, 90% 단축 등)
+5. ✅ <ul><li> 태그로 솔루션 불릿 포인트 작성
+
+**위 5가지가 모두 포함되지 않았다면 다시 작성하세요.**
+
+이제 개선된 이메일 **본문만** HTML 형식으로 출력하세요 (제목 없이):
 """
         
         # Gemini API 호출
@@ -3222,8 +3498,10 @@ PortOne 영업팀
         response = model.generate_content(
             prompt,
             generation_config={
-                'temperature': 0.7,
-                'max_output_tokens': 4096  # 장문 요청 처리를 위해 토큰 수 증가
+                'temperature': 0.5,  # 더 일관된 응답을 위해 낮춤
+                'max_output_tokens': 4096,
+                'top_p': 0.9,
+                'top_k': 40
             }
         )
         
@@ -3586,8 +3864,8 @@ def extract_content_from_soup(soup, url):
             'content': ['.article_view', '.news_view']
         },
         'chosun.com': {
-            'title': ['.article-header h1', '.news_title_text'],
-            'content': ['.par', '.news_text']
+            'title': ['h1', 'title', '.article-header h1', '.news_title_text', '[property="og:title"]'],
+            'content': ['#fusion-app article', '.story-news__article', '[data-type="article-body"]', '.par', '.news_text', 'article p', '.article-body']
         },
         'joins.com': {
             'title': ['.headline', '.article_title'],
@@ -3626,48 +3904,90 @@ def extract_content_from_soup(soup, url):
             site_selectors = selectors
             break
     
-    # 제목 추출
-    title_selectors = site_selectors['title'] if site_selectors else general_selectors['title']
-    for selector in title_selectors:
-        try:
-            title_elem = soup.select_one(selector)
-            if title_elem:
-                title = title_elem.get_text().strip()
-                if len(title) > 5:  # 의미있는 제목인지 확인
-                    logger.info(f"제목 추출 성공: {title[:50]}...")
-                    break
-        except Exception as e:
-            logger.debug(f"제목 선택자 {selector} 실패: {e}")
-            continue
+    # 제목 추출 - 먼저 meta 태그에서 시도
+    try:
+        og_title = soup.find('meta', property='og:title')
+        if og_title and og_title.get('content'):
+            title = og_title.get('content').strip()
+            logger.info(f"OG 태그에서 제목 추출 성공: {title[:50]}...")
+    except Exception as e:
+        logger.debug(f"OG 태그 제목 추출 실패: {e}")
     
-    # 본문 추출
-    content_selectors = site_selectors['content'] if site_selectors else general_selectors['content']
-    for selector in content_selectors:
+    # meta 태그에서 실패하면 일반 선택자 시도
+    if not title:
+        title_selectors = site_selectors['title'] if site_selectors else general_selectors['title']
+        for selector in title_selectors:
+            try:
+                title_elem = soup.select_one(selector)
+                if title_elem:
+                    title = title_elem.get_text().strip()
+                    if len(title) > 5:  # 의미있는 제목인지 확인
+                        logger.info(f"제목 추출 성공: {title[:50]}...")
+                        break
+            except Exception as e:
+                logger.debug(f"제목 선택자 {selector} 실패: {e}")
+                continue
+    
+    # 본문 추출 - 조선일보 JSON 데이터에서 먼저 시도
+    if 'chosun.com' in url.lower():
         try:
-            content_elem = soup.select_one(selector)
-            if content_elem:
-                # 불필요한 요소 제거 (더 포괄적)
-                unwanted_selectors = [
-                    'script', 'style', 'nav', 'header', 'footer', 'aside',
-                    '.ad', '.advertisement', '.social-share', '.related-articles',
-                    '.comment', '.reply', '.share', '.tag', '.category',
-                    '.author', '.date', '.source', '.copyright', '.ad_area',
-                    '.related_news', '.more_news', '.sns_area', '.util_area'
-                ]
-                
-                for unwanted_selector in unwanted_selectors:
-                    for unwanted in content_elem.select(unwanted_selector):
-                        unwanted.decompose()
-                
-                content = content_elem.get_text().strip()
-                content = ' '.join(content.split())  # 공백 정리
-                
-                if len(content) > 300:  # 충분한 내용이 있는 경우만
-                    logger.info(f"본문 추출 성공: {len(content)}자 (선택자: {selector})")
-                    break
+            # script 태그에서 Fusion.globalContent 찾기
+            scripts = soup.find_all('script', id='fusion-metadata')
+            for script in scripts:
+                script_text = script.string
+                if script_text and 'Fusion.globalContent' in script_text:
+                    # JSON 파싱
+                    import json
+                    import re
+                    
+                    # globalContent JSON 추출
+                    match = re.search(r'Fusion\.globalContent=({.*?});', script_text, re.DOTALL)
+                    if match:
+                        json_str = match.group(1)
+                        data = json.loads(json_str)
+                        
+                        # content_elements에서 본문 추출
+                        if 'content_elements' in data:
+                            content_parts = []
+                            for elem in data['content_elements']:
+                                if elem.get('type') == 'text' and elem.get('content'):
+                                    content_parts.append(elem['content'])
+                            
+                            if content_parts:
+                                content = ' '.join(content_parts)
+                                logger.info(f"조선일보 JSON에서 본문 추출 성공: {len(content)}자")
         except Exception as e:
-            logger.debug(f"본문 선택자 {selector} 실패: {e}")
-            continue
+            logger.debug(f"조선일보 JSON 파싱 실패: {e}")
+    
+    # JSON 파싱 실패 시 일반 선택자로 시도
+    if not content or len(content) < 300:
+        content_selectors = site_selectors['content'] if site_selectors else general_selectors['content']
+        for selector in content_selectors:
+            try:
+                content_elem = soup.select_one(selector)
+                if content_elem:
+                    # 불필요한 요소 제거 (더 포괄적)
+                    unwanted_selectors = [
+                        'script', 'style', 'nav', 'header', 'footer', 'aside',
+                        '.ad', '.advertisement', '.social-share', '.related-articles',
+                        '.comment', '.reply', '.share', '.tag', '.category',
+                        '.author', '.date', '.source', '.copyright', '.ad_area',
+                        '.related_news', '.more_news', '.sns_area', '.util_area'
+                    ]
+                    
+                    for unwanted_selector in unwanted_selectors:
+                        for unwanted in content_elem.select(unwanted_selector):
+                            unwanted.decompose()
+                    
+                    content = content_elem.get_text().strip()
+                    content = ' '.join(content.split())  # 공백 정리
+                    
+                    if len(content) > 300:  # 충분한 내용이 있는 경우만
+                        logger.info(f"본문 추출 성공: {len(content)}자 (선택자: {selector})")
+                        break
+            except Exception as e:
+                logger.debug(f"본문 선택자 {selector} 실패: {e}")
+                continue
     
     # 본문이 여전히 짧으면 전체 텍스트에서 추출 시도
     if len(content) < 300:
@@ -4159,6 +4479,196 @@ PortOne 오준호 매니저입니다.</p>
 오준호 드림</p>
 
 <p><small>참고 뉴스 (9월 17일 확인): <a href="{news_url}">{title}</a></small></p>"""
+
+# ===== 웹 인터페이스 라우트 =====
+
+@app.route('/')
+def index():
+    """루트 경로 - 이메일 인터페이스 (테스트용 더미 데이터)"""
+    # 테스트용 더미 데이터 생성
+    test_session_data = {
+        'company_data': {
+            '회사명': '테스트 회사',
+            '담당자명': '홍길동',
+            '직책': '대표'
+        },
+        'email_variations': {
+            'opi_professional': {
+                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
+                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.<br>PortOne 오준호 매니저입니다.</p><p>결제 시스템 구축을 고민하고 계신가요?</p><p>PortOne의 One Payment Infra로 <strong>개발 리소스 85% 절감</strong>, <strong>2주 내 구축</strong>이 가능합니다.</p>'
+            },
+            'opi_curiosity': {
+                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
+                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.</p><p>결제 개발 리소스 <strong>85% 절감</strong>하는 방법이 궁금하신가요?</p><p>PortOne One Payment Infra를 소개드립니다.</p>'
+            },
+            'finance_professional': {
+                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
+                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.</p><p>재무 자동화 솔루션으로 <strong>정산 프로세스 90% 단축</strong>이 가능합니다.</p>'
+            },
+            'finance_curiosity': {
+                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
+                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.</p><p>정산 업무에 시간을 너무 많이 쓰고 계시지 않나요?</p><p>PortOne 재무자동화로 <strong>90% 시간 단축</strong> 가능합니다.</p>'
+            }
+        },
+        'services_generated': ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+    }
+    
+    return render_template('email_interface.html', 
+                         session_id='test_session_' + str(int(time.time())),
+                         session_data=test_session_data)
+
+@app.route('/api-docs')
+def api_docs():
+    """API 문서 페이지"""
+    return """
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>PortOne 이메일 생성 API - 문서</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+            }
+            .container {
+                background: white;
+                border-radius: 16px;
+                padding: 40px;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            }
+            h1 { color: #4f46e5; margin-bottom: 10px; }
+            h2 { color: #7c3aed; font-size: 1.5em; margin-top: 30px; }
+            .info { background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #4f46e5; }
+            .endpoint { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0; }
+            .method { display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: bold; font-size: 0.9em; margin-right: 10px; }
+            .post { background: #10b981; color: white; }
+            .get { background: #3b82f6; color: white; }
+            code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', monospace; }
+            .test-form { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px; }
+            input, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+            button { background: #4f46e5; color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; }
+            button:hover { background: #4338ca; }
+            .result { background: white; border: 2px solid #4f46e5; padding: 15px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow-y: auto; }
+            .status { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+            .status.ok { background: #10b981; }
+            .status.error { background: #ef4444; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🚀 PortOne 이메일 생성 API</h1>
+            <p style="color: #64748b;">AI 기반 개인화 이메일 문안 생성 서비스</p>
+            
+            <div class="info">
+                <strong>✅ 서버 상태:</strong> <span class="status ok"></span> 실행 중 (포트: 5001)
+            </div>
+            
+            <h2>📡 사용 가능한 API 엔드포인트</h2>
+            
+            <div class="endpoint">
+                <span class="method get">GET</span>
+                <strong>/api/health</strong>
+                <p style="margin: 10px 0 0 0; color: #64748b;">서비스 상태 확인</p>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <strong>/api/research-company</strong>
+                <p style="margin: 10px 0 0 0; color: #64748b;">Perplexity로 회사 정보 조사</p>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <strong>/api/generate-email</strong>
+                <p style="margin: 10px 0 0 0; color: #64748b;">Gemini로 이메일 문안 4개 생성</p>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <strong>/api/refine-email</strong>
+                <p style="margin: 10px 0 0 0; color: #64748b;">기존 이메일 문안 개선 (URL 포함 가능)</p>
+            </div>
+            
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <strong>/api/analyze-news</strong>
+                <p style="margin: 10px 0 0 0; color: #64748b;">뉴스 기사 URL 분석</p>
+            </div>
+            
+            <h2>🧪 API 테스트</h2>
+            
+            <div class="test-form">
+                <h3>이메일 개선 테스트</h3>
+                <label><strong>현재 이메일 본문:</strong></label>
+                <textarea id="currentEmail" rows="4" placeholder="개선할 이메일 본문을 입력하세요...">안녕하세요, ABC 회사 담당자님.
+
+PortOne의 결제 솔루션을 소개드리고 싶습니다.</textarea>
+                
+                <label><strong>개선 요청 (URL 포함 가능):</strong></label>
+                <input type="text" id="refinementRequest" placeholder="예: 더 친근하게 만들어줘 또는 뉴스 URL">
+                
+                <button onclick="testRefine()">🚀 AI로 개선하기</button>
+                
+                <div id="result" style="display: none;"></div>
+            </div>
+            
+            <div style="margin-top: 30px; padding: 20px; background: #fef3c7; border-radius: 8px; border-left: 4px solid #f59e0b;">
+                <strong>💡 참고:</strong> Google Apps Script 연동은 별도로 구현되어 있습니다.
+                <br>F열이 "claude 개인화 메일"인 경우 이 API를 호출합니다.
+            </div>
+        </div>
+        
+        <script>
+            async function testRefine() {
+                const currentEmail = document.getElementById('currentEmail').value;
+                const refinementRequest = document.getElementById('refinementRequest').value;
+                
+                if (!refinementRequest) {
+                    alert('개선 요청을 입력해주세요!');
+                    return;
+                }
+                
+                const resultDiv = document.getElementById('result');
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = '<div style="text-align: center; padding: 20px;"><strong>⏳ AI가 이메일을 개선하고 있습니다...</strong></div>';
+                resultDiv.className = 'result';
+                
+                try {
+                    const response = await fetch('/api/refine-email', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            session_id: 'test_' + Date.now(),
+                            current_email: currentEmail,
+                            refinement_request: refinementRequest
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        resultDiv.innerHTML = '<strong style="color: #10b981;">✅ 개선 완료!</strong><br><br>' + 
+                                            '<div style="background: white; padding: 15px; border-radius: 8px;">' + 
+                                            result.refined_email.replace(/\\n/g, '<br>') + '</div>';
+                    } else {
+                        resultDiv.innerHTML = '<strong style="color: #ef4444;">❌ 오류 발생</strong><br><br>' + result.error;
+                    }
+                } catch (error) {
+                    resultDiv.innerHTML = '<strong style="color: #ef4444;">❌ 네트워크 오류</strong><br><br>' + error.message;
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
 
 if __name__ == '__main__':
     # API 키 확인

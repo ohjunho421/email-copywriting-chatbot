@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PortOne 이메일 문안 선택</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>PortOne 이메일 문안 선택 v2.0</title>
     <style>
         * {
             margin: 0;
@@ -324,7 +327,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 PortOne 개인화 이메일 생성</h1>
+            <h1>🚀 PortOne 개인화 이메일 생성 <small style="font-size: 0.5em; opacity: 0.7;">v2.0</small></h1>
             <div class="company-info">
                 <h3>{{ session_data.company_data.get('회사명', 'Unknown') }}</h3>
                 <p>{{ session_data.services_generated|length }}개의 맞춤 문안이 생성되었습니다</p>
@@ -407,7 +410,7 @@
                 <div class="refinement-section">
                     <h4 style="margin-bottom: 15px;">🤖 AI로 문안 개선하기</h4>
                     <input type="text" class="refinement-input" id="refinement-request" 
-                           placeholder="예: '더 친근하게 만들어줘', '긴급성을 강조해줘', '수치를 더 부각시켜줘'">
+                           placeholder="예: '더 친근하게 만들어줘', 'https://news.example.com/article (뉴스 URL 붙여넣기)'">
                     <button class="btn btn-secondary" id="refine-email">AI로 개선하기</button>
                 </div>
                 
@@ -445,6 +448,10 @@
     </script>
     
     <script type="text/javascript">
+        // 버전 확인용 로그 (캐시 문제 디버깅)
+        console.log('✅ PortOne Email Interface v2.0 - 덮어쓰기 모드 활성화됨');
+        console.log('📝 카드 생성 기능 완전 제거됨');
+        
         // 서버에서 전달된 데이터 파싱
         const serverData = JSON.parse(document.getElementById('server-data').textContent);
         const sessionId = serverData.sessionId;
@@ -530,9 +537,34 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    document.getElementById('email-body').value = result.refined_email;
+                    console.log('✅ AI 개선 완료 - 덮어쓰기 모드 실행');
+                    
+                    // 바로 덮어쓰기 (카드 생성하지 않음)
+                    const emailBodyTextarea = document.getElementById('email-body');
+                    emailBodyTextarea.value = result.refined_email;
                     updatePreview();
-                    showAlert('이메일이 성공적으로 개선되었습니다!', 'success');
+                    
+                    console.log('✅ 이메일 본문 덮어쓰기 완료');
+                    
+                    // 성공 알림 표시
+                    showAlert('✨ 이메일이 성공적으로 개선되었습니다!', 'success');
+                    
+                    // 개선된 문안 위치로 스크롤
+                    emailBodyTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // textarea에 포커스 및 하이라이트 효과
+                    emailBodyTextarea.focus();
+                    emailBodyTextarea.style.transition = 'all 0.3s ease';
+                    emailBodyTextarea.style.boxShadow = '0 0 20px rgba(76, 175, 80, 0.5)';
+                    emailBodyTextarea.style.borderColor = '#4CAF50';
+                    
+                    // 3초 후 원래대로
+                    setTimeout(() => {
+                        emailBodyTextarea.style.boxShadow = '';
+                        emailBodyTextarea.style.borderColor = '';
+                    }, 3000);
+                    
+                    // 입력란 비우기
                     document.getElementById('refinement-request').value = '';
                 } else {
                     showAlert('개선 중 오류가 발생했습니다: ' + result.error, 'error');

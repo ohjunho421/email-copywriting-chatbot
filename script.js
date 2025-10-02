@@ -720,9 +720,14 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                             <div class="small text-muted research-content" style="max-height: 300px; overflow-y: auto; white-space: pre-wrap; border: 1px solid #e9ecef; padding: 10px; border-radius: 5px; background-color: #f8f9fa;">
                                 ${result.research.company_info}
                             </div>
-                            <button class="btn btn-sm btn-outline-primary mt-2" onclick="toggleResearchContent(this)">
-                                <i class="fas fa-expand-alt"></i> 전체 내용 보기
-                            </button>
+                            <div class="d-flex gap-2 mt-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="toggleResearchContent(this)">
+                                    <i class="fas fa-expand-alt"></i> 전체 내용 보기
+                                </button>
+                                <button class="btn btn-sm btn-success" onclick="saveAllEmailsForCompany(${index})">
+                                    <i class="fas fa-save"></i> 이 회사 전체 저장
+                                </button>
+                            </div>
                         </div>
                     ` : ''}
                 </div>
@@ -741,7 +746,11 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                     </span>
                                 </div>
                                 <div class="mb-2">
-                                    <strong>제목:</strong><br>
+                                    <strong>제목:</strong>
+                                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="copySubjectToClipboard('${variation.subject.replace(/'/g, "\\'")}')">
+                                        <i class="fas fa-copy"></i> 제목 복사
+                                    </button>
+                                    <br>
                                     <em>${variation.subject}</em>
                                 </div>
                                 <div class="mb-3">
@@ -752,13 +761,16 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap">
                                     <button class="btn btn-sm btn-outline-primary" onclick="copyTextToClipboard('${variation.subject}', '${variation.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}')">
-                                        <i class="fas fa-copy"></i> 텍스트 복사
+                                        <i class="fas fa-copy"></i> 본문 복사
                                     </button>
                                     <button class="btn btn-sm btn-outline-success" onclick="convertToHtmlTemplate('${variation.subject}', '${variation.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}', ${index}, ${vIndex})">
                                         <i class="fas fa-code"></i> HTML 템플릿
                                     </button>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="refineEmailCopy(${index}, ${vIndex})">
                                         <i class="fas fa-edit"></i> 개선 요청
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="saveEmailDraft('${result.company['회사명'].replace(/'/g, "\\'")}', '${variation.type.replace(/'/g, "\\'")}', '${variation.subject.replace(/'/g, "\\'")}', '${variation.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}')">
+                                        <i class="fas fa-bookmark"></i> 저장
                                     </button>
                                     ${emailAddress ? `
                                         <button class="btn btn-sm btn-outline-info" onclick="copyToClipboard('${emailAddress}')" title="이메일 주소 복사">
@@ -950,18 +962,26 @@ ${variation.body}
         URL.revokeObjectURL(url);
     }
 
-    // 뉴스 분석 결과 표시
+    // 뉴스 분석 결과로 기존 문안 덮어쓰기
     displayNewsAnalysisResult(result, request, newsUrl) {
-        const container = document.getElementById('templatesContainer');
+        console.log('📰 뉴스 분석 결과 덮어쓰기 시작');
         
-        const newsDiv = document.createElement('div');
-        newsDiv.className = 'company-templates mb-4 border-info';
-        newsDiv.style.borderLeft = '4px solid #17a2b8';
+        // 현재 refinement target 가져오기
+        const { companyIndex, variationIndex } = this.currentRefinementTarget;
         
-        const timestamp = new Date().toLocaleTimeString('ko-KR');
-        const newsId = `news_${Date.now()}`;
+        // 기존 문안을 뉴스 분석 결과로 덮어쓰기
+        this.updateExistingVariation(companyIndex, variationIndex, result.analyzed_email, request);
         
-        // 뉴스 URL에서 도메인 추출
+        // 챗봇에 추가 정보 표시
+        if (result.article_summary) {
+            this.addBotMessage(`📋 기사 요약:\n${result.article_summary.substring(0, 300)}...`);
+        }
+        
+        if (result.pain_points && result.pain_points.length > 0) {
+            this.addBotMessage(`🎯 발굴된 페인 포인트:\n${result.pain_points.join('\n')}`);
+        }
+        
+        // 뉴스 URL 표시
         let newsDomain = '';
         try {
             const url = new URL(newsUrl);
@@ -969,119 +989,103 @@ ${variation.body}
         } catch (e) {
             newsDomain = newsUrl;
         }
-        
-        newsDiv.innerHTML = `
-            <div class="company-info bg-light">
-                <h5><i class="fas fa-newspaper text-info"></i> 뉴스 기사 기반 메일 문안</h5>
-                <div class="row">
-                    <div class="col-md-6">
-                        <small><strong>분석 기사:</strong> <a href="${newsUrl}" target="_blank">${newsDomain}</a></small><br>
-                        <small><strong>요청 내용:</strong> ${request.replace(newsUrl, '').trim() || '뉴스 기반 메일 생성'}</small>
-                    </div>
-                    <div class="col-md-6">
-                        <small><strong>생성 시간:</strong> ${timestamp}</small><br>
-                        <small><strong>분석 방식:</strong> AI 기사 분석 + 페인 포인트 도출</small>
-                    </div>
-                </div>
-                ${result.article_summary ? `
-                    <div class="mt-2">
-                        <small><strong>📋 기사 요약:</strong></small>
-                        <div class="small text-muted" style="max-height: 100px; overflow-y: auto; border: 1px solid #e9ecef; padding: 8px; border-radius: 3px; background-color: #f8f9fa;">
-                            ${result.article_summary}
-                        </div>
-                    </div>
-                ` : ''}
-            </div>
-            
-            <div class="row">
-                <div class="col-12">
-                    <div class="email-template border-info">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0">
-                                <i class="fas fa-newspaper text-info"></i> 뉴스 기반 AI 생성 문안
-                            </h6>
-                            <span class="badge bg-info">뉴스 분석</span>
-                        </div>
-                        <div class="mb-3">
-                            <div style="white-space: pre-line; font-size: 0.9em; max-height: 400px; overflow-y: auto; border: 1px solid #17a2b8; padding: 15px; border-radius: 5px; background-color: #f0f9ff;">
-                                ${result.analyzed_email}
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button class="btn btn-sm btn-info" onclick="copyNewsEmailToClipboard('${newsId}')">
-                                <i class="fas fa-copy"></i> 뉴스 기반 문안 복사
-                            </button>
-                            <button class="btn btn-sm btn-outline-info" onclick="window.open('${newsUrl}', '_blank')">
-                                <i class="fas fa-external-link-alt"></i> 원본 기사 보기
-                            </button>
-                        </div>
-                        <textarea id="${newsId}" style="position: absolute; left: -9999px;">${result.analyzed_email}</textarea>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // 맨 위에 추가
-        container.insertBefore(newsDiv, container.firstChild);
-        
-        // 스크롤을 맨 위로 이동
-        newsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        this.addBotMessage(`🔗 참고 기사: ${newsDomain}`);
     }
 
-    // 개선된 이메일 표시
-    displayRefinedEmail(refinedEmail, request) {
-        const container = document.getElementById('templatesContainer');
+    // 개선된 이메일로 기존 문안 덮어쓰기
+    updateExistingVariation(companyIndex, variationIndex, refinedEmail, request) {
+        console.log('🔄 덮어쓰기 시작:', { companyIndex, variationIndex, refinedEmailLength: refinedEmail.length });
         
-        const refinedDiv = document.createElement('div');
-        refinedDiv.className = 'company-templates mb-4 border-success';
-        refinedDiv.style.borderLeft = '4px solid #28a745';
+        // 1. 데이터 업데이트 (generatedResults)
+        if (this.generatedResults && this.generatedResults[companyIndex]) {
+            const result = this.generatedResults[companyIndex];
+            if (result.emails && result.emails.variations) {
+                const variationKeys = Object.keys(result.emails.variations);
+                const targetKey = variationKeys[variationIndex];
+                if (targetKey && result.emails.variations[targetKey]) {
+                    // 제목과 본문 분리 (제목: 으로 시작하는 경우)
+                    let subject = result.emails.variations[targetKey].subject;
+                    let body = refinedEmail;
+                    
+                    const lines = refinedEmail.split('\n');
+                    if (lines[0] && lines[0].startsWith('제목:')) {
+                        subject = lines[0].replace('제목:', '').trim();
+                        body = lines.slice(1).join('\n').trim();
+                    }
+                    
+                    result.emails.variations[targetKey].subject = subject;
+                    result.emails.variations[targetKey].body = body;
+                    console.log('✅ 데이터 업데이트 완료:', targetKey);
+                }
+            }
+        }
         
-        const timestamp = new Date().toLocaleTimeString('ko-KR');
-        const refinedId = `refined_${Date.now()}`;
+        // 2. UI 업데이트 - 해당 variation의 본문 영역 찾아서 교체
+        const variationElement = document.querySelector(`#ai_template_${companyIndex}_${variationIndex}`);
+        console.log('🔍 Element 검색:', `#ai_template_${companyIndex}_${variationIndex}`, variationElement ? '찾음' : '못 찾음');
         
-        refinedDiv.innerHTML = `
-            <div class="company-info bg-light">
-                <h5><i class="fas fa-magic text-success"></i> 개선된 이메일 문안</h5>
-                <div class="row">
-                    <div class="col-md-6">
-                        <small><strong>개선 요청:</strong> ${request}</small>
-                    </div>
-                    <div class="col-md-6">
-                        <small><strong>생성 시간:</strong> ${timestamp}</small>
-                    </div>
-                </div>
-            </div>
+        if (variationElement) {
+            // textarea 값 업데이트
+            variationElement.value = refinedEmail;
             
-            <div class="row">
-                <div class="col-12">
-                    <div class="email-template border-success">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0">
-                                <i class="fas fa-sparkles text-success"></i> AI 개선 문안
-                            </h6>
-                            <span class="badge bg-success">개선됨</span>
-                        </div>
-                        <div class="mb-3">
-                            <div style="white-space: pre-line; font-size: 0.9em; max-height: 400px; overflow-y: auto; border: 1px solid #28a745; padding: 15px; border-radius: 5px; background-color: #f8fff9;">
-                                ${refinedEmail}
-                            </div>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-sm btn-success" onclick="copyRefinedEmailToClipboard('${refinedId}')">
-                                <i class="fas fa-copy"></i> 개선된 문안 복사
-                            </button>
-                        </div>
-                        <textarea id="${refinedId}" style="position: absolute; left: -9999px;">${refinedEmail}</textarea>
-                    </div>
-                </div>
-            </div>
-        `;
+            // 화면에 표시되는 본문 영역 업데이트
+            const parentTemplate = variationElement.closest('.email-template');
+            if (parentTemplate) {
+                const bodyDisplay = parentTemplate.querySelector('div[style*="white-space: pre-line"]');
+                if (bodyDisplay) {
+                    // 제목과 본문 분리
+                    let displayBody = refinedEmail;
+                    const lines = refinedEmail.split('\n');
+                    if (lines[0] && lines[0].startsWith('제목:')) {
+                        const subject = lines[0].replace('제목:', '').trim();
+                        displayBody = lines.slice(1).join('\n').trim();
+                        
+                        // 제목도 업데이트
+                        const subjectDisplay = parentTemplate.querySelector('div.mb-2 em');
+                        if (subjectDisplay) {
+                            subjectDisplay.textContent = subject;
+                        }
+                    }
+                    
+                    bodyDisplay.innerHTML = displayBody;
+                    
+                    // 개선됨 표시 추가
+                    parentTemplate.style.borderLeft = '4px solid #28a745';
+                    parentTemplate.style.backgroundColor = '#f8fff9';
+                    
+                    // 상단에 개선 완료 배지 추가 (이미 없는 경우에만)
+                    const headerDiv = parentTemplate.querySelector('.d-flex.justify-content-between');
+                    if (headerDiv && !headerDiv.querySelector('.badge.bg-success')) {
+                        const badge = document.createElement('span');
+                        badge.className = 'badge bg-success ms-2';
+                        badge.innerHTML = '<i class="fas fa-check"></i> 개선됨';
+                        headerDiv.querySelector('h6').appendChild(badge);
+                    }
+                }
+            }
+        }
         
-        // 맨 위에 추가
-        container.insertBefore(refinedDiv, container.firstChild);
-        
-        // 스크롤을 맨 위로 이동
-        refinedDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // 3. 해당 variation에 ID 추가 (스크롤 대상)
+        const targetVariation = document.querySelector(`#ai_template_${companyIndex}_${variationIndex}`)?.closest('.email-template');
+        if (targetVariation) {
+            targetVariation.id = `variation_${companyIndex}_${variationIndex}`;
+        }
+    }
+    
+    // 특정 variation으로 스크롤 이동
+    scrollToVariation(companyIndex, variationIndex) {
+        const targetElement = document.getElementById(`variation_${companyIndex}_${variationIndex}`);
+        if (targetElement) {
+            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // 강조 효과 추가
+            targetElement.style.transition = 'all 0.3s ease';
+            targetElement.style.boxShadow = '0 0 20px rgba(40, 167, 69, 0.5)';
+            
+            setTimeout(() => {
+                targetElement.style.boxShadow = '';
+            }, 2000);
+        }
     }
 
     getScoreClass(score) {
@@ -1342,17 +1346,16 @@ ${variation.body}
             console.log('뉴스 분석 결과:', result);
             
             if (result.success && result.analyzed_email) {
-                // 뉴스 기반 분석 결과 표시
+                // 뉴스 기반 분석 결과로 기존 문안 덮어쓰기
                 this.displayNewsAnalysisResult(result, refinementRequest, newsUrl);
-                this.addBotMessage('✅ 뉴스 기사 분석을 통한 메일 문안 생성이 완료되었습니다!');
                 
-                if (result.article_summary) {
-                    this.addBotMessage(`📋 기사 요약: ${result.article_summary.substring(0, 200)}...`);
-                }
-                
-                if (result.pain_points && result.pain_points.length > 0) {
-                    this.addBotMessage(`🎯 발굴된 페인 포인트: ${result.pain_points.join(', ')}`);
-                }
+                // 성공 메시지 및 스크롤 버튼
+                this.addBotMessage('✅ 뉴스 기사 분석을 통한 메일 문안 개선이 완료되었습니다!');
+                this.addBotMessageWithScrollButton(
+                    '📍 개선된 문안을 확인하시려면 아래 버튼을 클릭하세요.',
+                    companyIndex,
+                    variationIndex
+                );
             } else {
                 console.error('뉴스 분석 실패:', result);
                 throw new Error(result.error || '뉴스 분석 처리 실패');
@@ -1411,9 +1414,16 @@ ${variation.body}
             console.log('API 응답 결과:', result);
             
             if (result.success && result.refined_email) {
-                // 개선된 내용을 새로운 템플릿으로 표시
-                this.displayRefinedEmail(result.refined_email, refinementRequest);
+                // 개선된 내용으로 기존 문안 덮어쓰기
+                this.updateExistingVariation(companyIndex, variationIndex, result.refined_email, refinementRequest);
+                
+                // 스크롤 이동 버튼이 포함된 메시지 추가
                 this.addBotMessage('✅ 이메일 문안 개선이 완료되었습니다!');
+                this.addBotMessageWithScrollButton(
+                    '📍 개선된 문안을 확인하시려면 아래 버튼을 클릭하세요.',
+                    companyIndex,
+                    variationIndex
+                );
             } else {
                 console.error('개선 실패:', result);
                 throw new Error(result.error || '개선 요청 처리 실패');
@@ -1492,6 +1502,22 @@ ${variation.body}
         
         this.addBotMessage('💡 이제 추가 질문이나 요청사항을 위 텍스트박스에 입력할 수 있습니다!');
     }
+    
+    // 스크롤 버튼이 포함된 챗봇 메시지 추가
+    addBotMessageWithScrollButton(message, companyIndex, variationIndex) {
+        const chatContainer = document.getElementById('chatContainer');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message bot-message';
+        messageDiv.innerHTML = `
+            <strong>PortOne 메일 봇</strong><br>
+            ${message}<br><br>
+            <button class="btn btn-sm btn-success" onclick="window.emailChatbot.scrollToVariation(${companyIndex}, ${variationIndex})">
+                <i class="fas fa-arrow-down"></i> 개선된 문안으로 이동
+            </button>
+        `;
+        chatContainer.appendChild(messageDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
 
     clearChat() {
         const chatContainer = document.getElementById('chatContainer');
@@ -1552,6 +1578,22 @@ async function refineEmailCopy(companyIndex, variationIndex) {
     
     // 개선 모드로 전환
     chatbot.enterRefinementMode(companyIndex, variationIndex);
+}
+
+// 제목만 복사하는 함수
+function copySubjectToClipboard(subject) {
+    // 최신 브라우저의 Clipboard API 사용
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(subject).then(() => {
+            showCopySuccess('📋 제목이 클립보드에 복사되었습니다!');
+        }).catch(err => {
+            console.error('복사 실패:', err);
+            fallbackCopyTextToClipboard(subject);
+        });
+    } else {
+        // 폴백 방법
+        fallbackCopyTextToClipboard(subject);
+    }
 }
 
 // 텍스트 복사 함수 (개선된 버전)
@@ -1990,8 +2032,689 @@ function fallbackCopyTextToClipboard(text) {
     document.body.removeChild(textArea);
 }
 
+// 사이드바 토글 함수
+function toggleSidebar() {
+    const sidebar = document.getElementById('emailSidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    sidebar.classList.toggle('active');
+    overlay.classList.toggle('active');
+}
+
+// 이메일 문안 저장 함수
+function saveEmailDraft(companyName, variationType, subject, body) {
+    try {
+        // localStorage에서 저장된 문안 가져오기
+        let savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+        
+        // 새 문안 추가
+        const newDraft = {
+            id: Date.now(),
+            companyName: companyName,
+            variationType: variationType,
+            subject: subject,
+            body: body.replace(/\\n/g, '\n'), // 줄바꿈 복원
+            savedAt: new Date().toISOString()
+        };
+        
+        savedDrafts.unshift(newDraft); // 최신순으로 추가
+        
+        // 최대 100개까지만 저장
+        if (savedDrafts.length > 100) {
+            savedDrafts = savedDrafts.slice(0, 100);
+        }
+        
+        // localStorage에 저장
+        localStorage.setItem('savedEmailDrafts', JSON.stringify(savedDrafts));
+        
+        // 사이드바 업데이트
+        loadSavedDrafts();
+        
+        // 성공 메시지
+        showToast('✅ 메일 문안이 저장되었습니다!', 'success');
+        
+    } catch (error) {
+        console.error('저장 실패:', error);
+        showToast('❌ 저장에 실패했습니다.', 'error');
+    }
+}
+
+// 저장된 문안 로드 및 표시
+function loadSavedDrafts() {
+    const savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    const savedCompanies = JSON.parse(localStorage.getItem('savedCompanyDrafts') || '[]');
+    const container = document.getElementById('savedEmailsList');
+    
+    if (savedDrafts.length === 0 && savedCompanies.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">저장된 문안이 없습니다.</p>';
+        return;
+    }
+    
+    let html = '';
+    
+    // 회사별 전체 저장 표시
+    if (savedCompanies.length > 0) {
+        html += '<h6 class="text-primary mb-3"><i class="fas fa-building"></i> 회사별 전체 저장</h6>';
+        
+        savedCompanies.forEach((company) => {
+            const savedDate = new Date(company.savedAt);
+            const dateStr = savedDate.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+            const timeStr = savedDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+            
+            html += `
+                <div class="saved-email-item" style="border-left: 3px solid #28a745;">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong><i class="fas fa-building text-success"></i> ${company.companyName}</strong>
+                            <br><small class="text-muted">${company.variations.length}개 문안</small>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteCompanyDraft(${company.id})" title="삭제">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <i class="fas fa-clock"></i> ${dateStr} ${timeStr}
+                    </div>
+                    <div class="small mb-2">
+                        ${company.variations.map(v => `<span class="badge bg-secondary me-1">${v.type}</span>`).join('')}
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-success" onclick="loadCompanyToMain(${company.id})" title="메인 화면에 전체 불러오기">
+                            <i class="fas fa-arrow-right"></i> 전체 불러오기
+                        </button>
+                        <button class="btn btn-sm btn-info" onclick="viewCompanyDetails(${company.id})" title="상세보기">
+                            <i class="fas fa-eye"></i> 상세보기
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    // 개별 문안 저장 표시
+    if (savedDrafts.length > 0) {
+        html += '<h6 class="text-primary mb-3 mt-4"><i class="fas fa-file-alt"></i> 개별 문안 저장</h6>';
+        
+        savedDrafts.forEach((draft) => {
+            const savedDate = new Date(draft.savedAt);
+            const dateStr = savedDate.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+            const timeStr = savedDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+            
+            html += `
+                <div class="saved-email-item">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong>${draft.companyName}</strong>
+                            <br><small class="text-muted">${draft.variationType}</small>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteDraft(${draft.id})" title="삭제">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="small text-muted mb-2">
+                        <i class="fas fa-clock"></i> ${dateStr} ${timeStr}
+                    </div>
+                    <div class="small mb-2" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                        <strong>제목:</strong> ${draft.subject}
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-success" onclick="loadDraftToMain(${draft.id})" title="메인 화면으로 불러와서 개선 요청 기능 사용">
+                            <i class="fas fa-arrow-right"></i> 불러오기
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="copyDraftSubject(${draft.id})" title="제목만 복사">
+                            <i class="fas fa-copy"></i> 제목
+                        </button>
+                        <button class="btn btn-sm btn-primary" onclick="copyFullDraft(${draft.id})" title="제목+본문 전체 복사">
+                            <i class="fas fa-copy"></i> 전체
+                        </button>
+                        <button class="btn btn-sm btn-warning" onclick="editDraft(${draft.id})" title="직접 수정">
+                            <i class="fas fa-edit"></i> 수정
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    container.innerHTML = html;
+}
+
+// 저장된 문안 삭제
+function deleteDraft(draftId) {
+    if (!confirm('이 문안을 삭제하시겠습니까?')) {
+        return;
+    }
+    
+    let savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    savedDrafts = savedDrafts.filter(draft => draft.id !== draftId);
+    localStorage.setItem('savedEmailDrafts', JSON.stringify(savedDrafts));
+    loadSavedDrafts();
+    showToast('문안이 삭제되었습니다.', 'info');
+}
+
+// 회사별 저장 데이터 삭제
+function deleteCompanyDraft(companyId) {
+    if (!confirm('이 회사의 모든 문안을 삭제하시겠습니까?')) {
+        return;
+    }
+    
+    let savedCompanies = JSON.parse(localStorage.getItem('savedCompanyDrafts') || '[]');
+    savedCompanies = savedCompanies.filter(company => company.id !== companyId);
+    localStorage.setItem('savedCompanyDrafts', JSON.stringify(savedCompanies));
+    loadSavedDrafts();
+    showToast('회사 데이터가 삭제되었습니다.', 'info');
+}
+
+// 회사 전체를 메인 화면으로 불러오기
+function loadCompanyToMain(companyId) {
+    const savedCompanies = JSON.parse(localStorage.getItem('savedCompanyDrafts') || '[]');
+    const company = savedCompanies.find(c => c.id === companyId);
+    
+    if (!company) return;
+    
+    const chatbot = window.emailChatbot;
+    if (!chatbot) return;
+    
+    // 템플릿 섹션 표시
+    document.getElementById('templatesSection').style.display = 'block';
+    
+    // 가상의 회사 데이터 생성
+    const mockResult = {
+        company: {
+            '회사명': company.companyName
+        },
+        research: company.research,
+        emails: {
+            variations: {}
+        }
+    };
+    
+    // variations 객체 생성
+    company.variations.forEach((variation, index) => {
+        const key = `variation_${index}`;
+        mockResult.emails.variations[key] = {
+            ...variation
+        };
+    });
+    
+    // generatedResults에 추가
+    if (!chatbot.generatedResults) {
+        chatbot.generatedResults = [];
+    }
+    
+    const loadedIndex = chatbot.generatedResults.length;
+    chatbot.generatedResults.push(mockResult);
+    
+    // 메인 화면에 표시
+    const container = document.getElementById('templatesContainer');
+    const loadedDiv = document.createElement('div');
+    loadedDiv.className = 'company-templates mb-4';
+    loadedDiv.style.borderLeft = '4px solid #28a745';
+    
+    const timestamp = new Date().toLocaleTimeString('ko-KR');
+    
+    let variationsHtml = '';
+    company.variations.forEach((variation, vIndex) => {
+        variationsHtml += `
+            <div class="col-md-6 mb-3">
+                <div class="email-template" id="variation_${loadedIndex}_${vIndex}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">
+                            <i class="fas fa-bookmark text-success"></i> ${variation.type}
+                        </h6>
+                        <span class="personalization-score score-high">${variation.personalizationScore}/10</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>제목:</strong>
+                        <button class="btn btn-sm btn-outline-primary ms-2" onclick="copySubjectToClipboard('${variation.subject.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-copy"></i> 제목 복사
+                        </button>
+                        <br>
+                        <em>${variation.subject}</em>
+                    </div>
+                    <div class="mb-3">
+                        <strong>본문:</strong><br>
+                        <div style="white-space: pre-line; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px;">
+                            ${variation.body}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-outline-primary" onclick="copyTextToClipboard('${variation.subject}', '${variation.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}')">
+                            <i class="fas fa-copy"></i> 본문 복사
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="refineEmailCopy(${loadedIndex}, ${vIndex})">
+                            <i class="fas fa-edit"></i> 개선 요청
+                        </button>
+                    </div>
+                    <textarea id="ai_template_${loadedIndex}_${vIndex}" style="position: absolute; left: -9999px;">
+제목: ${variation.subject}
+
+${variation.body}
+                    </textarea>
+                </div>
+            </div>
+        `;
+    });
+    
+    loadedDiv.innerHTML = `
+        <div class="company-info bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-building text-success"></i> 불러온 회사: ${company.companyName}</h5>
+                <span class="badge bg-success">${company.variations.length}개 문안</span>
+            </div>
+            <small class="text-muted">불러온 시간: ${timestamp}</small>
+            ${company.research.company_info ? `
+                <div class="mt-2">
+                    <small><strong>🔍 조사 결과:</strong></small>
+                    <div class="small text-muted research-content" style="max-height: 200px; overflow-y: auto; white-space: pre-wrap; border: 1px solid #e9ecef; padding: 10px; border-radius: 5px; background-color: #f8f9fa;">
+                        ${company.research.company_info}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+        
+        <div class="row">
+            ${variationsHtml}
+        </div>
+    `;
+    
+    // 맨 위에 추가
+    container.insertBefore(loadedDiv, container.firstChild);
+    loadedDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // 사이드바 닫기
+    toggleSidebar();
+    
+    chatbot.addBotMessage(`📂 "${company.companyName}"의 전체 문안 ${company.variations.length}개를 불러왔습니다!`);
+    showToast('✅ 회사 데이터를 메인 화면으로 불러왔습니다!', 'success');
+}
+
+// 회사 상세보기 (모달에 표시)
+function viewCompanyDetails(companyId) {
+    const savedCompanies = JSON.parse(localStorage.getItem('savedCompanyDrafts') || '[]');
+    const company = savedCompanies.find(c => c.id === companyId);
+    
+    if (!company) return;
+    
+    // 간단한 alert로 표시 (나중에 모달로 개선 가능)
+    let details = `회사명: ${company.companyName}\n`;
+    details += `저장일: ${new Date(company.savedAt).toLocaleString('ko-KR')}\n`;
+    details += `문안 수: ${company.variations.length}개\n\n`;
+    
+    company.variations.forEach((v, i) => {
+        details += `\n[${i+1}] ${v.type}\n`;
+        details += `제목: ${v.subject}\n`;
+        details += `점수: ${v.personalizationScore}/10\n`;
+    });
+    
+    alert(details);
+}
+
+// 저장된 문안의 제목 복사
+function copyDraftSubject(draftId) {
+    const savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    const draft = savedDrafts.find(d => d.id === draftId);
+    
+    if (draft) {
+        copyToClipboard(draft.subject);
+    }
+}
+
+// 저장된 문안의 본문 복사
+function copyDraftBody(draftId) {
+    const savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    const draft = savedDrafts.find(d => d.id === draftId);
+    
+    if (draft) {
+        const plainTextBody = htmlToPlainText(draft.body);
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(plainTextBody).then(() => {
+                showToast('본문이 클립보드에 복사되었습니다!', 'success');
+            }).catch(err => {
+                console.error('복사 실패:', err);
+            });
+        }
+    }
+}
+
+// 저장된 문안 전체 복사
+function copyFullDraft(draftId) {
+    const savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    const draft = savedDrafts.find(d => d.id === draftId);
+    
+    if (draft) {
+        const plainTextBody = htmlToPlainText(draft.body);
+        const fullText = `제목: ${draft.subject}\n\n${plainTextBody}`;
+        
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(fullText).then(() => {
+                showToast('전체 문안이 클립보드에 복사되었습니다!', 'success');
+            }).catch(err => {
+                console.error('복사 실패:', err);
+            });
+        }
+    }
+}
+
+// 문안 수정 모달 열기
+let currentEditingDraftId = null;
+
+function editDraft(draftId) {
+    const savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    const draft = savedDrafts.find(d => d.id === draftId);
+    
+    if (!draft) return;
+    
+    // 현재 수정 중인 ID 저장
+    currentEditingDraftId = draftId;
+    
+    // 모달 필드에 데이터 채우기
+    document.getElementById('editCompanyName').value = draft.companyName;
+    document.getElementById('editVariationType').value = draft.variationType;
+    document.getElementById('editSubject').value = draft.subject;
+    document.getElementById('editBody').value = htmlToPlainText(draft.body);
+    
+    // 모달 열기
+    document.getElementById('editModal').classList.add('active');
+}
+
+// 수정 모달 닫기
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('active');
+    document.getElementById('aiRefinementRequest').value = ''; // 개선 요청 필드 초기화
+    document.getElementById('aiRefineLoading').style.display = 'none'; // 로딩 숨김
+    currentEditingDraftId = null;
+}
+
+// 모달 외부 클릭 시 닫기
+function handleModalClick(event) {
+    if (event.target.id === 'editModal') {
+        closeEditModal();
+    }
+}
+
+// 수정된 문안 저장
+function saveEditedDraft() {
+    if (!currentEditingDraftId) return;
+    
+    const savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    const draftIndex = savedDrafts.findIndex(d => d.id === currentEditingDraftId);
+    
+    if (draftIndex === -1) return;
+    
+    // 수정된 내용 가져오기
+    const editedSubject = document.getElementById('editSubject').value;
+    const editedBody = document.getElementById('editBody').value;
+    
+    // 문안 업데이트 (HTML 태그는 그대로 유지하되 텍스트는 교체)
+    savedDrafts[draftIndex].subject = editedSubject;
+    savedDrafts[draftIndex].body = editedBody.replace(/\n/g, '<br>'); // 줄바꿈을 HTML로 변환
+    
+    // localStorage 업데이트
+    localStorage.setItem('savedEmailDrafts', JSON.stringify(savedDrafts));
+    
+    // 사이드바 새로고침
+    loadSavedDrafts();
+    
+    // 모달 닫기
+    closeEditModal();
+    
+    // 성공 메시지
+    showToast('✅ 문안이 수정되었습니다!', 'success');
+}
+
+// AI로 저장된 문안 개선
+async function aiRefineDraft() {
+    if (!currentEditingDraftId) return;
+    
+    const currentBody = document.getElementById('editBody').value;
+    const refinementRequest = document.getElementById('aiRefinementRequest').value.trim();
+    
+    if (!refinementRequest) {
+        showToast('개선 요청사항을 입력해주세요.', 'error');
+        return;
+    }
+    
+    // 로딩 표시
+    document.getElementById('aiRefineLoading').style.display = 'block';
+    document.getElementById('aiRefineBtn').disabled = true;
+    
+    try {
+        const response = await fetch('http://localhost:5001/api/refine-email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                current_email: currentBody,
+                refinement_request: refinementRequest
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`API 오류: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success && result.refined_email) {
+            // 개선된 내용을 본문 필드에 반영
+            const plainText = htmlToPlainText(result.refined_email);
+            document.getElementById('editBody').value = plainText;
+            
+            // 개선 요청 필드 초기화
+            document.getElementById('aiRefinementRequest').value = '';
+            
+            showToast('✅ AI가 문안을 개선했습니다!', 'success');
+        } else {
+            throw new Error(result.error || '개선 실패');
+        }
+    } catch (error) {
+        console.error('AI 개선 오류:', error);
+        showToast('❌ AI 개선 중 오류가 발생했습니다: ' + error.message, 'error');
+    } finally {
+        // 로딩 숨김
+        document.getElementById('aiRefineLoading').style.display = 'none';
+        document.getElementById('aiRefineBtn').disabled = false;
+    }
+}
+
+// ESC 키로 모달 닫기
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        closeEditModal();
+    }
+});
+
+// 회사별 전체 저장 함수
+function saveAllEmailsForCompany(companyIndex) {
+    const chatbot = window.emailChatbot;
+    if (!chatbot || !chatbot.generatedResults) return;
+    
+    const result = chatbot.generatedResults[companyIndex];
+    if (!result) return;
+    
+    const companyName = result.company['회사명'];
+    
+    try {
+        // localStorage에서 회사별 저장 데이터 가져오기
+        let savedCompanies = JSON.parse(localStorage.getItem('savedCompanyDrafts') || '[]');
+        
+        // 4개 문안 모두 수집
+        const allVariations = [];
+        if (result.emails && result.emails.variations) {
+            for (const [key, variation] of Object.entries(result.emails.variations)) {
+                allVariations.push({
+                    type: variation.type || key,
+                    subject: variation.subject,
+                    body: variation.body,
+                    personalizationScore: variation.personalizationScore || 8.0
+                });
+            }
+        }
+        
+        // 새 회사 데이터 생성
+        const newCompanyData = {
+            id: Date.now(),
+            companyName: companyName,
+            savedAt: new Date().toISOString(),
+            research: {
+                company_info: result.research?.company_info || '',
+                pain_points: result.research?.pain_points || '',
+                industry_trends: result.research?.industry_trends || '',
+                timestamp: result.research?.timestamp || new Date().toISOString()
+            },
+            variations: allVariations
+        };
+        
+        // 최신순으로 추가
+        savedCompanies.unshift(newCompanyData);
+        
+        // 최대 50개 회사까지만 저장
+        if (savedCompanies.length > 50) {
+            savedCompanies = savedCompanies.slice(0, 50);
+        }
+        
+        // localStorage에 저장
+        localStorage.setItem('savedCompanyDrafts', JSON.stringify(savedCompanies));
+        
+        // 사이드바 업데이트
+        loadSavedDrafts();
+        
+        // 성공 메시지
+        showToast(`✅ ${companyName}의 전체 문안(${allVariations.length}개)이 저장되었습니다!`, 'success');
+        
+    } catch (error) {
+        console.error('전체 저장 실패:', error);
+        showToast('❌ 저장에 실패했습니다.', 'error');
+    }
+}
+
+// 저장된 문안을 메인 화면으로 불러오기
+function loadDraftToMain(draftId) {
+    const savedDrafts = JSON.parse(localStorage.getItem('savedEmailDrafts') || '[]');
+    const draft = savedDrafts.find(d => d.id === draftId);
+    
+    if (!draft) return;
+    
+    const chatbot = window.emailChatbot;
+    if (!chatbot) return;
+    
+    // 템플릿 섹션 표시
+    document.getElementById('templatesSection').style.display = 'block';
+    
+    // 가상의 회사 데이터와 이메일 결과 생성
+    const mockResult = {
+        company: {
+            '회사명': draft.companyName
+        },
+        emails: {
+            variations: {
+                [draft.variationType]: {
+                    type: draft.variationType,
+                    subject: draft.subject,
+                    body: draft.body,
+                    personalizationScore: 9.0,
+                    product: '저장된 문안'
+                }
+            }
+        }
+    };
+    
+    // generatedResults에 추가 (개선 요청 기능을 위해)
+    if (!chatbot.generatedResults) {
+        chatbot.generatedResults = [];
+    }
+    
+    // 기존 결과를 대체하거나 새로 추가
+    const loadedIndex = chatbot.generatedResults.length;
+    chatbot.generatedResults.push(mockResult);
+    
+    // 메인 화면에 표시
+    const container = document.getElementById('templatesContainer');
+    
+    const loadedDiv = document.createElement('div');
+    loadedDiv.className = 'company-templates mb-4';
+    loadedDiv.style.borderLeft = '4px solid #17a2b8';
+    
+    const timestamp = new Date().toLocaleTimeString('ko-KR');
+    
+    loadedDiv.innerHTML = `
+        <div class="company-info bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-folder-open text-info"></i> 불러온 문안: ${draft.companyName}</h5>
+                <span class="badge bg-info">${draft.variationType}</span>
+            </div>
+            <small class="text-muted">불러온 시간: ${timestamp}</small>
+        </div>
+        
+        <div class="row">
+            <div class="col-12 mb-3">
+                <div class="email-template" id="variation_${loadedIndex}_0">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">
+                            <i class="fas fa-bookmark text-info"></i> ${draft.variationType}
+                            <br><small class="text-muted">저장된 문안</small>
+                        </h6>
+                        <span class="personalization-score score-high">9.0/10</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>제목:</strong>
+                        <button class="btn btn-sm btn-outline-primary ms-2" onclick="copySubjectToClipboard('${draft.subject.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-copy"></i> 제목 복사
+                        </button>
+                        <br>
+                        <em>${draft.subject}</em>
+                    </div>
+                    <div class="mb-3">
+                        <strong>본문:</strong><br>
+                        <div style="white-space: pre-line; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px;">
+                            ${draft.body}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-outline-primary" onclick="copyTextToClipboard('${draft.subject}', '${draft.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}')">
+                            <i class="fas fa-copy"></i> 본문 복사
+                        </button>
+                        <button class="btn btn-sm btn-outline-success" onclick="convertToHtmlTemplate('${draft.subject}', '${draft.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}', ${loadedIndex}, 0)">
+                            <i class="fas fa-code"></i> HTML 템플릿
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="refineEmailCopy(${loadedIndex}, 0)">
+                            <i class="fas fa-edit"></i> 개선 요청
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning" onclick="saveEmailDraft('${draft.companyName.replace(/'/g, "\\'")}', '${draft.variationType.replace(/'/g, "\\'")}', '${draft.subject.replace(/'/g, "\\'")}', '${draft.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}')">
+                            <i class="fas fa-bookmark"></i> 다시 저장
+                        </button>
+                    </div>
+                    <textarea id="ai_template_${loadedIndex}_0" style="position: absolute; left: -9999px;">
+제목: ${draft.subject}
+
+${draft.body}
+                    </textarea>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 맨 위에 추가
+    container.insertBefore(loadedDiv, container.firstChild);
+    
+    // 스크롤하여 표시
+    loadedDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // 사이드바 닫기
+    toggleSidebar();
+    
+    // 챗봇 메시지 추가
+    chatbot.addBotMessage(`📂 "${draft.companyName}"의 저장된 문안을 불러왔습니다. 이제 "개선 요청" 버튼으로 수정할 수 있습니다!`);
+    
+    showToast('✅ 문안을 메인 화면으로 불러왔습니다!', 'success');
+}
+
 // 챗봇 초기화
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Script.js 로드됨 - 현재 시간:', new Date().toLocaleTimeString());
     window.emailChatbot = new EmailCopywritingChatbot();
+    
+    // 저장된 문안 로드
+    loadSavedDrafts();
 });
