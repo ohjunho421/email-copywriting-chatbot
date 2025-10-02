@@ -569,6 +569,9 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
         // 결과를 인스턴스 변수에 저장하여 CSV 다운로드에서 사용
         this.generatedResults = results;
         
+        // 자동 저장: 모든 결과를 localStorage에 저장
+        this.autoSaveSession(results);
+        
         results.forEach((result, index) => {
             if (result.error) {
                 // 오류가 있는 경우
@@ -1070,6 +1073,12 @@ ${variation.body}
         if (targetVariation) {
             targetVariation.id = `variation_${companyIndex}_${variationIndex}`;
         }
+        
+        // 4. 개선된 내용을 세션에 자동 저장
+        if (this.generatedResults) {
+            this.autoSaveSession(this.generatedResults);
+            console.log('✅ 개선된 문안이 세션에 자동 저장되었습니다.');
+        }
     }
     
     // 특정 variation으로 스크롤 이동
@@ -1527,6 +1536,167 @@ ${variation.body}
                 대화가 초기화되었습니다. 새로운 메일 문안 생성을 시작해보세요! 👋
             </div>
         `;
+    }
+
+    // 자동 저장: 세션을 localStorage에 저장
+    autoSaveSession(results) {
+        // 세션 불러오기 중이면 자동 저장 스킵
+        if (this.isLoadingSession) {
+            console.log('⏭️ 세션 불러오기 중이므로 자동 저장 스킵');
+            return;
+        }
+        
+        try {
+            const timestamp = new Date().toISOString();
+            const sessionData = {
+                timestamp: timestamp,
+                date: new Date().toLocaleString('ko-KR'),
+                results: results,
+                uploadedData: this.uploadedData,
+                companyCount: results.length
+            };
+            
+            // 세션 ID 생성 (타임스탬프 기반)
+            const sessionId = `session_${Date.now()}`;
+            
+            // 개별 세션 저장
+            localStorage.setItem(sessionId, JSON.stringify(sessionData));
+            
+            // 세션 목록에 추가
+            let sessionList = JSON.parse(localStorage.getItem('sessionList') || '[]');
+            sessionList.unshift({
+                id: sessionId,
+                date: sessionData.date,
+                companyCount: sessionData.companyCount,
+                timestamp: timestamp
+            });
+            
+            // 최근 20개 세션만 유지
+            if (sessionList.length > 20) {
+                const oldSessions = sessionList.slice(20);
+                oldSessions.forEach(session => {
+                    localStorage.removeItem(session.id);
+                });
+                sessionList = sessionList.slice(0, 20);
+            }
+            
+            localStorage.setItem('sessionList', JSON.stringify(sessionList));
+            
+            console.log('✅ 세션 자동 저장 완료:', sessionId);
+            this.showSaveNotification('💾 자동 저장 완료!');
+            
+            // 세션 목록 UI 업데이트
+            this.updateSessionListUI();
+            
+        } catch (error) {
+            console.error('세션 저장 오류:', error);
+            this.addBotMessage('⚠️ 세션 저장에 실패했습니다. 브라우저 저장 공간을 확인해주세요.');
+        }
+    }
+    
+    // 세션 불러오기
+    loadSession(sessionId) {
+        try {
+            const sessionData = JSON.parse(localStorage.getItem(sessionId));
+            if (!sessionData) {
+                alert('세션을 찾을 수 없습니다.');
+                return;
+            }
+            
+            // 데이터 복원
+            this.uploadedData = sessionData.uploadedData || [];
+            this.generatedResults = sessionData.results;
+            
+            // 불러오기 모드 플래그 설정 (자동 저장 방지)
+            this.isLoadingSession = true;
+            
+            // UI 업데이트
+            this.displayAIGeneratedTemplates(sessionData.results);
+            
+            // 플래그 해제
+            this.isLoadingSession = false;
+            
+            this.addBotMessage(`✅ 세션을 불러왔습니다!\n생성일: ${sessionData.date}\n회사 수: ${sessionData.companyCount}개`);
+            
+            console.log('✅ 세션 불러오기 완료:', sessionId);
+            
+        } catch (error) {
+            console.error('세션 불러오기 오류:', error);
+            alert('세션 불러오기에 실패했습니다.');
+        }
+    }
+    
+    // 세션 삭제
+    deleteSession(sessionId) {
+        if (!confirm('이 세션을 삭제하시겠습니까?')) {
+            return;
+        }
+        
+        try {
+            // 세션 데이터 삭제
+            localStorage.removeItem(sessionId);
+            
+            // 세션 목록에서 제거
+            let sessionList = JSON.parse(localStorage.getItem('sessionList') || '[]');
+            sessionList = sessionList.filter(session => session.id !== sessionId);
+            localStorage.setItem('sessionList', JSON.stringify(sessionList));
+            
+            // UI 업데이트
+            this.updateSessionListUI();
+            
+            console.log('✅ 세션 삭제 완료:', sessionId);
+            
+        } catch (error) {
+            console.error('세션 삭제 오류:', error);
+            alert('세션 삭제에 실패했습니다.');
+        }
+    }
+    
+    // 세션 목록 UI 업데이트
+    updateSessionListUI() {
+        const sessionList = JSON.parse(localStorage.getItem('sessionList') || '[]');
+        const sessionListContainer = document.getElementById('sessionListContainer');
+        
+        if (!sessionListContainer) return;
+        
+        if (sessionList.length === 0) {
+            sessionListContainer.innerHTML = '<p class="text-muted small">저장된 세션이 없습니다.</p>';
+            return;
+        }
+        
+        sessionListContainer.innerHTML = sessionList.map(session => `
+            <div class="session-item d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                <div>
+                    <small class="d-block"><strong>${session.date}</strong></small>
+                    <small class="text-muted">${session.companyCount}개 회사</small>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="window.emailChatbot.loadSession('${session.id}')">
+                        <i class="fas fa-folder-open"></i> 불러오기
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="window.emailChatbot.deleteSession('${session.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // 저장 알림 표시
+    showSaveNotification(message) {
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-success position-fixed';
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; animation: fadeIn 0.3s;';
+        notification.innerHTML = `<i class="fas fa-check-circle"></i> ${message}`;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'fadeOut 0.3s';
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 300);
+        }, 2000);
     }
 
     showLoading(show) {
@@ -2717,4 +2887,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 저장된 문안 로드
     loadSavedDrafts();
+    
+    // 저장된 세션 목록 표시
+    if (window.emailChatbot) {
+        window.emailChatbot.updateSessionListUI();
+    }
 });
