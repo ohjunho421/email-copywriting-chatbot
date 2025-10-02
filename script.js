@@ -750,7 +750,7 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                 </div>
                                 <div class="mb-2">
                                     <strong>제목:</strong>
-                                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="copySubjectToClipboard('${variation.subject.replace(/'/g, "\\'")}')">
+                                    <button class="btn btn-sm btn-outline-primary ms-2" onclick="copySubjectFromTextarea(${index}, ${vIndex})">
                                         <i class="fas fa-copy"></i> 제목 복사
                                     </button>
                                     <br>
@@ -763,16 +763,16 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="copyTextToClipboard('${variation.subject}', '${variation.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}')">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="copyTemplateFromTextarea(${index}, ${vIndex})">
                                         <i class="fas fa-copy"></i> 본문 복사
                                     </button>
-                                    <button class="btn btn-sm btn-outline-success" onclick="convertToHtmlTemplate('${variation.subject}', '${variation.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}', ${index}, ${vIndex})">
+                                    <button class="btn btn-sm btn-outline-success" onclick="convertToHtmlTemplateFromTextarea(${index}, ${vIndex})">
                                         <i class="fas fa-code"></i> HTML 템플릿
                                     </button>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="refineEmailCopy(${index}, ${vIndex})">
                                         <i class="fas fa-edit"></i> 개선 요청
                                     </button>
-                                    <button class="btn btn-sm btn-outline-warning" onclick="saveEmailDraft('${result.company['회사명'].replace(/'/g, "\\'")}', '${variation.type.replace(/'/g, "\\'")}', '${variation.subject.replace(/'/g, "\\'")}', '${variation.body.replace(/'/g, "\\'").replace(/\n/g, "\\n")}')">
+                                    <button class="btn btn-sm btn-outline-warning" onclick="saveEmailDraftFromTextarea(${index}, ${vIndex})">
                                         <i class="fas fa-bookmark"></i> 저장
                                     </button>
                                     ${emailAddress ? `
@@ -2893,3 +2893,131 @@ document.addEventListener('DOMContentLoaded', () => {
         window.emailChatbot.updateSessionListUI();
     }
 });
+
+// ===== 안전한 버튼 함수들 (인덱스 기반) =====
+
+// textarea에서 제목만 복사
+function copySubjectFromTextarea(companyIndex, variationIndex) {
+    const textarea = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
+    if (!textarea) {
+        alert('문안을 찾을 수 없습니다.');
+        return;
+    }
+    
+    const content = textarea.value;
+    const lines = content.split('\n');
+    
+    // 제목 추출
+    let subject = '';
+    if (lines[0] && lines[0].startsWith('제목:')) {
+        subject = lines[0].replace('제목:', '').trim();
+    } else {
+        subject = '제목 없음';
+    }
+    
+    copySubjectToClipboard(subject);
+}
+
+// textarea에서 내용을 가져와서 복사
+function copyTemplateFromTextarea(companyIndex, variationIndex) {
+    const textarea = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
+    if (!textarea) {
+        alert('문안을 찾을 수 없습니다.');
+        return;
+    }
+    
+    const content = textarea.value;
+    const lines = content.split('\n');
+    
+    // 제목과 본문 분리
+    let subject = '';
+    let body = '';
+    
+    if (lines[0] && lines[0].startsWith('제목:')) {
+        subject = lines[0].replace('제목:', '').trim();
+        body = lines.slice(2).join('\n').trim(); // 첫 줄(제목), 둘째 줄(빈 줄) 제외
+    } else {
+        subject = '제목 없음';
+        body = content;
+    }
+    
+    copyTextToClipboard(subject, body);
+}
+
+// textarea에서 내용을 가져와서 HTML 템플릿으로 변환
+function convertToHtmlTemplateFromTextarea(companyIndex, variationIndex) {
+    const textarea = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
+    if (!textarea) {
+        alert('문안을 찾을 수 없습니다.');
+        return;
+    }
+    
+    const content = textarea.value;
+    const lines = content.split('\n');
+    
+    // 제목과 본문 분리
+    let subject = '';
+    let body = '';
+    
+    if (lines[0] && lines[0].startsWith('제목:')) {
+        subject = lines[0].replace('제목:', '').trim();
+        body = lines.slice(2).join('\n').trim();
+    } else {
+        subject = '제목 없음';
+        body = content;
+    }
+    
+    convertToHtmlTemplate(subject, body, companyIndex, variationIndex);
+}
+
+// textarea에서 내용을 가져와서 저장
+function saveEmailDraftFromTextarea(companyIndex, variationIndex) {
+    const textarea = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
+    if (!textarea) {
+        alert('문안을 찾을 수 없습니다.');
+        return;
+    }
+    
+    const content = textarea.value;
+    const lines = content.split('\n');
+    
+    // 제목과 본문 분리
+    let subject = '';
+    let body = '';
+    
+    if (lines[0] && lines[0].startsWith('제목:')) {
+        subject = lines[0].replace('제목:', '').trim();
+        body = lines.slice(2).join('\n').trim();
+    } else {
+        subject = '제목 없음';
+        body = content;
+    }
+    
+    // 회사명과 문안 유형 추출
+    const companyData = window.emailChatbot?.generatedResults?.[companyIndex];
+    const companyName = companyData?.company?.['회사명'] || '알 수 없음';
+    
+    // variationType 추출
+    let variationType = '알 수 없음';
+    if (companyData?.emails?.variations) {
+        const variationKeys = Object.keys(companyData.emails.variations);
+        const variationKey = variationKeys[variationIndex];
+        
+        const typeNames = {
+            'opi_professional': 'OPI - 전문적 톤',
+            'opi_curiosity': 'OPI - 호기심 유발형',
+            'finance_professional': '재무자동화 - 전문적 톤',
+            'finance_curiosity': '재무자동화 - 호기심 유발형',
+            'game_d2c_professional': '게임 D2C - 전문적 톤',
+            'game_d2c_curiosity': '게임 D2C - 호기심 유발형',
+            'professional': '전문적 톤',
+            'curiosity': '호기심 유발형',
+            'value': '가치 제안형',
+            'problem': '문제 해결형'
+        };
+        
+        variationType = typeNames[variationKey] || variationKey;
+    }
+    
+    saveEmailDraft(companyName, variationType, subject, body);
+}
