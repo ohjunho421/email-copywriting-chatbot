@@ -223,6 +223,16 @@ class EmailCopywritingChatbot {
             
             const startTime = Date.now();
             
+            // 사용자 문안 가져오기
+            const userTemplate = document.getElementById('userTemplate').value.trim();
+            
+            // 사용자 문안 유무에 따른 메시지 표시
+            if (userTemplate) {
+                this.addBotMessage('📝 사용자 문안 모드: 뉴스 후킹 서론 + 사용자 본문(90%)으로 생성합니다.');
+            } else {
+                this.addBotMessage('🤖 SSR 모드: 뉴스 후킹 + 4개 문안 생성 + 실제 사례 포함 + 최적의 1개를 AI가 추천합니다.');
+            }
+            
             // 백엔드 API로 병렬 처리 요청
             const response = await fetch('http://localhost:5001/api/batch-process', {
                 method: 'POST',
@@ -231,7 +241,8 @@ class EmailCopywritingChatbot {
                 },
                 body: JSON.stringify({
                     companies: companiesToProcess,
-                    max_workers: maxWorkers
+                    max_workers: maxWorkers,
+                    user_template: userTemplate || null  // 사용자 문안 전달
                 })
             });
 
@@ -590,6 +601,12 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
             const companyDiv = document.createElement('div');
             companyDiv.className = 'company-templates mb-4';
             
+            // SSR 정보 확인
+            const ssrEnabled = result.emails?.ssr_enabled || false;
+            const recommendedEmail = result.emails?.recommended_email;
+            const allRankedEmails = result.emails?.all_ranked_emails;
+            const selectedCases = result.selected_cases || [];
+            
             // AI가 생성한 메일 문안 파싱 (개선된 버전)
             let emailVariations = [];
             if (result.emails && result.emails.success) {
@@ -637,6 +654,7 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                             
                             return {
                                 type: typeNames[key] || key,
+                                originalKey: key,
                                 product: value.product || 'PortOne 솔루션',
                                 subject: value.subject || '제목 없음',
                                 body: value.body || '본문 없음',
@@ -645,6 +663,28 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                 personalizationScore: value.personalization_score || this.calculateAIScore(result.research, value)
                             };
                         });
+                        
+                        // SSR 활성화된 경우 순위 정보 추가
+                        if (ssrEnabled && allRankedEmails && allRankedEmails.length > 0) {
+                            // SSR 점수 기반으로 emailVariations 재정렬 및 점수 추가
+                            emailVariations = emailVariations.map(email => {
+                                const rankedEmail = allRankedEmails.find(r => r.type === email.originalKey);
+                                if (rankedEmail) {
+                                    return {
+                                        ...email,
+                                        ssrScore: rankedEmail.ssr_score || 0,
+                                        ssrConfidence: rankedEmail.ssr_confidence || 0,
+                                        ssrReasoning: rankedEmail.ssr_reasoning || '',
+                                        ssrMethod: rankedEmail.ssr_method || 'unknown',
+                                        isRecommended: rankedEmail.type === recommendedEmail?.type
+                                    };
+                                }
+                                return email;
+                            });
+                            
+                            // SSR 점수로 정렬 (높은 점수가 먼저)
+                            emailVariations.sort((a, b) => (b.ssrScore || 0) - (a.ssrScore || 0));
+                        }
                     } else {
                         // JSON 파싱 실패 시 텍스트를 3개 스타일로 분할 시도
                         const textContent = variations.raw_content || variations || '';
@@ -735,18 +775,49 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                     ` : ''}
                 </div>
                 
+                ${ssrEnabled && selectedCases.length > 0 ? `
+                    <div class="alert alert-info mt-2">
+                        <strong><i class="fas fa-lightbulb"></i> 적용된 실제 사례:</strong>
+                        <small class="d-block mt-1">${selectedCases.join(', ')}</small>
+                    </div>
+                ` : ''}
+                
+                ${ssrEnabled ? `
+                    <div class="alert alert-success mt-2">
+                        <strong><i class="fas fa-chart-line"></i> SSR 기반 최적화 완료</strong>
+                        <p class="mb-0 small">논문 기반 Semantic Similarity Rating으로 가장 효과적인 이메일을 선정했습니다.</p>
+                    </div>
+                ` : ''}
+                
                 <div class="row">
                     ${emailVariations.map((variation, vIndex) => `
                         <div class="col-md-${emailVariations.length === 1 ? '12' : '6'} mb-3">
-                            <div class="email-template">
+                            <div class="email-template ${variation.isRecommended ? 'border-success border-3' : ''}">
+                                ${variation.isRecommended ? `
+                                    <div class="badge bg-success mb-2">
+                                        <i class="fas fa-star"></i> AI 추천 (최적 메일)
+                                    </div>
+                                ` : ''}
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <h6 class="mb-0">
                                         <i class="fas fa-robot text-primary"></i> ${variation.type}
                                         ${variation.product ? `<br><small class="text-muted">${variation.product}</small>` : ''}
                                     </h6>
-                                    <span class="personalization-score ${this.getScoreClass(variation.personalizationScore)}">
-                                        ${variation.personalizationScore}/10
-                                    </span>
+                                    <div class="text-end">
+                                        ${variation.ssrScore !== undefined ? `
+                                            <div class="badge bg-primary mb-1">
+                                                SSR: ${variation.ssrScore.toFixed(2)}/5.0
+                                            </div>
+                                            <br>
+                                            <small class="text-muted" title="${variation.ssrReasoning}">
+                                                신뢰도: ${(variation.ssrConfidence * 100).toFixed(0)}%
+                                            </small>
+                                        ` : `
+                                            <span class="personalization-score ${this.getScoreClass(variation.personalizationScore)}">
+                                                ${variation.personalizationScore}/10
+                                            </span>
+                                        `}
+                                    </div>
                                 </div>
                                 <div class="mb-2">
                                     <strong>제목:</strong>

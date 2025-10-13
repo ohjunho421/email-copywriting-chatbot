@@ -14,6 +14,10 @@ import boto3
 from botocore.exceptions import ClientError
 import google.generativeai as genai
 
+# SSR 엔진 및 사례 DB 임포트
+from ssr_engine import rank_emails, get_top_email, calculate_ssr_score
+from case_database import select_relevant_cases, get_case_details, format_case_for_email, PORTONE_CASES
+
 # .env 파일 로드
 load_dotenv()
 
@@ -2933,22 +2937,42 @@ def generate_email_with_gemini(company_data, research_data):
             services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
             logger.info(f"sales_item 없음, 기본 4개 문안 생성: {company_name}")
         
+        # CSV 뉴스 제공 여부 확인
+        has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
+        
         # 기본 context 정의
+        if has_csv_news:
+            news_instruction = """**🎯 최우선 지시: CSV에서 제공된 '관련 뉴스 기사' 섹션의 내용을 반드시 이메일 도입부에 활용하세요!**
+
+이 뉴스는 사용자가 직접 선정한 중요한 기사이므로, 다른 어떤 뉴스보다 우선적으로 언급해야 합니다.
+
+**필수 활용 방식:**
+- "최근 '{news_title}' 기사를 봤습니다..." 형태로 직접 인용
+- CSV 뉴스가 있으면 Perplexity 뉴스보다 우선
+- 뉴스 내용과 회사 상황을 구체적으로 연결
+
+예시:
+- "최근 '{company_name}가 100억원 투자를 유치했다'는 기사를 봤습니다. 사업 확장 준비로 바쁘시겠지만, 결제 인프라 확장도 지금 준비해야 할 시점이 아닐까요?"
+- "'{company_name}의 매출 200% 증가' 소식을 들었습니다. 급성장할 때 결제 시스템 병목이 가장 큰 리스크인데, 지금 어떻게 대응하고 계신가요?" """
+        else:
+            news_instruction = """**중요**: 위의 Perplexity 조사 결과에서 구체적인 뉴스 내용을 직접 인용하여 이메일 도입부에 반드시 활용하세요.
+
+예시:
+- "최근 기사에서 '{company_name}가 100억원 투자를 유치했다'고 봤습니다. 사업 확장에 따른 결제 인프라 확장 계획도 있으실 텐데..." """
+        
         context = f"""
 당신은 포트원(PortOne) 전문 세일즈 카피라이터로, 실제 검증된 한국어 영업 이메일 패턴을 완벽히 숙지하고 있습니다.
 
 **타겟 회사 정보:**
 {company_info}
 
-**🔥 Perplexity 최신 뉴스 조사 결과 (이메일에 반드시 활용해야 함):**
+**🔥 회사 조사 결과 (이메일에 반드시 활용해야 함):**
 {research_summary}
 
 **업계 트렌드:**
 {industry_trends}
 
-**중요**: 위의 Perplexity 조사 결과에서 구체적인 뉴스 내용을 직접 인용하여 이메일 도입부에 반드시 활용하세요. 
-예시:
-- "최근 기사에서 '{company_name}가 100억원 투자를 유치했다'고 봤습니다. 사업 확장에 따른 결제 인프라 확장 계획도 있으실 텐데..."
+{news_instruction}
 - "'{company_name}의 3분기 매출이 전년 대비 150% 증가했다'는 소식을 들었습니다. 급속한 성장에 따른 재무 관리 부담이 늘어나고 계시지 않나요?"
 - "'{company_name}가 일본 시장에 진출한다'는 뉴스를 봤습니다. 해외 진출 시 현지 결제 시스템 연동이 복잡하실 텐데..."
 
@@ -2971,14 +2995,30 @@ def generate_email_with_gemini(company_data, research_data):
 
 다음 고정된 형식에 따라 {service_focus} 이메일을 작성해주세요:
 
-**필수 요구사항:**
+**🎯 최우선 목표: B2B 의사결정자가 "즉시 답장하고 싶다"고 느끼는 메일 작성**
+
+당신이 작성하는 메일은 AI 평가 시스템으로 효과성을 측정하며, 아래 기준으로 5점 만점 평가됩니다:
+
+**5점 (목표)**: "정확히 우리가 찾던 솔루션이며 즉시 답장하겠습니다", "매우 시의적절하고 필요한 제안", "우리 회사의 현재 문제를 정확히 이해하고 있어 매우 인상적"
+**4점 (합격)**: "매우 관심이 가며 곧 답장할 가능성 높음", "우리 회사의 pain point를 잘 파악", "구체적이고 관련성이 높아 미팅을 잡고 싶다"
+**3점 이하 (실패)**: "어느 정도 관심", "제안이 괜찮아 보이지만 확신 없음", "별로 관심 없음", "스팸처럼 느껴짐"
+
+**필수 요구사항 (4-5점을 받기 위한 조건):**
 1. **가장 중요**: 퍼플렉시티가 조사한 {company_name}의 최신 뉴스/활동을 반드시 구체적으로 언급하여 개인화
-2. 위에 제시된 회사별 맞춤 Pain Point를 구체적으로 언급하여 차별화  
+   → "이 회사의 현재 상황을 정확히 이해하고 있다" 인상 필수
+2. 위에 제시된 회사별 맞춤 Pain Point를 구체적으로 언급하여 차별화
+   → "우리 회사의 pain point를 잘 파악했다" 반응 유도  
 3. 고정된 서론/결론 형식 사용 (담당자의 이름과 직책이 정확히 반영되도록)
 4. 담당자의 직책에 맞는 관점으로 Pain Point와 해결책 제시
 5. 실제 수치와 구체적 혜택 제시 (85% 절감, 90% 단축, 15% 향상 등)
+   → "구체적이고 관련성이 높다" 평가 확보
 6. PortOne 이용 경쟁사가 있다면 반드시 해당 기업 사례를 언급
+   → "시의적절하고 필요한 제안" 인식 강화
 7. "비슷한 고민을 가진 다른 고객사도..." 식의 사례 암시
+8. **즉시 답장하고 싶게 만드는 요소 포함**:
+   - 시급성: "지금 겪고 계실" 문제 언급
+   - 관련성: "{company_name}만의 구체적 상황" 정확히 지적
+   - 실현 가능성: "2주 내 구축", "즉시 적용 가능" 등 구체적 타임라인
 
 **퍼플렉시티 뉴스 직접 인용 예시:**
 - "최근 기사에서 '{company_name}가 시리즈A 50억원 투자를 유치했다'고 봤습니다. 사업 확장 준비로 바쁘시겠지만..."
@@ -3194,6 +3234,242 @@ def generate_email_with_gemini(company_data, research_data):
             'error': str(e),
             'timestamp': datetime.now().isoformat()
         }
+
+def generate_email_with_user_template(company_data, research_data, user_template, case_examples="", news_content=None):
+    """
+    사용자 제공 문안 기반 이메일 생성 (뉴스 후킹 서론 + 사용자 본문 90%)
+    """
+    try:
+        company_name = company_data.get('회사명', 'Unknown')
+        
+        # 담당자 정보 추출 (generate_email_with_gemini와 동일)
+        column_keys = list(company_data.keys())
+        email_name = ''
+        if len(column_keys) >= 14:
+            email_name = company_data.get(column_keys[13], '').strip()
+        
+        if not email_name:
+            contact_name = company_data.get('담당자명', '') or company_data.get('대표자명', '') or company_data.get('이름', '')
+            contact_position = company_data.get('직책', '') or company_data.get('직급', '')
+            if not contact_name or contact_name == '담당자':
+                email_name = '담당자님'
+            else:
+                if contact_position:
+                    if any(keyword in contact_position for keyword in ['대표', 'CEO', '사장']):
+                        email_name = f'{contact_name} {contact_position}님'
+                    elif any(keyword in contact_position for keyword in ['이사', '부장', '팀장', '매니저', '실장', '과장']):
+                        email_name = f'{contact_name} {contact_position}님'
+                    elif any(keyword in contact_position for keyword in ['주임', '대리', '선임', '책임']):
+                        email_name = f'{contact_name} {contact_position}님'
+                    else:
+                        email_name = f'{contact_name} {contact_position}님'
+                else:
+                    if any(title in contact_name for title in ['대표', 'CEO', '사장']):
+                        email_name = f'{contact_name}님'
+                    else:
+                        email_name = f'{contact_name} 담당자님'
+        
+        # 경쟁사 정보
+        competitor_name = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '')
+        
+        company_info = f"회사명: {company_name}\n담당자: {email_name}"
+        if competitor_name:
+            company_info += f"\nPortOne 이용 경쟁사: {competitor_name}"
+        
+        # 조사 정보
+        research_summary = research_data.get('company_info', '조사 정보 없음')
+        
+        # sales_item에 따른 서비스 결정
+        sales_item = company_data.get('sales_item', '').lower().strip()
+        services_to_generate = []
+        if sales_item:
+            if 'opi' in sales_item:
+                services_to_generate = ['opi_professional', 'opi_curiosity']
+            elif 'recon' in sales_item or 'finance' in sales_item or '재무' in sales_item:
+                services_to_generate = ['finance_professional', 'finance_curiosity']
+            else:
+                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+        else:
+            services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+        
+        # CSV 뉴스 제공 여부 확인
+        has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
+        
+        # 사용자 문안 모드 프롬프트
+        if has_csv_news:
+            news_instruction_template = """**🎯 최우선 지시: CSV에서 제공된 '관련 뉴스 기사' 섹션의 내용을 반드시 서론에 활용하세요!**
+
+이 뉴스는 사용자가 직접 선정한 중요한 기사이므로, 다른 어떤 뉴스보다 우선적으로 언급해야 합니다.
+
+**필수 작성 방식:**
+1. **서론 (2-3문장)**: CSV 제공 뉴스를 직접 인용하여 후킹하는 도입부 작성
+   - **시급성 + 관련성 + 공감** 3요소 모두 포함
+   - 예: "최근 '{company_name}가 100억원 투자 유치'라는 기사를 봤습니다. 사업 확장 준비로 바쁘시겠지만, 결제 인프라 확장도 지금 준비해야 할 시점이 아닐까요?"
+   - 예: "'{company_name}의 매출 150% 증가' 소식을 들었습니다. 급성장할 때 결제 시스템 병목이 가장 큰 리스크인데, 지금 어떻게 대응하고 계신가요?" """
+        else:
+            news_instruction_template = """**필수 작성 방식:**
+1. **서론 (2-3문장)**: 위의 조사 결과에서 구체적인 최신 뉴스를 직접 인용하여 후킹하는 도입부 작성
+   - **시급성 + 관련성 + 공감** 3요소 모두 포함
+   - 예: "최근 '{company_name}가 100억원 투자 유치' 소식을 봤습니다. 사업 확장 준비로 바쁘시겠지만, 결제 인프라 확장도 지금 준비해야 할 시점이 아닐까요?"
+   - 예: "'{company_name}의 매출 150% 증가' 기사를 읽었습니다. 급성장할 때 결제 시스템 병목이 가장 큰 리스크인데, 지금 어떻게 대응하고 계신가요?" """
+        
+        context = f"""
+당신은 포트원(PortOne) 전문 세일즈 카피라이터입니다.
+
+**타겟 회사 정보:**
+{company_info}
+
+**🔥 회사 조사 결과 (이메일 서론에 반드시 활용):**
+{research_summary}
+
+**🎯 특별 요청사항: 사용자 제공 문안 활용**
+
+사용자가 제공한 본문 문안:
+---
+{user_template}
+---
+
+**🎯 최우선 목표: B2B 의사결정자가 "즉시 답장하고 싶다"고 느끼는 메일 작성**
+
+뉴스 후킹 서론이 다음 반응을 이끌어내야 합니다:
+- "우리 회사의 현재 상황을 정확히 이해하고 있다"
+- "매우 시의적절하고 필요한 제안"
+- "즉시 답장할 가치가 있다"
+
+{news_instruction_template}
+
+2. **본문 (90%)**: 위에 제공된 사용자 문안을 **거의 그대로** 사용하되, 다음만 자연스럽게 개인화:
+   - {{company_name}} 회사명을 본문에 자연스럽게 삽입
+   - {{email_name}} 담당자명을 맥락에 맞게 추가 가능
+   - 문장 순서나 핵심 내용은 **절대 변경하지 말것**
+   - 단어 선택이나 문체도 **최대한 원본 유지**
+
+3. **고정 결론**: "<br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
+
+**고정 서론 형식 (서론 시작 전):**
+"안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>"
+
+**구조:**
+- 제목: "[PortOne] {{company_name}} {{email_name}}께 전달 부탁드립니다"
+- 본문: 고정 서론 → 뉴스 후킹 서론(2-3문장) → 사용자 문안(90% 유지) → 고정 결론
+
+**중요**: 어떤 설명이나 추가 텍스트 없이 오직 JSON 형태로만 응답해주세요.
+
+**생성할 서비스**: {', '.join(services_to_generate)}
+
+{{
+  "opi_professional": {{
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }},
+  "opi_curiosity": {{
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }},
+  "finance_professional": {{
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }},
+  "finance_curiosity": {{
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }}
+}}
+"""
+        
+        # Gemini API 호출
+        if not GEMINI_API_KEY:
+            return {
+                'success': False,
+                'error': 'Gemini API 키가 설정되지 않았습니다',
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        try:
+            model = genai.GenerativeModel('gemini-2.5-pro')
+            response = model.generate_content(context)
+            
+            if response.text:
+                # JSON 파싱
+                clean_response = response.text.strip()
+                if '```json' in clean_response:
+                    json_start = clean_response.find('```json') + 7
+                    json_end = clean_response.find('```', json_start)
+                    if json_end != -1:
+                        clean_response = clean_response[json_start:json_end]
+                    else:
+                        clean_response = clean_response[json_start:]
+                elif '{' in clean_response and '}' in clean_response:
+                    json_start = clean_response.find('{')
+                    json_end = clean_response.rfind('}') + 1
+                    clean_response = clean_response[json_start:json_end]
+                
+                clean_response = clean_response.strip()
+                email_variations = json.loads(clean_response)
+                
+                # 플레이스홀더 교체
+                def replace_placeholders(text, company_name, email_name, competitor_name=''):
+                    result = text.replace('{company_name}', company_name).replace('{email_name}', email_name)
+                    result = result.replace('{{company_name}}', company_name).replace('{{email_name}}', email_name)
+                    if competitor_name:
+                        result = result.replace('{competitor_name}', competitor_name).replace('{{competitor_name}}', competitor_name)
+                    return result
+                
+                formatted_variations = {}
+                for service in services_to_generate:
+                    if service in email_variations:
+                        subject = f'[PortOne] {company_name} {email_name}께 전달 부탁드립니다'
+                        body = replace_placeholders(email_variations[service]['body'], company_name, email_name, competitor_name)
+                        
+                        formatted_variations[service] = {
+                            'subject': subject,
+                            'body': body
+                        }
+                
+                return {
+                    'success': True,
+                    'variations': formatted_variations,
+                    'services_generated': services_to_generate,
+                    'sales_item': sales_item if sales_item else 'all',
+                    'timestamp': datetime.now().isoformat(),
+                    'model': 'gemini-2.5-pro-exp',
+                    'mode': 'user_template'
+                }
+                
+        except Exception as e:
+            logger.error(f"사용자 문안 이메일 생성 오류: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+    except Exception as e:
+        logger.error(f"사용자 문안 처리 오류: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }
+
+def generate_email_with_gemini_and_cases(company_data, research_data, case_examples="", user_template=None, news_content=None):
+    """
+    Gemini를 사용하여 개인화된 이메일 생성 (실제 사례 포함 버전)
+    
+    Args:
+        company_data: 회사 정보 dict
+        research_data: Perplexity 조사 결과
+        case_examples: 선택된 실제 사례 텍스트 (formatted)
+        user_template: 사용자 제공 문안 (옵션)
+        news_content: 스크래핑된 뉴스 내용 (옵션)
+    
+    Returns:
+        dict: 생성된 이메일 variations
+    """
+    # 사용자 문안이 있으면 특별 처리
+    if user_template:
+        logger.info(f"{company_data.get('회사명')}: 사용자 문안 모드 - 뉴스 후킹 + 사용자 본문")
+        return generate_email_with_user_template(company_data, research_data, user_template, case_examples, news_content)
+    
+    # 사용자 문안이 없으면 기존 SSR 방식 (4개 생성 + 사례 포함)
+    logger.info(f"{company_data.get('회사명')}: SSR 모드 - 4개 생성 + 사례 포함")
+    return generate_email_with_gemini(company_data, research_data)
 
 def refine_email_with_gemini(current_email, refinement_request):
     """Gemini 2.5 Pro를 사용하여 이메일 개선"""
@@ -3614,9 +3890,28 @@ def generate_emails():
     except Exception as e:
         return jsonify({'error': f'메일 생성 오류: {str(e)}'}), 500
 
-def process_single_company(company, index):
-    """단일 회사 처리 함수 (병렬 실행용)"""
+def process_single_company(company, index, user_template=None):
+    """
+    단일 회사 처리 함수 (병렬 실행용) - SSR 최적화 버전
+    
+    뉴스 후킹 + SSR 적용 (4개 생성 → 최적 1개 추천) 또는 사용자 문안 활용
+    """
     try:
+        company_name = company.get('회사명', '')
+        
+        # CSV에서 "관련뉴스" 열 확인
+        news_url = company.get('관련뉴스', '')
+        news_content = None
+        
+        # 뉴스 URL이 있으면 스크래핑
+        if news_url and news_url.strip():
+            logger.info(f"{company_name}: 관련뉴스 발견 - {news_url}")
+            news_content = scrape_news_article(news_url.strip())
+            if news_content:
+                logger.info(f"{company_name}: 뉴스 스크래핑 성공 - {news_content.get('title', '')}")
+            else:
+                logger.warning(f"{company_name}: 뉴스 스크래핑 실패")
+        
         # 1. 회사 정보 조사 (CSV 추가 정보 활용)
         additional_info = {
             '사업자번호': company.get('사업자번호', ''),
@@ -3628,22 +3923,78 @@ def process_single_company(company, index):
         }
         
         research_result = researcher.research_company(
-            company.get('회사명', ''), 
+            company_name, 
             company.get('홈페이지링크', ''),
             additional_info
         )
         
         # 2. 메일 문안 생성 (Gemini 사용)
         if research_result['success']:
-            # Gemini API를 사용한 메일 생성
-            email_result = generate_email_with_gemini(
-                company, research_result
+            # 뉴스 내용을 research_result에 추가
+            if news_content:
+                news_title = news_content.get('title', '')
+                news_text = news_content.get('content', '')
+                logger.info(f"{company_name}: 관련뉴스 내용을 research에 추가")
+                research_result['company_info'] += f"\n\n## 📰 관련 뉴스 기사 (CSV 제공)\n**제목:** {news_title}\n**내용:** {news_text[:1000]}"
+            
+            # 2-1. 관련 사례 선택 (제안서 기반 실제 사례)
+            relevant_case_keys = select_relevant_cases(
+                company, 
+                research_result.get('company_info', ''),
+                max_cases=2
             )
+            
+            logger.info(f"{company_name} - 선택된 사례: {relevant_case_keys}")
+            
+            # 사례 정보 포맷팅
+            case_examples = ""
+            for case_key in relevant_case_keys:
+                case_examples += format_case_for_email(case_key)
+            
+            # 2-2. Gemini API를 사용한 메일 생성 (뉴스 내용, 사례 정보, 사용자 문안 포함)
+            email_result = generate_email_with_gemini_and_cases(
+                company, research_result, case_examples, user_template=user_template, news_content=news_content
+            )
+            
+            # 2-3. SSR로 4개 이메일 평가 및 순위 매기기
+            if email_result.get('success') and email_result.get('variations'):
+                try:
+                    # 4개 이메일을 SSR로 평가
+                    all_emails = []
+                    for key, variation in email_result['variations'].items():
+                        all_emails.append({
+                            'type': key,
+                            'product': variation.get('product', 'PortOne'),
+                            'subject': variation.get('subject', ''),
+                            'body': variation.get('body', ''),
+                            'cta': variation.get('cta', ''),
+                            'tone': variation.get('tone', '')
+                        })
+                    
+                    # SSR 순위 매기기
+                    ranked_emails = rank_emails(all_emails, company)
+                    
+                    logger.info(f"{company.get('회사명')} SSR 점수: " + 
+                              ", ".join([f"{e['type']}: {e.get('ssr_score', 0):.2f}" 
+                                       for e in ranked_emails]))
+                    
+                    # 최고 점수 이메일
+                    top_email = ranked_emails[0]
+                    
+                    # 결과에 SSR 정보 추가
+                    email_result['recommended_email'] = top_email
+                    email_result['all_ranked_emails'] = ranked_emails
+                    email_result['ssr_enabled'] = True
+                    
+                except Exception as ssr_error:
+                    logger.warning(f"SSR 평가 실패: {ssr_error}, 기본 순서 사용")
+                    email_result['ssr_enabled'] = False
             
             return {
                 'company': company,
                 'research': research_result,
                 'emails': email_result,
+                'selected_cases': relevant_case_keys,
                 'index': index
             }
         else:
@@ -3654,6 +4005,7 @@ def process_single_company(company, index):
             }
             
     except Exception as e:
+        logger.error(f"회사 처리 오류 ({company.get('회사명')}): {str(e)}")
         return {
             'company': company,
             'error': f'처리 오류: {str(e)}',
@@ -3667,18 +4019,23 @@ def batch_process():
         data = request.json
         companies = data.get('companies', [])
         max_workers = data.get('max_workers', 5)  # 동시 처리 개수 (기본 5개)
+        user_template = data.get('user_template', None)  # 사용자 문안
         
         if not companies:
             return jsonify({'error': '처리할 회사 데이터가 없습니다'}), 400
         
         logger.info(f"병렬 처리 시작: {len(companies)}개 회사, {max_workers}개 동시 작업")
+        if user_template:
+            logger.info(f"사용자 문안 모드: {len(user_template)}자 - 뉴스 후킹 서론 + 사용자 본문")
+        else:
+            logger.info("SSR 모드: 뉴스 후킹 + 4개 생성 + 사례 포함 + AI 추천")
         start_time = time.time()
         
         # ThreadPoolExecutor를 사용한 병렬 처리
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 각 회사에 대해 처리 작업 제출
+            # 각 회사에 대해 처리 작업 제출 (user_template 전달)
             future_to_company = {
-                executor.submit(process_single_company, company, i): (company, i)
+                executor.submit(process_single_company, company, i, user_template): (company, i)
                 for i, company in enumerate(companies)
             }
             

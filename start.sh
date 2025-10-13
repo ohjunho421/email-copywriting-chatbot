@@ -1,10 +1,21 @@
 #!/bin/bash
 
-# PortOne 이메일 생성 챗봇 시작 스크립트
-echo "🚀 PortOne 이메일 생성 챗봇을 시작합니다..."
+# PortOne 이메일 생성 챗봇 시작 스크립트 (SSR 버전)
+echo "🚀 PortOne 이메일 생성 챗봇 SSR 버전을 시작합니다..."
 
 # 현재 디렉토리로 이동
 cd "$(dirname "$0")"
+
+# 가상환경 활성화
+if [ -d "../.venv" ]; then
+    echo "🔧 가상환경을 활성화합니다..."
+    source ../.venv/bin/activate
+elif [ -d ".venv" ]; then
+    echo "🔧 가상환경을 활성화합니다..."
+    source .venv/bin/activate
+else
+    echo "⚠️  가상환경을 찾을 수 없습니다. 시스템 Python을 사용합니다..."
+fi
 
 # 기존 프로세스 종료
 echo "📋 기존 서버 프로세스를 정리합니다..."
