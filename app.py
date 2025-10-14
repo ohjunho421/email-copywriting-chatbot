@@ -2919,23 +2919,43 @@ def generate_email_with_gemini(company_data, research_data):
         pain_points = research_data.get('pain_points', '일반적인 Pain Point')
         industry_trends = research_data.get('industry_trends', '')
         
+        # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단)
+        hosting = company_data.get('호스팅사', '').lower().strip()
+        is_self_hosted = '자체' in hosting or 'self' in hosting or '직접' in hosting
+        
         # sales_item에 따른 서비스 결정
         services_to_generate = []
         if sales_item:
             if 'opi' in sales_item:
-                services_to_generate = ['opi_professional', 'opi_curiosity']
-                logger.info(f"OPI 서비스 문안만 생성: {company_name}")
-            elif 'recon' in sales_item or 'finance' in sales_item or '재무' in sales_item:
+                # OPI는 자체구축인 경우에만 제공 가능
+                if is_self_hosted:
+                    services_to_generate = ['opi_professional', 'opi_curiosity']
+                    logger.info(f"✅ OPI 서비스 문안 생성 (호스팅: {hosting}): {company_name}")
+                else:
+                    # 자체구축이 아니면 Recon으로 대체
+                    services_to_generate = ['finance_professional', 'finance_curiosity']
+                    logger.warning(f"⚠️ OPI 불가능 (호스팅: {hosting}) → Recon(재무자동화)으로 전환: {company_name}")
+            elif 'recon' in sales_item or '재무' in sales_item:
                 services_to_generate = ['finance_professional', 'finance_curiosity']
-                logger.info(f"재무자동화 서비스 문안만 생성: {company_name}")
+                logger.info(f"Recon(재무자동화) 서비스 문안만 생성: {company_name}")
             else:
-                # 알 수 없는 sales_item인 경우 기본 4개 생성
-                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
-                logger.info(f"알 수 없는 sales_item '{sales_item}', 기본 4개 문안 생성: {company_name}")
+                # 알 수 없는 sales_item인 경우
+                if is_self_hosted:
+                    # 자체구축이면 4개 생성
+                    services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                    logger.info(f"알 수 없는 sales_item '{sales_item}', 자체구축이므로 4개 문안 생성: {company_name}")
+                else:
+                    # 자체구축 아니면 Recon만
+                    services_to_generate = ['finance_professional', 'finance_curiosity']
+                    logger.info(f"알 수 없는 sales_item '{sales_item}', 자체구축 아니므로 Recon만 생성: {company_name}")
         else:
-            # sales_item이 없으면 기존처럼 4개 모두 생성
-            services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
-            logger.info(f"sales_item 없음, 기본 4개 문안 생성: {company_name}")
+            # sales_item이 없으면 호스팅사 기준으로 판단
+            if is_self_hosted:
+                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                logger.info(f"sales_item 없음, 자체구축이므로 4개 문안 생성: {company_name}")
+            else:
+                services_to_generate = ['finance_professional', 'finance_curiosity']
+                logger.info(f"sales_item 없음, 자체구축 아니므로 Recon만 생성 (호스팅: {hosting}): {company_name}")
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
@@ -3279,18 +3299,40 @@ def generate_email_with_user_template(company_data, research_data, user_template
         # 조사 정보
         research_summary = research_data.get('company_info', '조사 정보 없음')
         
+        # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단)
+        hosting = company_data.get('호스팅사', '').lower().strip()
+        is_self_hosted = '자체' in hosting or 'self' in hosting or '직접' in hosting
+        
         # sales_item에 따른 서비스 결정
         sales_item = company_data.get('sales_item', '').lower().strip()
         services_to_generate = []
         if sales_item:
             if 'opi' in sales_item:
-                services_to_generate = ['opi_professional', 'opi_curiosity']
-            elif 'recon' in sales_item or 'finance' in sales_item or '재무' in sales_item:
+                # OPI는 자체구축인 경우에만 제공 가능
+                if is_self_hosted:
+                    services_to_generate = ['opi_professional', 'opi_curiosity']
+                    logger.info(f"✅ [사용자문안] OPI 서비스 문안 생성 (호스팅: {hosting}): {company_name}")
+                else:
+                    # 자체구축이 아니면 Recon으로 대체
+                    services_to_generate = ['finance_professional', 'finance_curiosity']
+                    logger.warning(f"⚠️ [사용자문안] OPI 불가능 (호스팅: {hosting}) → Recon(재무자동화)으로 전환: {company_name}")
+            elif 'recon' in sales_item or '재무' in sales_item:
                 services_to_generate = ['finance_professional', 'finance_curiosity']
+                logger.info(f"[사용자문안] Recon(재무자동화) 서비스 문안만 생성: {company_name}")
             else:
-                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                # 알 수 없는 sales_item인 경우
+                if is_self_hosted:
+                    services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                else:
+                    services_to_generate = ['finance_professional', 'finance_curiosity']
+                    logger.info(f"[사용자문안] 자체구축 아니므로 Recon만 생성: {company_name}")
         else:
-            services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+            # sales_item이 없으면 호스팅사 기준으로 판단
+            if is_self_hosted:
+                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+            else:
+                services_to_generate = ['finance_professional', 'finance_curiosity']
+                logger.info(f"[사용자문안] 자체구축 아니므로 Recon만 생성 (호스팅: {hosting}): {company_name}")
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
