@@ -3100,7 +3100,21 @@ def generate_email_with_gemini(company_data, research_data):
 - 제목: 고정 형식 사용 ("[PortOne] {company_name} {email_name}께 전달 부탁드립니다") - 본문에 제목 포함하지 말것
 - 본문: 고정 서론 → Pain Point 제기(50-70단어) → 해결책 제시(50-70단어) → 경쟁사 사례/혜택(30-50단어) → 고정 결론
 - 전체 본문: 130-200단어로 간결하면서도 핵심적으로 작성
-- 줄바꿈: 의미 단위별로 자연스럽게 <br> 태그 사용 (문장이 길 때, 새로운 주제로 넘어갈 때)
+- **한국어 자연스러운 줄바꿈 규칙 (매우 중요)**:
+  * 주어가 긴 문장: 주어 뒤에 `<br>` 추가
+  * 의미 단위 구분: 새로운 주제/문단으로 넘어갈 때 `<br><br>` (빈 줄)
+  * 문장이 2줄 이상: 자연스러운 호흡 위치에 `<br>`
+  * 리스트/나열: 각 항목마다 `<br>`
+  * 예시:
+    ```
+    나쁜 줄바꿈:
+    "최근 투자 유치 소식을 봤습니다. 빠른 성장 속도를 보니 결제 시스템 확장이 부담되실 것 같습니다."
+    
+    좋은 줄바꿈:
+    "최근 투자 유치 소식을 봤습니다.<br>
+    빠른 성장 속도를 보니<br>
+    결제 시스템 확장이 부담되실 것 같습니다."
+    ```
 - 톤: 전문적이면서도 공감하고 도움을 주는 관점, 간결하고 임팩트 있는 표현
 
 **중요**: 어떤 설명이나 추가 텍스트 없이 오직 JSON 형태로만 응답해주세요. 다른 텍스트는 절대 포함하지 마세요.
@@ -3492,7 +3506,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
             'timestamp': datetime.now().isoformat()
         }
 
-def generate_email_with_gemini_and_cases(company_data, research_data, case_examples="", user_template=None, news_content=None):
+def generate_email_with_gemini_and_cases(company_data, research_data, case_examples="", user_template=None, news_content=None, user_input_mode='template'):
     """
     Gemini를 사용하여 개인화된 이메일 생성 (실제 사례 포함 버전)
     
@@ -3500,20 +3514,255 @@ def generate_email_with_gemini_and_cases(company_data, research_data, case_examp
         company_data: 회사 정보 dict
         research_data: Perplexity 조사 결과
         case_examples: 선택된 실제 사례 텍스트 (formatted)
-        user_template: 사용자 제공 문안 (옵션)
+        user_template: 사용자 제공 문안 또는 요청사항 (옵션)
         news_content: 스크래핑된 뉴스 내용 (옵션)
+        user_input_mode: 'request' (요청사항 모드) 또는 'template' (문안 모드)
     
     Returns:
         dict: 생성된 이메일 variations
     """
-    # 사용자 문안이 있으면 특별 처리
+    # 사용자 입력이 있으면 모드에 따라 처리
     if user_template:
-        logger.info(f"{company_data.get('회사명')}: 사용자 문안 모드 - 뉴스 후킹 + 사용자 본문")
-        return generate_email_with_user_template(company_data, research_data, user_template, case_examples, news_content)
+        if user_input_mode == 'request':
+            logger.info(f"{company_data.get('회사명')}: 요청사항 모드 - 기본 생성 + 요청사항 반영")
+            return generate_email_with_user_request(company_data, research_data, user_template, case_examples, news_content)
+        else:
+            logger.info(f"{company_data.get('회사명')}: 문안 모드 - 뉴스 후킹 + 사용자 본문")
+            return generate_email_with_user_template(company_data, research_data, user_template, case_examples, news_content)
     
-    # 사용자 문안이 없으면 기존 SSR 방식 (4개 생성 + 사례 포함)
+    # 사용자 입력이 없으면 기존 SSR 방식 (4개 생성 + 사례 포함)
     logger.info(f"{company_data.get('회사명')}: SSR 모드 - 4개 생성 + 사례 포함")
     return generate_email_with_gemini(company_data, research_data)
+
+def generate_email_with_user_request(company_data, research_data, user_request, case_examples="", news_content=None):
+    """
+    사용자 요청사항 기반 이메일 생성 (2단계)
+    
+    1단계: 기본 SSR 방식으로 4개 문안 생성 (Pain Point + 포트원 해결책 포함)
+    2단계: 사용자 요청사항 반영해서 각 문안 개선
+    """
+    try:
+        company_name = company_data.get('회사명', 'Unknown')
+        logger.info(f"{company_name}: 요청모드 1단계 - 기본 문안 생성 시작")
+        
+        # 1단계: 기본 SSR 모드로 문안 생성
+        base_result = generate_email_with_gemini(company_data, research_data)
+        
+        if not base_result.get('success'):
+            logger.error(f"{company_name}: 기본 문안 생성 실패")
+            return base_result
+        
+        logger.info(f"{company_name}: 요청모드 2단계 - 요청사항 반영 개선 시작")
+        
+        # 2단계: 각 문안을 사용자 요청사항에 맞춰 개선
+        base_variations = base_result.get('variations', {})
+        refined_variations = {}
+        
+        for service_key, email_content in base_variations.items():
+            try:
+                # 원본 이메일
+                original_subject = email_content.get('subject', '')
+                original_body = email_content.get('body', '')
+                
+                # 요청사항 반영해서 개선
+                refined_email = refine_email_with_user_request(
+                    original_subject=original_subject,
+                    original_body=original_body,
+                    user_request=user_request,
+                    company_data=company_data
+                )
+                
+                if refined_email:
+                    refined_variations[service_key] = refined_email
+                else:
+                    # 개선 실패 시 원본 사용
+                    refined_variations[service_key] = email_content
+                    
+            except Exception as e:
+                logger.error(f"{company_name} {service_key} 개선 오류: {str(e)}")
+                # 오류 시 원본 사용
+                refined_variations[service_key] = email_content
+        
+        logger.info(f"{company_name}: 요청모드 완료 - {len(refined_variations)}개 문안 생성")
+        
+        return {
+            'success': True,
+            'variations': refined_variations,
+            'services_generated': base_result.get('services_generated', []),
+            'sales_item': base_result.get('sales_item', 'all'),
+            'timestamp': datetime.now().isoformat(),
+            'model': 'gemini-2.0-flash-exp',
+            'mode': 'user_request'
+        }
+        
+    except Exception as e:
+        logger.error(f"요청모드 오류: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }
+
+def refine_email_with_user_request(original_subject, original_body, user_request, company_data):
+    """
+    생성된 이메일을 사용자 요청사항에 맞춰 개선
+    
+    ⚠️ 핵심: 원본 이메일의 Pain Point + 포트원 해결책을 반드시 유지하면서
+             사용자 요청사항(톤, 강조점, 제목 스타일 등)만 반영
+    """
+    try:
+        company_name = company_data.get('회사명', 'Unknown')
+        
+        # 요청사항 개선 프롬프트
+        context = f"""
+당신은 포트원(PortOne) 이메일 개선 전문가입니다.
+
+**원본 이메일:**
+제목: {original_subject}
+
+본문:
+{original_body}
+
+**사용자 요청사항:**
+{user_request}
+
+**🚨 절대 규칙 - MUST KEEP (반드시 유지해야 하는 내용):**
+
+1. **Pain Point (고객 과제) 내용 100% 유지**
+   - 원본에서 언급한 회사의 어려움/과제는 절대 삭제 불가
+   - 예: "거래량 급증", "결제 시스템 확장 부담", "정산 업무 복잡도 증가" 등
+   - 표현만 다듬을 수 있지만, 핵심 메시지는 동일하게 유지
+
+2. **PortOne 해결책 100% 유지**
+   - OPI/재무자동화 등 포트원 솔루션 설명은 절대 삭제 불가
+   - 구체적 수치(85% 절감, 90% 단축 등)는 반드시 포함
+   - 예: "단 하나의 API로 국내외 주요 PG사 연동", "정산 업무 90% 단축" 등
+
+3. **뉴스 후킹 내용 유지**
+   - 원본에서 언급한 회사 뉴스/성장 이야기는 유지
+   - 투자 유치, 사업 확장 등 구체적 내용 보존
+
+**✅ 변경 가능한 부분 (사용자 요청사항 반영):**
+
+1. **톤&매너 조정**
+   - 친근한/전문적/격식있는 등 요청된 톤으로 수정 가능
+   - 예: "혹시 이런 고민 있으신가요?" ↔ "다음과 같은 과제를 검토하고 계실 것으로 판단됩니다"
+
+2. **강조점 변경**
+   - 사용자가 강조 요청한 부분을 `<strong>` 태그로 강조
+   - 볼드 처리 위치 조정 가능
+
+3. **제목 수정 (조건부)**
+   - ⚠️ **사용자가 제목 수정을 명시적으로 요청한 경우에만** 제목 변경 가능
+   - 예: "제목을 더 임팩트있게", "제목에 ROI 수치 포함" 등의 명확한 요청이 있을 때만
+   - **제목 관련 요청이 없으면 원본 제목({original_subject})을 그대로 사용**
+
+4. **구조 개선 및 한국어 자연스러운 줄바꿈**
+   - 문장 순서 조정, 문단 나누기 등
+   - **한국어의 자연스러운 호흡에 맞춰 줄바꿈 배치**:
+     * 주어가 긴 문장: 주어 다음 줄바꿈 (`<br>`)
+     * 접속사 전후: 자연스러운 위치에 줄바꿈
+     * 의미 단위 구분: 각 의미 블록마다 빈 줄 (`<br><br>`)
+     * 리스트나 나열: 각 항목마다 줄바꿈
+   - 예시:
+     ```
+     나쁜 줄바꿈:
+     "최근 투자 유치 소식을 봤습니다. 빠른 성장 속도를 보니 결제 시스템 확장이 부담되실 것 같습니다. 저희 OPI는..."
+     
+     좋은 줄바꿈:
+     "최근 투자 유치 소식을 봤습니다.<br>
+     빠른 성장 속도를 보니<br>
+     결제 시스템 확장이 부담되실 것 같습니다.<br><br>
+     저희 포트원 OPI는..."
+     ```
+
+5. **길이 조정**
+   - 더 간결하게 또는 더 상세하게 (단, Pain Point + 해결책은 유지)
+
+**❌ 절대 금지사항:**
+- Pain Point 내용을 삭제하거나 축소
+- PortOne 해결책 설명을 삭제하거나 추상화 ("도움 드릴 수 있습니다"로만 끝내기 금지)
+- 구체적 수치 삭제
+- 뉴스 후킹 내용 삭제
+
+**개선 예시:**
+
+원본:
+"최근 투자 유치 소식을 봤습니다. 빠른 성장 속도를 보니 결제 시스템 확장이 부담되실 것 같습니다. 
+저희 OPI는 단 하나의 API로 주요 PG사를 연동하고 개발 기간을 85% 단축합니다."
+
+요청사항: "더 친근한 톤으로, ROI 수치 강조"
+
+개선:
+"'{company_name} 투자 유치' 소식 정말 축하드립니다! 😊
+이렇게 빠르게 성장하시다 보면, 결제 시스템 확장이 개발팀에 큰 부담 되지 않으실까요?
+저희 포트원 OPI는 단 하나의 API로 국내외 주요 PG사를 연결하고, <strong>개발 기간을 85% 단축</strong>해드립니다."
+
+→ Pain Point(결제 시스템 확장 부담) + 해결책(OPI, 85% 단축) 모두 유지하면서, 톤만 친근하게 변경
+
+**📤 JSON 출력 형식:**
+
+**중요**: 사용자 요청사항에서 제목 관련 내용이 없으면 subject는 원본 그대로 사용하세요.
+
+{{
+  "subject": "사용자가 제목 수정을 요청했다면 개선된 제목, 아니면 '{original_subject}' 그대로",
+  "body": "개선된 본문 (HTML 형식, <p>, <br>, <strong> 태그 사용, 한국어 자연스러운 줄바꿈)"
+}}
+
+**줄바꿈 예시 (본문):**
+```html
+<p>안녕하세요, ABC회사 김철수 대표님.<br>
+PortOne 오준호 매니저입니다.</p>
+
+<p>최근 'ABC회사 시리즈 A 투자 유치' 소식을 봤습니다.<br>
+정말 축하드립니다!</p>
+
+<p>이렇게 빠르게 성장하시다 보면<br>
+결제 시스템 확장과 관리가<br>
+개발팀에 큰 부담이 되지 않으실까요?</p>
+
+<p>저희 포트원 OPI는<br>
+<strong>단 하나의 API로 국내외 주요 PG사를 연동</strong>하고<br>
+<strong>개발 기간을 85% 단축</strong>해드립니다.</p>
+```
+"""
+        
+        payload = {
+            "contents": [{"parts": [{"text": context}]}],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 2048,
+                "responseMimeType": "application/json"
+            }
+        }
+        
+        gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={GEMINI_API_KEY}"
+        
+        response = requests.post(
+            gemini_api_url,
+            json=payload,
+            headers={'Content-Type': 'application/json'},
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"{company_name} 개선 API 오류: {response.status_code}")
+            return None
+        
+        result = response.json()
+        generated_text = result['candidates'][0]['content']['parts'][0]['text']
+        
+        import json
+        refined_email = json.loads(generated_text)
+        
+        return {
+            'subject': refined_email.get('subject', original_subject),
+            'body': refined_email.get('body', original_body)
+        }
+        
+    except Exception as e:
+        logger.error(f"이메일 개선 오류: {str(e)}")
+        return None
 
 def refine_email_with_gemini(current_email, refinement_request):
     """Gemini 2.5 Pro를 사용하여 이메일 개선"""
@@ -3934,11 +4183,11 @@ def generate_emails():
     except Exception as e:
         return jsonify({'error': f'메일 생성 오류: {str(e)}'}), 500
 
-def process_single_company(company, index, user_template=None):
+def process_single_company(company, index, user_template=None, user_input_mode='template'):
     """
     단일 회사 처리 함수 (병렬 실행용) - SSR 최적화 버전
     
-    뉴스 후킹 + SSR 적용 (4개 생성 → 최적 1개 추천) 또는 사용자 문안 활용
+    뉴스 후킹 + SSR 적용 (4개 생성 → 최적 1개 추천) 또는 사용자 문안/요청사항 활용
     """
     try:
         company_name = company.get('회사명', '')
@@ -3995,9 +4244,9 @@ def process_single_company(company, index, user_template=None):
             for case_key in relevant_case_keys:
                 case_examples += format_case_for_email(case_key)
             
-            # 2-2. Gemini API를 사용한 메일 생성 (뉴스 내용, 사례 정보, 사용자 문안 포함)
+            # 2-2. Gemini API를 사용한 메일 생성 (뉴스 내용, 사례 정보, 사용자 문안/요청사항 포함)
             email_result = generate_email_with_gemini_and_cases(
-                company, research_result, case_examples, user_template=user_template, news_content=news_content
+                company, research_result, case_examples, user_template=user_template, news_content=news_content, user_input_mode=user_input_mode
             )
             
             # 2-3. SSR로 4개 이메일 평가 및 순위 매기기
@@ -4063,23 +4312,27 @@ def batch_process():
         data = request.json
         companies = data.get('companies', [])
         max_workers = data.get('max_workers', 5)  # 동시 처리 개수 (기본 5개)
-        user_template = data.get('user_template', None)  # 사용자 문안
+        user_template = data.get('user_template', None)  # 사용자 문안 또는 요청사항
+        user_input_mode = data.get('user_input_mode', 'template')  # 'request' 또는 'template'
         
         if not companies:
             return jsonify({'error': '처리할 회사 데이터가 없습니다'}), 400
         
         logger.info(f"병렬 처리 시작: {len(companies)}개 회사, {max_workers}개 동시 작업")
         if user_template:
-            logger.info(f"사용자 문안 모드: {len(user_template)}자 - 뉴스 후킹 서론 + 사용자 본문")
+            if user_input_mode == 'request':
+                logger.info(f"요청사항 모드: {len(user_template)}자 - 기본 생성 + 요청사항 반영")
+            else:
+                logger.info(f"문안 모드: {len(user_template)}자 - 뉴스 후킹 서론 + 사용자 본문")
         else:
             logger.info("SSR 모드: 뉴스 후킹 + 4개 생성 + 사례 포함 + AI 추천")
         start_time = time.time()
         
         # ThreadPoolExecutor를 사용한 병렬 처리
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 각 회사에 대해 처리 작업 제출 (user_template 전달)
+            # 각 회사에 대해 처리 작업 제출 (user_template, user_input_mode 전달)
             future_to_company = {
-                executor.submit(process_single_company, company, i, user_template): (company, i)
+                executor.submit(process_single_company, company, i, user_template, user_input_mode): (company, i)
                 for i, company in enumerate(companies)
             }
             

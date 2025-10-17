@@ -13,7 +13,9 @@ class EmailCopywritingChatbot {
         this.currentCompanyIndex = 0;
         this.isRefinementMode = false;
         this.currentRefinementTarget = null;
+        this.userInputMode = 'request'; // 'template' 또는 'request'
         this.initializeEventListeners();
+        this.loadRequestHistory();
         this.portOneValueProps = {
             resourceSaving: {
                 title: '85% 리소스 절감',
@@ -149,16 +151,19 @@ class EmailCopywritingChatbot {
     }
 
     processFile(file) {
-        if (!file.name.toLowerCase().endsWith('.csv')) {
-            this.addBotMessage('❌ CSV 파일만 업로드 가능합니다.');
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith('.csv') && !fileName.endsWith('.txt') && !fileName.endsWith('.tsv')) {
+            this.addBotMessage('❌ CSV, TSV, TXT 파일만 업로드 가능합니다.');
             return;
         }
 
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const csv = e.target.result;
-                this.uploadedData = this.parseCSV(csv);
+                const content = e.target.result;
+                // TSV나 TXT 파일이면 탭 구분, CSV면 쉼표 구분
+                const isTSV = fileName.endsWith('.txt') || fileName.endsWith('.tsv');
+                this.uploadedData = this.parseCSV(content, isTSV);
                 this.displayFileInfo(file.name, this.uploadedData.length);
                 this.addBotMessage(`✅ ${file.name} 파일이 성공적으로 업로드되었습니다. 총 ${this.uploadedData.length}개 회사 데이터를 확인했습니다.`);
                 document.getElementById('generateBtn').disabled = false;
@@ -169,17 +174,29 @@ class EmailCopywritingChatbot {
         reader.readAsText(file, 'utf-8');
     }
 
-    parseCSV(csv) {
-        const lines = csv.split('\n').filter(line => line.trim());
-        const headers = lines[0].split(',').map(h => h.trim());
+    parseCSV(content, isTSV = false) {
+        const lines = content.split('\n').filter(line => line.trim());
+        const delimiter = isTSV ? '\t' : ',';
+        
+        // TSV면 단순 split, CSV면 따옴표 처리
+        const headers = isTSV ? lines[0].split(delimiter).map(h => h.trim()) : this.parseCSVLine(lines[0]);
         const data = [];
 
+        console.log(`📋 ${isTSV ? 'TSV' : 'CSV'} 헤더:`, headers);
+
         for (let i = 1; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim());
+            const values = isTSV ? lines[i].split(delimiter).map(v => v.trim()) : this.parseCSVLine(lines[i]);
             const row = {};
             headers.forEach((header, index) => {
                 row[header] = values[index] || '';
             });
+            
+            // 디버깅: 첫 번째 데이터 행 출력
+            if (i === 1) {
+                console.log('📊 첫 번째 행 원본:', lines[i]);
+                console.log('📊 파싱된 값들:', values);
+                console.log('📊 매핑된 데이터:', row);
+            }
             
             // 필수 필드가 있는 행만 포함
             if (row['회사명'] && row['회사명'].trim() !== '') {
@@ -188,6 +205,40 @@ class EmailCopywritingChatbot {
         }
 
         return data;
+    }
+
+    // CSV 한 줄을 파싱하는 함수 (따옴표 내부의 쉼표는 무시)
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+            
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    // 연속된 따옴표 ("") → 하나의 따옴표로 처리
+                    current += '"';
+                    i++; // 다음 따옴표 건너뛰기
+                } else {
+                    // 따옴표 시작 또는 종료
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                // 따옴표 밖의 쉼표 → 컬럼 구분자
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        
+        // 마지막 컬럼 추가
+        result.push(current.trim());
+        
+        return result;
     }
 
     displayFileInfo(fileName, rowCount) {
@@ -230,12 +281,18 @@ class EmailCopywritingChatbot {
             
             const startTime = Date.now();
             
-            // 사용자 문안 가져오기
+            // 사용자 입력 가져오기
             const userTemplate = document.getElementById('userTemplate').value.trim();
             
-            // 사용자 문안 유무에 따른 메시지 표시
+            // 모드에 따른 메시지 표시 및 히스토리 저장
             if (userTemplate) {
-                this.addBotMessage('📝 사용자 문안 모드: 뉴스 후킹 서론 + 사용자 본문(90%)으로 생성합니다.');
+                if (this.userInputMode === 'request') {
+                    this.addBotMessage('📝 요청사항 모드: AI가 요청사항을 분석하여 맞춤 메일을 생성합니다.');
+                    // 요청사항 히스토리에 저장
+                    saveRequestToHistory(userTemplate);
+                } else {
+                    this.addBotMessage('📝 문안 모드: 뉴스 후킹 서론 + 사용자 본문(90%)으로 생성합니다.');
+                }
             } else {
                 this.addBotMessage('🤖 SSR 모드: 뉴스 후킹 + 4개 문안 생성 + 실제 사례 포함 + 최적의 1개를 AI가 추천합니다.');
             }
@@ -249,7 +306,8 @@ class EmailCopywritingChatbot {
                 body: JSON.stringify({
                     companies: companiesToProcess,
                     max_workers: maxWorkers,
-                    user_template: userTemplate || null  // 사용자 문안 전달
+                    user_template: userTemplate || null,  // 사용자 입력 전달
+                    user_input_mode: this.userInputMode    // 모드 정보 전달
                 })
             });
 
@@ -844,15 +902,6 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                     <button class="btn btn-sm btn-outline-primary" onclick="copyTemplateFromTextarea(${index}, ${vIndex})">
                                         <i class="fas fa-copy"></i> 본문 복사
                                     </button>
-                                    <button class="btn btn-sm btn-outline-success" onclick="convertToHtmlTemplateFromTextarea(${index}, ${vIndex})">
-                                        <i class="fas fa-code"></i> HTML 템플릿
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="refineEmailCopy(${index}, ${vIndex})">
-                                        <i class="fas fa-edit"></i> 개선 요청
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-warning" onclick="saveEmailDraftFromTextarea(${index}, ${vIndex})">
-                                        <i class="fas fa-bookmark"></i> 저장
-                                    </button>
                                     ${emailAddress ? `
                                         <button class="btn btn-sm btn-outline-info" onclick="copyToClipboard('${emailAddress}')" title="이메일 주소 복사">
                                             <i class="fas fa-envelope"></i> 이메일 복사
@@ -862,6 +911,15 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                             <i class="fas fa-exclamation-triangle"></i> 이메일 없음
                                         </button>
                                     `}
+                                    <button class="btn btn-sm btn-outline-success" onclick="convertToHtmlTemplateFromTextarea(${index}, ${vIndex})">
+                                        <i class="fas fa-code"></i> HTML 템플릿
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="refineEmailCopy(${index}, ${vIndex})">
+                                        <i class="fas fa-edit"></i> 개선 요청
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="saveEmailDraftFromTextarea(${index}, ${vIndex})">
+                                        <i class="fas fa-bookmark"></i> 저장
+                                    </button>
                                 </div>
                                 <textarea id="ai_template_${index}_${vIndex}" style="position: absolute; left: -9999px;">
 제목: ${variation.subject}
@@ -1844,25 +1902,75 @@ function copySubjectToClipboard(subject) {
     }
 }
 
-// 텍스트 복사 함수 (개선된 버전) - 본문만 복사
+// 텍스트 복사 함수 (개선된 버전) - 본문만 복사 (서식 포함)
 function copyTextToClipboard(subject, body) {
-    // 1. HTML 태그를 완전히 제거하고 순수 텍스트로 변환
-    const plainTextBody = htmlToPlainText(body);
+    // contentEditable div를 사용하여 실제 렌더링된 내용을 복사 (볼드, 줄바꿈 유지)
+    const tempDiv = document.createElement('div');
+    tempDiv.contentEditable = true;
+    tempDiv.style.position = 'fixed';
+    tempDiv.style.left = '-9999px';
+    tempDiv.style.whiteSpace = 'pre-wrap'; // 줄바꿈 유지
+    tempDiv.innerHTML = body;
     
-    // 2. 본문만 복사 (제목 제외)
-    const fullText = plainTextBody;
+    document.body.appendChild(tempDiv);
     
-    // 최신 브라우저의 Clipboard API 사용
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(fullText).then(() => {
+    try {
+        // div 내용 선택
+        const range = document.createRange();
+        range.selectNodeContents(tempDiv);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        
+        // 복사 실행
+        const successful = document.execCommand('copy');
+        
+        if (successful) {
+            showCopySuccess('📋 본문이 서식과 함께 클립보드에 복사되었습니다!');
+        } else {
+            throw new Error('execCommand 실패');
+        }
+        
+        // 선택 해제
+        selection.removeAllRanges();
+    } catch (err) {
+        console.error('서식 복사 실패:', err);
+        
+        // 폴백: ClipboardItem API 시도
+        if (navigator.clipboard && window.ClipboardItem) {
+            fallbackCopyWithClipboardItem(body);
+        } else {
+            // 마지막 폴백: 텍스트만 복사
+            const plainText = htmlToPlainText(body);
+            fallbackCopyTextToClipboard(plainText);
+        }
+    } finally {
+        document.body.removeChild(tempDiv);
+    }
+}
+
+// ClipboardItem을 사용한 폴백 복사
+function fallbackCopyWithClipboardItem(htmlBody) {
+    try {
+        const htmlBlob = new Blob([htmlBody], { type: 'text/html' });
+        const plainText = htmlToPlainText(htmlBody);
+        const textBlob = new Blob([plainText], { type: 'text/plain' });
+        
+        const clipboardItem = new ClipboardItem({
+            'text/html': htmlBlob,
+            'text/plain': textBlob
+        });
+        
+        navigator.clipboard.write([clipboardItem]).then(() => {
             showCopySuccess('📋 본문이 클립보드에 복사되었습니다!');
         }).catch(err => {
-            console.error('복사 실패:', err);
-            fallbackCopyTextToClipboard(fullText);
+            console.error('ClipboardItem 복사 실패:', err);
+            fallbackCopyTextToClipboard(plainText);
         });
-    } else {
-        // 폴백 방법
-        fallbackCopyTextToClipboard(fullText);
+    } catch (err) {
+        console.error('ClipboardItem 생성 실패:', err);
+        const plainText = htmlToPlainText(htmlBody);
+        fallbackCopyTextToClipboard(plainText);
     }
 }
 
@@ -2239,19 +2347,19 @@ function copyToClipboard(text) {
     if (navigator.clipboard && window.isSecureContext) {
         // 최신 브라우저에서 Clipboard API 사용
         navigator.clipboard.writeText(text).then(() => {
-            showToast('이메일 주소가 클립보드에 복사되었습니다!', 'success');
+            showCopySuccess('📧 이메일 주소가 클립보드에 복사되었습니다!');
         }).catch(err => {
             console.error('클립보드 복사 실패:', err);
-            fallbackCopyTextToClipboard(text);
+            fallbackCopyEmailToClipboard(text);
         });
     } else {
         // 구형 브라우저 지원
-        fallbackCopyTextToClipboard(text);
+        fallbackCopyEmailToClipboard(text);
     }
 }
 
-// 구형 브라우저용 클립보드 복사 함수
-function fallbackCopyTextToClipboard(text) {
+// 구형 브라우저용 이메일 클립보드 복사 함수
+function fallbackCopyEmailToClipboard(text) {
     const textArea = document.createElement("textarea");
     textArea.value = text;
     
@@ -2268,13 +2376,13 @@ function fallbackCopyTextToClipboard(text) {
     try {
         const successful = document.execCommand('copy');
         if (successful) {
-            showToast('이메일 주소가 클립보드에 복사되었습니다!', 'success');
+            showCopySuccess('📧 이메일 주소가 클립보드에 복사되었습니다!');
         } else {
-            showToast('클립보드 복사에 실패했습니다.', 'error');
+            alert('클립보드 복사에 실패했습니다.');
         }
     } catch (err) {
         console.error('클립보드 복사 실패:', err);
-        showToast('클립보드 복사에 실패했습니다.', 'error');
+        alert('클립보드 복사에 실패했습니다.');
     }
     
     document.body.removeChild(textArea);
@@ -3099,3 +3207,113 @@ function saveEmailDraftFromTextarea(companyIndex, variationIndex) {
     
     saveEmailDraft(companyName, variationType, subject, body);
 }
+
+// ========================================
+// 사용자 입력 모드 전환 및 히스토리 관리
+// ========================================
+
+// 모드 전환 함수
+function switchUserInputMode(mode) {
+    const chatbot = window.emailChatbot;
+    if (!chatbot) return;
+    
+    chatbot.userInputMode = mode;
+    
+    const templateBtn = document.getElementById('templateModeBtn');
+    const requestBtn = document.getElementById('requestModeBtn');
+    const textarea = document.getElementById('userTemplate');
+    const hint = document.getElementById('userInputHint');
+    const historySection = document.getElementById('requestHistorySection');
+    
+    if (mode === 'template') {
+        // 문안 모드
+        templateBtn.classList.add('active');
+        templateBtn.classList.remove('btn-outline-primary');
+        templateBtn.classList.add('btn-primary');
+        
+        requestBtn.classList.remove('active');
+        requestBtn.classList.remove('btn-success');
+        requestBtn.classList.add('btn-outline-success');
+        
+        textarea.placeholder = '뉴스 후킹 서론과 함께 사용할 메일 본문 문안을 입력하세요. (입력한 문안의 90%가 그대로 사용됩니다)';
+        hint.innerHTML = '💡 <strong>문안 모드:</strong> 뉴스 후킹 서론 + 입력한 본문(90% 유지) | <strong>비워두면:</strong> 뉴스 후킹 + 4개 생성 + SSR 추천';
+        historySection.style.display = 'none';
+    } else {
+        // 요청사항 모드
+        requestBtn.classList.add('active');
+        requestBtn.classList.remove('btn-outline-success');
+        requestBtn.classList.add('btn-success');
+        
+        templateBtn.classList.remove('active');
+        templateBtn.classList.remove('btn-primary');
+        templateBtn.classList.add('btn-outline-primary');
+        
+        textarea.placeholder = '예: 제목을 더 임팩트있게, 본문은 친근한 톤으로 작성하고, ROI 수치를 강조해주세요';
+        hint.innerHTML = '💡 <strong>요청사항 모드:</strong> AI가 요청사항을 분석하여 맞춤 메일 생성 | <strong>비워두면:</strong> 뉴스 후킹 + 4개 생성 + SSR 추천';
+        historySection.style.display = 'block';
+    }
+}
+
+// 요청사항 히스토리 저장
+function saveRequestToHistory(request) {
+    if (!request || !request.trim()) return;
+    
+    let history = JSON.parse(localStorage.getItem('requestHistory') || '[]');
+    
+    // 중복 체크
+    if (history.includes(request.trim())) {
+        return;
+    }
+    
+    // 최신 요청을 맨 앞에 추가
+    history.unshift(request.trim());
+    
+    // 최대 20개까지만 저장
+    if (history.length > 20) {
+        history = history.slice(0, 20);
+    }
+    
+    localStorage.setItem('requestHistory', JSON.stringify(history));
+    loadRequestHistoryDropdown();
+}
+
+// 히스토리 드롭다운 로드
+function loadRequestHistoryDropdown() {
+    const select = document.getElementById('requestHistory');
+    if (!select) return;
+    
+    const history = JSON.parse(localStorage.getItem('requestHistory') || '[]');
+    
+    // 기존 옵션 제거 (첫 번째 옵션 제외)
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+    
+    // 히스토리 추가
+    history.forEach((request, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        // 긴 텍스트는 잘라서 표시
+        const displayText = request.length > 50 ? request.substring(0, 50) + '...' : request;
+        option.textContent = displayText;
+        select.appendChild(option);
+    });
+}
+
+// 히스토리에서 요청사항 불러오기
+function loadRequestFromHistory(index) {
+    if (index === '') return;
+    
+    const history = JSON.parse(localStorage.getItem('requestHistory') || '[]');
+    const request = history[parseInt(index)];
+    
+    if (request) {
+        document.getElementById('userTemplate').value = request;
+        showToast('✅ 저장된 요청사항을 불러왔습니다!', 'success');
+    }
+}
+
+// EmailCopywritingChatbot 클래스에 히스토리 로드 메서드 추가
+EmailCopywritingChatbot.prototype.loadRequestHistory = function() {
+    loadRequestHistoryDropdown();
+};

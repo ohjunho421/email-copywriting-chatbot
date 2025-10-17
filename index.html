@@ -304,9 +304,10 @@
                     <div class="card-body">
                         <div class="upload-area" id="uploadArea">
                             <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
-                            <h6>CSV 파일을 드래그하거나 클릭하여 업로드</h6>
-                            <p class="text-muted small">회사명, 홈페이지, 이메일 등이 포함된 CSV 파일</p>
-                            <input type="file" id="fileInput" accept=".csv" style="display: none;">
+                            <h6>CSV/TSV 파일을 드래그하거나 클릭하여 업로드</h6>
+                            <p class="text-muted small">회사명, 홈페이지, 이메일 등이 포함된 CSV 또는 TSV 파일<br>
+                            💡 <strong>경쟁사에 쉼표 사용하려면 TSV 파일을 권장합니다!</strong></p>
+                            <input type="file" id="fileInput" accept=".csv,.tsv,.txt" style="display: none;">
                         </div>
                         
                         <div class="mt-3" id="fileInfo" style="display: none;">
@@ -320,9 +321,29 @@
                         </div>
 
                         <div class="mt-3">
-                            <label class="form-label"><strong>사용자 문안 (선택사항)</strong></label>
-                            <textarea class="form-control mb-2" id="userTemplate" rows="6" placeholder="메일 본문 문안을 입력하면 뉴스 후킹 서론과 함께 작성됩니다. (비워두면 뉴스 후킹 + SSR 기반 AI가 4개 문안을 자동 생성하고 실제 사례를 포함하여 최적의 1개를 추천합니다)"></textarea>
-                            <small class="text-muted">💡 <strong>문안 입력 시:</strong> 뉴스 후킹 서론 + 입력한 본문(90%) | <strong>비워두면:</strong> 뉴스 후킹 + 4개 생성 + 사례 포함 + SSR 기반 AI 추천</small>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0"><strong>사용자 입력 (선택사항)</strong></label>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <button type="button" class="btn btn-outline-primary" id="templateModeBtn" onclick="switchUserInputMode('template')">
+                                        <i class="fas fa-file-alt"></i> 문안 모드
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success active" id="requestModeBtn" onclick="switchUserInputMode('request')">
+                                        <i class="fas fa-tasks"></i> 요청사항 모드
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- 히스토리 드롭다운 (요청사항 모드일 때만 표시) -->
+                            <div class="mb-2" id="requestHistorySection">
+                                <select class="form-select form-select-sm" id="requestHistory" onchange="loadRequestFromHistory(this.value)">
+                                    <option value="">💾 저장된 요청사항 불러오기...</option>
+                                </select>
+                            </div>
+                            
+                            <textarea class="form-control mb-2" id="userTemplate" rows="6" placeholder="예: '제목을 더 임팩트있게, 본문은 친근한 톤으로 작성하고, ROI 수치를 강조해주세요'"></textarea>
+                            <small class="text-muted" id="userInputHint">
+                                💡 <strong>요청사항 모드:</strong> AI가 요청사항을 분석하여 맞춤 메일 생성 | <strong>비워두면:</strong> 뉴스 후킹 + 4개 생성 + SSR 추천
+                            </small>
                         </div>
 
                         <div class="mt-3">
