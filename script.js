@@ -1,5 +1,12 @@
 // 메일 문안 생성 챗봇 JavaScript
 
+// 마크다운 볼드를 HTML로 변환하는 헬퍼 함수
+function convertMarkdownToHtml(text) {
+    if (!text) return text;
+    // **텍스트**를 <strong>텍스트</strong>로 변환
+    return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
 class EmailCopywritingChatbot {
     constructor() {
         this.uploadedData = [];
@@ -829,8 +836,8 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                 </div>
                                 <div class="mb-3">
                                     <strong>본문:</strong><br>
-                                    <div style="white-space: pre-line; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px;">
-                                        ${variation.body}
+                                    <div style="white-space: pre-line; word-break: keep-all; line-break: strict; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px; line-height: 1.8;">
+                                        ${convertMarkdownToHtml(variation.body)}
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap">
@@ -1837,18 +1844,18 @@ function copySubjectToClipboard(subject) {
     }
 }
 
-// 텍스트 복사 함수 (개선된 버전)
+// 텍스트 복사 함수 (개선된 버전) - 본문만 복사
 function copyTextToClipboard(subject, body) {
     // 1. HTML 태그를 완전히 제거하고 순수 텍스트로 변환
     const plainTextBody = htmlToPlainText(body);
     
-    // 2. 순수 텍스트로 제목과 본문을 조합
-    const fullText = `제목: ${subject}\n\n${plainTextBody}`;
+    // 2. 본문만 복사 (제목 제외)
+    const fullText = plainTextBody;
     
     // 최신 브라우저의 Clipboard API 사용
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(fullText).then(() => {
-            showCopySuccess('📋 텍스트가 클립보드에 복사되었습니다!');
+            showCopySuccess('📋 본문이 클립보드에 복사되었습니다!');
         }).catch(err => {
             console.error('복사 실패:', err);
             fallbackCopyTextToClipboard(fullText);
@@ -1908,7 +1915,7 @@ function fallbackCopyTextToClipboard(text) {
     
     try {
         document.execCommand('copy');
-        showCopySuccess('텍스트가 클립보드에 복사되었습니다!');
+        showCopySuccess('📋 본문이 클립보드에 복사되었습니다!');
     } catch (err) {
         console.error('폴백 복사 실패:', err);
         alert('복사에 실패했습니다. 수동으로 복사해주세요.');
@@ -2514,8 +2521,8 @@ function loadCompanyToMain(companyId) {
                     </div>
                     <div class="mb-3">
                         <strong>본문:</strong><br>
-                        <div style="white-space: pre-line; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px;">
-                            ${variation.body}
+                        <div style="white-space: pre-line; word-break: keep-all; line-break: strict; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px; line-height: 1.8;">
+                            ${convertMarkdownToHtml(variation.body)}
                         </div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
@@ -2908,8 +2915,8 @@ function loadDraftToMain(draftId) {
                     </div>
                     <div class="mb-3">
                         <strong>본문:</strong><br>
-                        <div style="white-space: pre-line; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px;">
-                            ${draft.body}
+                        <div style="white-space: pre-line; word-break: keep-all; line-break: strict; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px; line-height: 1.8;">
+                            ${convertMarkdownToHtml(draft.body)}
                         </div>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
