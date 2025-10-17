@@ -1,32 +1,107 @@
-# Environment variables
+# 환경 변수 (절대 커밋하지 말 것!)
 .env
+.env.local
+.env.*.local
 
-# Python cache
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
-# Virtual environment
+# 가상환경
+.venv/
 venv/
-env/
 ENV/
+env/
+.virtualenv/
 
-# IDE files
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.project
+.pydevproject
+.settings/
 
-# OS files
+# OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Test files
-test_*.csv
+# 로그 파일
 *.log
+logs/
+*.cache
 
-# Temporary files
+# 캐시 및 임시 파일
+cache/
+tmp/
+temp/
 *.tmp
-*.temp
+
+# 사용자 업로드 데이터 (예시 제외)
+*.csv
+!example.csv
+uploads/
+results/
+output/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# 테스트 커버리지
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# ChromeDriver
+chromedriver
+chromedriver.exe
+
+# 로컬 데이터베이스
+*.db
+*.sqlite
+*.sqlite3
+
+# 백업 파일
+*.bak
+*.backup
+*~
+
+# 압축 파일 (배포용 제외)
+*.zip
+*.tar.gz
+*.rar
