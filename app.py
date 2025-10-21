@@ -2962,30 +2962,20 @@ def generate_email_with_gemini(company_data, research_data):
                 services_to_generate = ['finance_professional', 'finance_curiosity']
                 logger.info(f"sales_item 없음, 자체구축 아니므로 Recon만 생성 (호스팅: {hosting}): {company_name}")
         
-        # 서비스별 블로그 조회 (OPI 또는 Recon)
-        from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email
+        # 서비스별 통합 지식베이스 로드 (서비스 소개서 + 블로그 전체)
+        from portone_blog_cache import get_service_knowledge
         
-        company_info_for_blog = {
-            'industry': company_data.get('업종', ''),
-            'category': company_data.get('카테고리', ''),
-            'description': research_summary
-        }
-        
-        # OPI용 블로그 (OPI 서비스 생성 시)
+        # OPI용 통합 지식베이스 (OPI 서비스 생성 시)
         opi_blog_content = ""
         if any('opi' in s for s in services_to_generate):
-            opi_blogs = get_relevant_blog_posts_by_industry(company_info_for_blog, max_posts=2, service_type='OPI')
-            if opi_blogs:
-                opi_blog_content = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
-                logger.info(f"📰 [OPI] {company_name}: 관련 블로그 {len(opi_blogs)}개 조회")
+            opi_blog_content = get_service_knowledge(service_type='OPI')
+            logger.info(f"📚 [OPI] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
-        # Recon용 블로그 (Recon 서비스 생성 시)
+        # Recon용 통합 지식베이스 (Recon 서비스 생성 시)
         recon_blog_content = ""
         if any('finance' in s for s in services_to_generate):
-            recon_blogs = get_relevant_blog_posts_by_industry(company_info_for_blog, max_posts=2, service_type='Recon')
-            if recon_blogs:
-                recon_blog_content = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
-                logger.info(f"📰 [Recon] {company_name}: 관련 블로그 {len(recon_blogs)}개 조회")
+            recon_blog_content = get_service_knowledge(service_type='Recon')
+            logger.info(f"📚 [Recon] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
@@ -5818,38 +5808,13 @@ PortOne 오준호 매니저입니다.</p>
 
 @app.route('/')
 def index():
-    """루트 경로 - 이메일 인터페이스 (테스트용 더미 데이터)"""
-    # 테스트용 더미 데이터 생성
-    test_session_data = {
-        'company_data': {
-            '회사명': '테스트 회사',
-            '담당자명': '홍길동',
-            '직책': '대표'
-        },
-        'email_variations': {
-            'opi_professional': {
-                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
-                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.<br>PortOne 오준호 매니저입니다.</p><p>결제 시스템 구축을 고민하고 계신가요?</p><p>PortOne의 One Payment Infra로 <strong>개발 리소스 85% 절감</strong>, <strong>2주 내 구축</strong>이 가능합니다.</p>'
-            },
-            'opi_curiosity': {
-                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
-                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.</p><p>결제 개발 리소스 <strong>85% 절감</strong>하는 방법이 궁금하신가요?</p><p>PortOne One Payment Infra를 소개드립니다.</p>'
-            },
-            'finance_professional': {
-                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
-                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.</p><p>재무 자동화 솔루션으로 <strong>정산 프로세스 90% 단축</strong>이 가능합니다.</p>'
-            },
-            'finance_curiosity': {
-                'subject': '[PortOne] 테스트 회사 홍길동님께 전달 부탁드립니다',
-                'body': '<p>안녕하세요, 테스트 회사 홍길동 대표님.</p><p>정산 업무에 시간을 너무 많이 쓰고 계시지 않나요?</p><p>PortOne 재무자동화로 <strong>90% 시간 단축</strong> 가능합니다.</p>'
-            }
-        },
-        'services_generated': ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
-    }
-    
-    return render_template('email_interface.html', 
-                         session_id='test_session_' + str(int(time.time())),
-                         session_data=test_session_data)
+    """루트 경로 - index.html 제공 (챗봇 스타일 UI)"""
+    return send_from_directory('.', 'index.html')
+
+@app.route('/script.js')
+def serve_script():
+    """script.js 정적 파일 제공"""
+    return send_from_directory('.', 'script.js')
 
 @app.route('/api-docs')
 def api_docs():
@@ -6058,11 +6023,6 @@ if __name__ == '__main__':
         logger.warning("GEMINI_API_KEY가 설정되지 않았습니다.")
     
     logger.info("🚀 이메일 생성 챗봇 서버 시작")
-    
-    # Flask 서버 시작
-    app.run(host='0.0.0.0', port=8000, debug=True)
-
-    logger.info("이메일 생성 서비스 시작...")
     logger.info("사용 가능한 엔드포인트:")
     logger.info("- POST /api/research-company: 회사 조사")
     logger.info("- POST /api/generate-email: 이메일 생성")
@@ -6075,4 +6035,5 @@ if __name__ == '__main__':
     logger.info("- GET /api/blog-cache-status: 블로그 캐시 상태 확인 (NEW!)")
     logger.info("- GET /api/health: 서비스 상태 확인")
     
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    # Flask 서버 시작
+    app.run(host='0.0.0.0', port=8000, debug=True, use_reloader=False)

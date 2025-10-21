@@ -1,0 +1,12 @@
+{
+  "recon": {
+    "file": "/Users/milo/Desktop/ocean/[포트원]국내커머스채널 재무자동화 솔루션.pdf",
+    "text_length": 4683,
+    "extracted": true
+  },
+  "opi": {
+    "file": "/Users/milo/Desktop/ocean/250502_One Payment Infra 제안서.pdf",
+    "text_length": 10898,
+    "extracted": true
+  }
+}

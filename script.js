@@ -299,7 +299,7 @@ class EmailCopywritingChatbot {
             }
             
             // 백엔드 API로 병렬 처리 요청
-            const response = await fetch('http://localhost:5001/api/batch-process', {
+            const response = await fetch('http://localhost:8000/api/batch-process', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -359,7 +359,7 @@ class EmailCopywritingChatbot {
         this.addBotMessage(`💬 ${parseInfo.companyName}님의 상황을 분석하여 재설득 메일을 생성하고 있습니다...`);
         
         try {
-            const response = await fetch('http://localhost:5001/api/chat-reply', {
+            const response = await fetch('http://localhost:8000/api/chat-reply', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -469,7 +469,7 @@ class EmailCopywritingChatbot {
         this.addBotMessage(`💬 ${companyName}님의 상황을 분석하여 재설득 메일을 생성하고 있습니다...`);
         
         try {
-            const response = await fetch('http://localhost:5001/api/chat-reply', {
+            const response = await fetch('http://localhost:8000/api/chat-reply', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1743,7 +1743,7 @@ ${variation.body}
             });
             
             // 뉴스 분석 API 호출
-            const response = await fetch('http://localhost:5001/api/analyze-news', {
+            const response = await fetch('http://localhost:8000/api/analyze-news', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1812,7 +1812,7 @@ ${variation.body}
             });
             
             // 백엔드 API로 개선 요청
-            const response = await fetch('http://localhost:5001/api/refine-email', {
+            const response = await fetch('http://localhost:8000/api/refine-email', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -3109,7 +3109,7 @@ async function aiRefineDraft() {
     document.getElementById('aiRefineBtn').disabled = true;
     
     try {
-        const response = await fetch('http://localhost:5001/api/refine-email', {
+        const response = await fetch('http://localhost:8000/api/refine-email', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

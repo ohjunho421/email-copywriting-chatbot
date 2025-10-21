@@ -457,3 +457,93 @@ def format_relevant_blog_for_email(blog_posts, company_name='', service_type='')
     content += "- 수치나 사례가 있다면 \"업계 평균\", \"다른 기업 사례\" 등으로 자연스럽게 인용\n"
     
     return content
+
+def get_service_knowledge(service_type=''):
+    """
+    서비스 소개서와 블로그 전체 정보를 통합하여 RAG 지식베이스 생성
+    
+    Args:
+        service_type: 'OPI' 또는 'Recon'
+    
+    Returns:
+        str: 통합된 지식베이스 텍스트
+    """
+    knowledge = ""
+    
+    # 1. 서비스 소개서 로드
+    if service_type == 'OPI':
+        try:
+            with open('opi_service_info.txt', 'r', encoding='utf-8') as f:
+                service_doc = f.read()
+            knowledge += f"\n\n**📖 One Payment Infra (OPI) 서비스 소개:**\n\n"
+            knowledge += f"{service_doc[:3000]}...\n\n"  # 처음 3000자
+            logger.info("✅ OPI 서비스 소개서 로드 완료")
+        except:
+            logger.warning("⚠️ OPI 서비스 소개서 파일 없음")
+    
+    elif service_type == 'Recon':
+        try:
+            with open('recon_service_info.txt', 'r', encoding='utf-8') as f:
+                service_doc = f.read()
+            knowledge += f"\n\n**📖 재무자동화 솔루션 (Recon) 서비스 소개:**\n\n"
+            knowledge += f"{service_doc[:2000]}...\n\n"  # 처음 2000자
+            logger.info("✅ Recon 서비스 소개서 로드 완료")
+        except:
+            logger.warning("⚠️ Recon 서비스 소개서 파일 없음")
+    
+    # 2. 블로그 전체 요약 (해당 카테고리)
+    try:
+        init_db()
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT title, summary, keywords
+            FROM blog_posts
+            WHERE category = ?
+            ORDER BY created_at DESC
+        ''', (service_type,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if rows:
+            knowledge += f"\n\n**📚 {service_type} 관련 블로그 인사이트 ({len(rows)}개 글):**\n\n"
+            knowledge += f"다음은 포트원 공식 블로그에서 {service_type} 관련 {len(rows)}개 글의 핵심 내용입니다.\n"
+            knowledge += "이 정보들을 바탕으로 업계 트렌드, Pain Point, 사례 등을 자연스럽게 언급하세요.\n\n"
+            
+            # 주요 키워드 추출
+            all_keywords = []
+            for row in rows:
+                keywords = row[2].split(',') if row[2] else []
+                all_keywords.extend(keywords)
+            
+            # 키워드 빈도 계산
+            from collections import Counter
+            keyword_freq = Counter(all_keywords)
+            top_keywords = [k for k, v in keyword_freq.most_common(10)]
+            
+            knowledge += f"**주요 키워드**: {', '.join(top_keywords)}\n\n"
+            
+            # 대표 글 5개 요약
+            knowledge += f"**대표 인사이트:**\n\n"
+            for i, row in enumerate(rows[:5], 1):
+                title, summary = row[0], row[1]
+                knowledge += f"{i}. {title}\n"
+                if summary:
+                    knowledge += f"   → {summary[:150]}...\n\n"
+            
+            logger.info(f"✅ {service_type} 블로그 {len(rows)}개 요약 완료")
+        
+    except Exception as e:
+        logger.error(f"블로그 요약 오류: {str(e)}")
+    
+    # 3. RAG 활용 지침
+    knowledge += f"\n\n**💡 지식 활용 가이드:**\n"
+    knowledge += "- 위 서비스 소개서와 블로그 인사이트를 깊이 이해하고 활용하세요\n"
+    knowledge += "- 구체적인 수치, 기능, 효과를 정확하게 언급하세요\n"
+    knowledge += "- 업계 트렌드나 Pain Point는 '업계에서는...', '많은 기업들이...' 형태로 자연스럽게\n"
+    knowledge += "- 경쟁력 있는 차별점과 핵심 가치를 명확히 전달하세요\n"
+    knowledge += f"- {service_type} 서비스에 대한 전문성과 신뢰성을 보여주세요\n"
+    
+    return knowledge
