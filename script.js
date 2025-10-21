@@ -121,9 +121,10 @@ class EmailCopywritingChatbot {
         clearChatBtn.addEventListener('click', this.clearChat.bind(this));
         sendBtn.addEventListener('click', this.sendMessage.bind(this));
         
-        // Enter 키 이벤트
-        userInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
+        // Enter 키 이벤트 (Shift+Enter: 줄바꿈, Enter: 전송)
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault(); // 기본 줄바꿈 방지
                 this.sendMessage();
             }
         });
@@ -338,6 +339,226 @@ class EmailCopywritingChatbot {
             this.showLoading(false);
             this.removeProgressIndicator();
         }
+    }
+
+    async handleChatReply(userMessage) {
+        // 자연어 메시지에서 회사명, 담당자, 상황 파싱
+        const parseInfo = this.parseUserRequest(userMessage);
+        
+        if (!parseInfo.companyName) {
+            this.addBotMessage('❌ 회사명을 찾을 수 없습니다. 예: "토스에서 비용이 부담된다고 했어"');
+            return;
+        }
+        
+        if (!parseInfo.context) {
+            this.addBotMessage('❌ 상황이나 고객 답변을 찾을 수 없습니다.');
+            return;
+        }
+        
+        this.showLoading(true);
+        this.addBotMessage(`💬 ${parseInfo.companyName}님의 상황을 분석하여 재설득 메일을 생성하고 있습니다...`);
+        
+        try {
+            const response = await fetch('http://localhost:5001/api/chat-reply', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    context: parseInfo.context,
+                    company_name: parseInfo.companyName,
+                    email_name: parseInfo.emailName || '담당자님'
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`API 오류: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displayChatReply(result.email, parseInfo.companyName);
+                this.addBotMessage(`✅ ${parseInfo.companyName}님을 위한 재설득 메일이 생성되었습니다!`);
+                
+                // 전략 설명
+                if (result.email.strategy_used) {
+                    this.addBotMessage(`📋 사용된 전략: ${result.email.strategy_used}`);
+                }
+                
+                // 핵심 포인트
+                if (result.email.key_points && result.email.key_points.length > 0) {
+                    const points = result.email.key_points.map((p, i) => `${i+1}. ${p}`).join('<br>');
+                    this.addBotMessage(`🎯 핵심 포인트:<br>${points}`);
+                }
+            } else {
+                throw new Error(result.error || '알 수 없는 오류');
+            }
+            
+        } catch (error) {
+            this.addBotMessage('❌ 재설득 메일 생성 중 오류가 발생했습니다: ' + error.message);
+            this.addBotMessage('💡 백엔드 서버가 실행 중인지 확인해주세요 (python app.py)');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+    
+    parseUserRequest(message) {
+        // 회사명 추출 패턴
+        const companyPatterns = [
+            /([가-힣a-zA-Z0-9]+)에서/,
+            /([가-힣a-zA-Z0-9]+)이\s/,
+            /([가-힣a-zA-Z0-9]+)가\s/,
+            /([가-힣a-zA-Z0-9]+)\s.*?([말했|했어|답변|거절|반박])/
+        ];
+        
+        let companyName = '';
+        for (const pattern of companyPatterns) {
+            const match = message.match(pattern);
+            if (match) {
+                companyName = match[1];
+                break;
+            }
+        }
+        
+        // 담당자 추출 (선택사항)
+        const namePatterns = [
+            /([가-힣]{2,4})\s*(대표|팀장|매니저|담당자|님)/,
+            /([가-힣]{2,4})\s*씨/
+        ];
+        
+        let emailName = '';
+        for (const pattern of namePatterns) {
+            const match = message.match(pattern);
+            if (match) {
+                emailName = match[0];
+                break;
+            }
+        }
+        
+        // 전체 메시지를 컨텍스트로 사용 (회사명 제거)
+        let context = message;
+        if (companyName) {
+            context = message.replace(new RegExp(companyName, 'g'), '{회사명}');
+        }
+        
+        return {
+            companyName,
+            emailName,
+            context: message // 원본 전체를 컨텍스트로
+        };
+    }
+
+    async generateChatReply() {
+        // 챗봇 모드: 부정적 답변에 대한 재설득 메일 생성
+        const companyName = document.getElementById('chatCompanyName')?.value.trim();
+        const emailName = document.getElementById('chatEmailName')?.value.trim();
+        const context = document.getElementById('chatContext')?.value.trim();
+        
+        if (!context) {
+            this.addBotMessage('❌ 고객의 답변 또는 상황을 입력해주세요.');
+            return;
+        }
+        
+        if (!companyName) {
+            this.addBotMessage('❌ 회사명을 입력해주세요.');
+            return;
+        }
+        
+        this.showLoading(true);
+        this.addBotMessage(`💬 ${companyName}님의 상황을 분석하여 재설득 메일을 생성하고 있습니다...`);
+        
+        try {
+            const response = await fetch('http://localhost:5001/api/chat-reply', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    context: context,
+                    company_name: companyName,
+                    email_name: emailName || '담당자님'
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`API 오류: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.displayChatReply(result.email, companyName);
+                this.addBotMessage(`✅ ${companyName}님을 위한 재설득 메일이 생성되었습니다!`);
+                
+                // 전략 설명
+                if (result.email.strategy_used) {
+                    this.addBotMessage(`📋 사용된 전략: ${result.email.strategy_used}`);
+                }
+                
+                // 핵심 포인트
+                if (result.email.key_points && result.email.key_points.length > 0) {
+                    const points = result.email.key_points.map((p, i) => `${i+1}. ${p}`).join('<br>');
+                    this.addBotMessage(`🎯 핵심 포인트:<br>${points}`);
+                }
+            } else {
+                throw new Error(result.error || '알 수 없는 오류');
+            }
+            
+        } catch (error) {
+            this.addBotMessage('❌ 재설득 메일 생성 중 오류가 발생했습니다: ' + error.message);
+            this.addBotMessage('💡 백엔드 서버가 실행 중인지 확인해주세요 (python app.py)');
+        } finally {
+            this.showLoading(false);
+        }
+    }
+    
+    displayChatReply(email, companyName) {
+        const container = document.getElementById('templatesContainer');
+        container.innerHTML = '';
+        
+        const emailCard = document.createElement('div');
+        emailCard.className = 'email-template';
+        
+        emailCard.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h5 class="mb-1">
+                        <i class="fas fa-reply text-info"></i> 재설득 메일
+                    </h5>
+                    <span class="badge bg-info">챗봇 생성</span>
+                    <span class="badge bg-light text-dark">${companyName}</span>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="copyChatEmail('${companyName}')">
+                        <i class="fas fa-copy"></i> 복사
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="saveChatEmail('${companyName}')">
+                        <i class="fas fa-save"></i> 저장
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <strong>제목:</strong>
+                <div class="p-2 bg-light rounded mt-1" id="chat-subject-${companyName}">
+                    ${email.subject}
+                </div>
+            </div>
+            
+            <div>
+                <strong>본문:</strong>
+                <div class="p-3 bg-light rounded mt-1" id="chat-body-${companyName}">
+                    ${email.body}
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(emailCard);
+        document.getElementById('templatesSection').style.display = 'block';
+        
+        // 스크롤 이동
+        emailCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     addProgressIndicator(total) {
@@ -1378,7 +1599,8 @@ ${variation.body}
         const chatContainer = document.getElementById('chatContainer');
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message user-message';
-        messageDiv.textContent = message;
+        // 줄바꿈을 <br> 태그로 변환하여 표시
+        messageDiv.innerHTML = message.replace(/\n/g, '<br>');
         chatContainer.appendChild(messageDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
@@ -1398,7 +1620,7 @@ ${variation.body}
         }
     }
 
-    handleUserMessage(message) {
+    async handleUserMessage(message) {
         // 개선 모드인지 확인
         if (this.isRefinementMode && this.currentRefinementTarget) {
             this.processRefinementRequest(message);
@@ -1407,21 +1629,73 @@ ${variation.body}
 
         const lowerMessage = message.toLowerCase();
         
+        console.log('🔍 메시지 분석 중:', lowerMessage); // 디버깅
+        
+        // 기본적으로 20자 이상이고 회사명이 있으면 재설득 메일로 간주
+        const hasCompanyName = /[가-힣a-zA-Z]{2,}/.test(message);
+        const isLongMessage = message.length > 20;
+        
+        // 재설득 메일 생성 요청 감지 (매우 넓게)
+        const keywords = [
+            '답장', '회신', '재설득', '반박', '대응',
+            '했어', '했다', '라고', '왔어',
+            '거절', '거부', '부정', '어렵', '불가',
+            '써야', '써줘', '작성', '만들어', '생성', '보내',
+            '비용', '부담', '시간', '없', 'pg', '변경', '예정',
+            '검토', '비교', '미팅', '어떻게', '알려드립니다'
+        ];
+        
+        const matchedKeywords = keywords.filter(k => lowerMessage.includes(k));
+        console.log('✅ 매칭된 키워드:', matchedKeywords); // 디버깅
+        
+        const isReplyRequest = matchedKeywords.length > 0 || (hasCompanyName && isLongMessage);
+        
+        console.log('📊 판정 결과:', {
+            isReplyRequest,
+            matchedCount: matchedKeywords.length,
+            hasCompanyName,
+            isLongMessage,
+            messageLength: message.length
+        }); // 디버깅
+        
+        if (isReplyRequest) {
+            this.addBotMessage('💬 재설득 메일 생성 요청을 확인했습니다. 회사명과 상황을 분석하고 있습니다...');
+            console.log('🚀 재설득 메일 생성 시작'); // 디버깅
+            await this.handleChatReply(message);
+            return;
+        }
+        
         if (lowerMessage.includes('다시') || lowerMessage.includes('재생성')) {
             this.addBotMessage('새로운 메일 문안을 생성하려면 "메일 문안 생성하기" 버튼을 다시 클릭해주세요.');
         } else if (lowerMessage.includes('도움') || lowerMessage.includes('사용법')) {
             this.addBotMessage(`
-사용 방법 안내:
+📖 <strong>사용 방법 안내:</strong>
+
+<strong>일반 메일 생성:</strong>
 1. CSV 파일 업로드 (회사명, 이메일 등 포함)
 2. "메일 문안 생성하기" 버튼 클릭
-3. 생성된 문안 중 마음에 드는 것 선택
-4. "개선 요청" 버튼 클릭 후 위 텍스트박스에 요청사항 입력
-5. "복사" 버튼으로 클립보드에 복사
+3. 생성된 문안 확인 및 복사
 
-추가 질문이 있으시면 언제든 말씀해주세요!
+<strong>재설득 메일 생성 (새 기능!):</strong>
+- 이 채팅창에 직접 입력하세요
+- 예: "토스에서 비용이 부담된다고 했는데 재설득 메일 만들어줘"
+- 예: "쿠팡 김철수 대표가 시간이 없다고 거절했어, 재설득 메일 부탁해"
+
+💡 회사명과 상황만 알려주시면 자동으로 설득력 있는 재영업 메일을 만들어드립니다!
             `);
         } else {
-            this.addBotMessage('죄송합니다. 아직 해당 요청을 처리할 수 없습니다. "도움말"을 입력하시면 사용 방법을 안내해드립니다.');
+            this.addBotMessage(`
+💬 무엇을 도와드릴까요?
+
+• <strong>재설득 메일이 필요하신가요?</strong>
+  → "토스에서 비용이 부담된다고 했는데 재설득 메일 만들어줘"
+
+• <strong>사용법이 궁금하신가요?</strong>
+  → "도움말" 또는 "사용법" 입력
+
+• <strong>일반 메일 생성은?</strong>
+  → 왼쪽에 CSV 파일 업로드 후 버튼 클릭
+            `);
         }
     }
 
@@ -3317,3 +3591,29 @@ function loadRequestFromHistory(index) {
 EmailCopywritingChatbot.prototype.loadRequestHistory = function() {
     loadRequestHistoryDropdown();
 };
+
+// ========================================
+// 챗봇 모드 - 재설득 메일 복사/저장
+// ========================================
+
+function copyChatEmail(companyName) {
+    const subject = document.getElementById(`chat-subject-${companyName}`).innerText;
+    const body = document.getElementById(`chat-body-${companyName}`).innerHTML;
+    
+    const emailText = `제목: ${subject}\n\n본문:\n${body.replace(/<br>/g, '\n').replace(/<[^>]*>/g, '')}`;
+    
+    navigator.clipboard.writeText(emailText).then(() => {
+        showToast('📋 재설득 메일이 클립보드에 복사되었습니다!', 'success');
+    }).catch(err => {
+        console.error('복사 실패:', err);
+        showToast('❌ 복사 중 오류가 발생했습니다.', 'danger');
+    });
+}
+
+function saveChatEmail(companyName) {
+    const subject = document.getElementById(`chat-subject-${companyName}`).innerText;
+    const body = document.getElementById(`chat-body-${companyName}`).innerHTML;
+    
+    saveEmailDraft(companyName, '챗봇 재설득 메일', subject, body);
+    showToast('💾 재설득 메일이 저장되었습니다!', 'success');
+}

@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 import boto3
 from botocore.exceptions import ClientError
 import google.generativeai as genai
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import atexit
 
 # SSR 엔진 및 사례 DB 임포트
 from ssr_engine import rank_emails, get_top_email, calculate_ssr_score
@@ -2959,6 +2962,31 @@ def generate_email_with_gemini(company_data, research_data):
                 services_to_generate = ['finance_professional', 'finance_curiosity']
                 logger.info(f"sales_item 없음, 자체구축 아니므로 Recon만 생성 (호스팅: {hosting}): {company_name}")
         
+        # 서비스별 블로그 조회 (OPI 또는 Recon)
+        from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email
+        
+        company_info_for_blog = {
+            'industry': company_data.get('업종', ''),
+            'category': company_data.get('카테고리', ''),
+            'description': research_summary
+        }
+        
+        # OPI용 블로그 (OPI 서비스 생성 시)
+        opi_blog_content = ""
+        if any('opi' in s for s in services_to_generate):
+            opi_blogs = get_relevant_blog_posts_by_industry(company_info_for_blog, max_posts=2, service_type='OPI')
+            if opi_blogs:
+                opi_blog_content = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
+                logger.info(f"📰 [OPI] {company_name}: 관련 블로그 {len(opi_blogs)}개 조회")
+        
+        # Recon용 블로그 (Recon 서비스 생성 시)
+        recon_blog_content = ""
+        if any('finance' in s for s in services_to_generate):
+            recon_blogs = get_relevant_blog_posts_by_industry(company_info_for_blog, max_posts=2, service_type='Recon')
+            if recon_blogs:
+                recon_blog_content = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
+                logger.info(f"📰 [Recon] {company_name}: 관련 블로그 {len(recon_blogs)}개 조회")
+        
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
         
@@ -3066,32 +3094,47 @@ def generate_email_with_gemini(company_data, research_data):
 **고정 서론 형식:**
 "안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다."
 
-**고정 결론 형식:**
+**고정 결론 형식 (필수!):**
+"⚠️  **반드시** 아래 CTA(행동 촉구)를 포함하세요. CTA가 없으면 이메일이 완성되지 않은 것입니다!"
+
 "<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
+
+‼️ **CTA 필수 포함 요구사항:**
+- 위의 "다음주 중 편하신 일정을 알려주시면" CTA는 **반드시** 포함해야 합니다
+- 이 CTA가 빠지면 이메일이 불완전하게 됩니다
+- 서명("감사합니다. 오준호 드림") 앞에 반드시 CTA를 배치하세요
 
 **이메일 유형 (요청된 서비스에 따라 선택적 생성):**
 
 1. **One Payment Infra - 전문적 톤**: 
+{opi_blog_content}
    - **필수**: 뉴스 내용을 직접 인용. 예: "최근 기사에서 '{company_name}가 XX억원 투자 유치'라고 봤습니다"
    - 구체적 뉴스 → 결제 시스템 확장 필요성 자연스럽게 연결
    - OPI의 핵심 해결책과 수치 (평균 15-30% 수수료 절감, PG사별 견적 비교 제안)
+   - **블로그 정보 활용**: 위 OPI 참고 정보의 수치/트렌드를 자연스럽게 녹여서 설득력 강화
    - **경쟁사가 있다면**: "{competitor_name}도 비슷한 성장 과정에서<br>PortOne으로 결제 인프라를 안정화했습니다"
 
 2. **One Payment Infra - 호기심 유발형**: 
+{opi_blog_content}
    - **필수**: 뉴스를 직접 언급한 질문. 예: "'{company_name}의 매출 150% 증가' 소식을 봤는데, 결제량 증가는 어떻게 처리하고 계신가요?"
    - 급성장에 따른 결제 시스템 병목 현상 걱정 표현
+   - **블로그 정보 활용**: 위 OPI 참고 정보의 업계 사례를 "많은 기업들이..." 형태로 자연스럽게 인용
    - **경쟁사가 있다면**: "실제로 {competitor_name}도 급성장할 때<br>같은 고민을 했었는데..." 호기심 유발
    - "어떻게 해결했는지 궁금하시지 않나요?" 관심 유도
 
 3. **재무자동화 솔루션 (Recon) - 전문적 톤**: 
+{recon_blog_content}
    - **필수**: 성장/확장 뉴스를 구체적으로 인용. 예: "'{company_name}가 신사업 부문 진출'이라는 소식을 들었습니다"
    - 사업 다각화 → 복잡해지는 재무 관리 자연스럽게 연결
+   - **블로그 정보 활용**: 위 Recon 참고 정보의 통계/효과를 근거로 제시하며 설득력 강화
    - **경쟁사가 있다면**: "{competitor_name}도 사업 확장 시<br>재무 자동화로 90% 시간 절약했습니다"
    - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "PG사의 각기다른 양식에도 정확하게 데이터를 통합하고 주문건당 정산여부 파악이 가능합니다. 이를 통해 ERP연동도 가능하기 때문에 재무팀의 반복적인 수작업을 90% 이상 단축하고, 휴먼에러를 줄여 확보된 리소스를 더 가치 있는 성장 전략에 집중하실 수 있습니다"
 
 4. **재무자동화 솔루션 (Recon) - 호기심 유발형**: 
+{recon_blog_content}
    - **필수**: 구체적 뉴스로 시작하는 질문. 예: "'{company_name} 해외 진출' 뉴스를 봤는데, 다국가 재무 관리는 어떻게 하실 계획인가요?"
    - 확장에 따른 재무 복잡성 증가 공감 표현
+   - **블로그 정보 활용**: 위 Recon 참고 정보의 Pain Point를 "업계에서 흔히 겪는..." 형태로 자연스럽게 언급
    - **경쟁사가 있다면**: "{competitor_name}도 글로벌 진출 시<br>재무 통합 관리로 큰 도움을 받았는데..." 호기심 자극
    - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "여러 PG사의 다른 데이터 형식도 자동으로 통합하고, ERP 연동으로 재무팀 업무를 90% 이상 줄여드릴 수 있습니다. 휴먼에러도 제거하고요"
    - "구체적으로 어떤 도움이 되는지 보여드릴까요?" 관심 유도
@@ -3208,6 +3251,15 @@ def generate_email_with_gemini(company_data, research_data):
                                 'body': body
                             }
                             logger.info(f"서비스 '{service}' 문안 생성 완료: {company_name}")
+                    
+                    # CTA 검증 및 자동 수정
+                    logger.info(f"{company_name}: CTA 검증 시작...")
+                    for service_key, email_content in formatted_variations.items():
+                        if 'body' in email_content:
+                            email_content['body'] = validate_and_fix_cta(
+                                email_content['body'],
+                                company_name
+                            )
                     
                     return {
                         'success': True,
@@ -3402,7 +3454,10 @@ def generate_email_with_user_template(company_data, research_data, user_template
    - 문장 순서나 핵심 내용은 **절대 변경하지 말것**
    - 단어 선택이나 문체도 **최대한 원본 유지**
 
-3. **고정 결론**: "<br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
+3. **고정 결론 (⚠️ 필수!)**: 
+   "<br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
+   
+   ‼️ **CTA는 반드시 포함해야 합니다!** "다음주 중 편하신 일정을 알려주시면..."이 빠지면 안 됩니다.
 
 **고정 서론 형식 (서론 시작 전):**
 "안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>"
@@ -3480,6 +3535,15 @@ def generate_email_with_user_template(company_data, research_data, user_template
                             'body': body
                         }
                 
+                # CTA 검증 및 자동 수정
+                logger.info(f"{company_name}: [사용자문안] CTA 검증 시작...")
+                for service_key, email_content in formatted_variations.items():
+                    if 'body' in email_content:
+                        email_content['body'] = validate_and_fix_cta(
+                            email_content['body'],
+                            company_name
+                        )
+                
                 return {
                     'success': True,
                     'variations': formatted_variations,
@@ -3505,6 +3569,236 @@ def generate_email_with_user_template(company_data, research_data, user_template
             'error': str(e),
             'timestamp': datetime.now().isoformat()
         }
+
+def generate_persuasive_reply(context, company_name, email_name, case_examples=""):
+    """
+    고객 반박/부정적 답변에 대한 재설득 메일 생성
+    
+    Args:
+        context: 고객의 답변 또는 상황 설명
+        company_name: 회사명
+        email_name: 담당자 호칭
+        case_examples: 관련 케이스 스터디
+    
+    Returns:
+        dict: 생성된 재설득 메일
+    """
+    try:
+        logger.info(f"{company_name}: 재설득 메일 생성 시작")
+        
+        # Gemini 프롬프트 구성
+        prompt = f"""
+당신은 포트원(PortOne) 최고 영업 전문가입니다. 고객의 부정적 반응이나 반박에 대응하여 재설득하는 메일을 작성합니다.
+
+**고객 상황/답변:**
+{context}
+
+**회사 정보:**
+- 회사명: {company_name}
+- 담당자: {email_name}
+
+**포트원 서비스 소개, 실제 사례 및 최신 블로그 콘텐츠:**
+{case_examples}
+
+💡 **위 정보 활용 방법:**
+- 실제 고객사 사례를 인용하여 신뢰도 높이기
+- 최신 블로그 콘텐츠에서 관련 트렌드나 기술 정보를 자연스럽게 언급
+- "최근 포트원 블로그에서도..." 같은 방식으로 활용 가능
+
+**🎯 목표: 고객의 우려를 해소하고 재미팅 기회를 만드는 설득력 있는 메일 작성**
+
+**메일 작성 전략:**
+
+1. **공감 먼저**: 고객의 우려나 의견을 먼저 인정하고 공감
+   - "말씀하신 우려 충분히 이해합니다"
+   - "좋은 지적이십니다"
+   
+2. **오해 해소**: 고객이 잘못 이해한 부분이 있다면 부드럽게 설명
+   - 강압적이지 않게
+   - 데이터와 사례로 뒷받침
+
+3. **구체적 사례 + 최신 정보 제시**: 
+   - 위의 실제 케이스 스터디를 활용
+   - 비슷한 우려를 가졌던 다른 고객사 사례
+   - 도입 후 결과 수치 제시
+   - **포트원 블로그의 최신 콘텐츠를 자연스럽게 언급**하여 전문성과 최신성 강조
+   - "{company_name}님과 비슷한 상황이었던 [고객사명]도..."
+
+4. **새로운 가치 제안**: 고객이 놓친 부분 강조
+   - ROI, 시간 절약, 리스크 감소 등
+   - 구체적 수치로 설득
+   - 최신 트렌드나 업계 동향 언급
+
+5. **부담 없는 재제안**: 
+   - "단 15분만 시간 내주시면..."
+   - "한 번만 데모를 보여드리면..."
+   - "무료 컨설팅으로 가능성만 확인해보시겠습니까?"
+
+**반박 유형별 대응 전략:**
+
+A. **"비용이 부담됩니다"**
+   → ROI 계산, 장기적 절감 효과, 무료 체험 제안
+
+B. **"지금은 바빠서 어렵습니다"**
+   → 간단한 도입 프로세스 강조, 2주 내 구축 가능, 최소 리소스
+
+C. **"현재 시스템으로 충분합니다"**
+   → 숨겨진 비효율 지적, 확장성 문제, 미래 성장 대비
+
+D. **"다른 솔루션과 비교 중입니다"**
+   → 차별점 강조, 고객사 만족도, PG사 비교 견적 제공
+
+E. **"내부 검토가 더 필요합니다"**
+   → 의사결정에 필요한 자료 제공, 레퍼런스 연결, CTO 미팅 제안
+
+**필수 포함 요소:**
+
+1. **서론**: 이전 메일 감사 + 공감
+   "안녕하세요, {company_name} {email_name}.<br>PortOne 오준호입니다.<br><br>
+   바쁘신 와중에도 답변 주셔서 감사합니다."
+
+2. **본문**: 
+   - 우려사항 공감 및 해소
+   - 실제 사례 2-3개 구체적 제시
+   - 수치 기반 설득 (85% 절감, 2주 내 구축 등)
+   - 새로운 관점 제시
+
+3. **CTA (필수!)**: 
+   "<br>그래도 한 번만 기회를 주시면 {company_name}의 상황에 맞는<br>
+   구체적인 해결책을 보여드리고 싶습니다.<br>
+   다음 주 중 15분만 시간 내주실 수 있을까요?<br>
+   긍정적인 회신 부탁드립니다.<br><br>
+   감사합니다.<br>오준호 드림"
+
+**톤앤매너:**
+- 절대 강압적이거나 공격적이지 않게
+- 진정성 있게, 고객의 성공을 진심으로 원하는 파트너로
+- 전문적이지만 친근하게
+- 데이터와 사실 기반
+
+**구조:**
+제목: [PortOne] {company_name} {email_name} - 추가 말씀 드립니다
+
+본문: HTML 형식으로 작성
+<p>서론</p>
+<p>본문 - 공감 + 해소</p>
+<p>본문 - 사례 제시</p>
+<p>본문 - 새로운 가치</p>
+<p>CTA</p>
+
+**JSON 형식으로만 응답하세요:**
+{{
+  "subject": "제목",
+  "body": "HTML 본문",
+  "strategy_used": "사용한 전략 간단 설명",
+  "key_points": ["핵심 포인트 1", "핵심 포인트 2", "핵심 포인트 3"]
+}}
+"""
+
+        # Gemini API 호출
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        response = model.generate_content(prompt)
+        
+        if not response or not response.text:
+            raise Exception("Gemini API 응답이 비어있습니다")
+        
+        # JSON 파싱
+        import re
+        response_text = response.text.strip()
+        
+        # JSON 추출
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        elif '{' in response_text and '}' in response_text:
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            json_str = response_text[json_start:json_end]
+        else:
+            json_str = response_text
+        
+        email_data = json.loads(json_str)
+        
+        # CTA 검증
+        if 'body' in email_data:
+            email_data['body'] = validate_and_fix_cta(email_data['body'], company_name)
+        
+        logger.info(f"{company_name}: 재설득 메일 생성 완료")
+        
+        return {
+            'success': True,
+            'email': email_data,
+            'timestamp': datetime.now().isoformat(),
+            'model': 'gemini-2.0-flash-exp'
+        }
+        
+    except Exception as e:
+        logger.error(f"{company_name} 재설득 메일 생성 오류: {str(e)}")
+        return {
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }
+
+def validate_and_fix_cta(email_body, company_name):
+    """
+    이메일 본문에 CTA(Call-to-Action)가 있는지 확인하고 없으면 추가
+    
+    Args:
+        email_body: 이메일 본문 (HTML)
+        company_name: 회사명
+    
+    Returns:
+        str: CTA가 포함된 이메일 본문
+    """
+    # CTA 키워드 체크
+    cta_keywords = [
+        '다음주 중', '다음 주 중', '편하신 일정', '편하신 시간',
+        '긍정적인 회신', '회신 부탁', '일정을 알려주시면',
+        '시간을 알려주시면', '미팅 가능한 시간'
+    ]
+    
+    # 본문에 CTA 키워드가 하나라도 있는지 확인
+    has_cta = any(keyword in email_body for keyword in cta_keywords)
+    
+    if has_cta:
+        logger.info(f"{company_name}: CTA 검증 통과 ✓")
+        return email_body
+    
+    # CTA가 없으면 자동 추가
+    logger.warning(f"{company_name}: ⚠️  CTA 누락 감지 - 자동 추가")
+    
+    # 표준 CTA 템플릿
+    standard_cta = f"""<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p>
+
+<p>감사합니다.<br>오준호 드림</p>"""
+    
+    # 서명 패턴 찾기
+    import re
+    signature_patterns = [
+        r'<p>\s*감사합니다\.?<br>\s*오준호\s*드림\s*</p>',
+        r'<p>\s*오준호\s*Junho\s*Oh<br>\s*Sales\s*team.*?</p>',
+        r'<p>\s*오준호\s*드림\s*</p>',
+        r'감사합니다[.\s]*$'
+    ]
+    
+    # 서명이 있으면 그 앞에 CTA 삽입
+    for pattern in signature_patterns:
+        if re.search(pattern, email_body, re.DOTALL | re.IGNORECASE):
+            email_body = re.sub(
+                pattern,
+                standard_cta,
+                email_body,
+                flags=re.DOTALL | re.IGNORECASE
+            )
+            logger.info(f"{company_name}: CTA 추가 완료 (서명 앞에 삽입)")
+            return email_body
+    
+    # 서명이 없으면 본문 끝에 CTA 추가
+    email_body = email_body.rstrip() + "\n\n" + standard_cta
+    logger.info(f"{company_name}: CTA 추가 완료 (본문 끝에 추가)")
+    
+    return email_body
 
 def generate_email_with_gemini_and_cases(company_data, research_data, case_examples="", user_template=None, news_content=None, user_input_mode='template'):
     """
@@ -3582,6 +3876,14 @@ def generate_email_with_user_request(company_data, research_data, user_request, 
                 logger.error(f"{company_name} {service_key} 개선 오류: {str(e)}")
                 # 오류 시 원본 사용
                 refined_variations[service_key] = email_content
+        
+        # CTA 검증 및 자동 수정
+        for service_key, email_content in refined_variations.items():
+            if 'body' in email_content:
+                email_content['body'] = validate_and_fix_cta(
+                    email_content['body'],
+                    company_name
+                )
         
         logger.info(f"{company_name}: 요청모드 완료 - {len(refined_variations)}개 문안 생성")
         
@@ -4479,17 +4781,395 @@ def analyze_news():
             'error': str(e)
         }), 500
 
+def scrape_article_content(url):
+    """
+    개별 블로그 글의 상세 내용 스크래핑
+    
+    Args:
+        url: 블로그 글 URL
+    
+    Returns:
+        str: 글 내용
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # article 태그 찾기
+        article = soup.find('article')
+        if article:
+            # 텍스트만 추출 (HTML 태그 제거)
+            content = article.get_text(separator=' ', strip=True)
+            return content[:5000]  # 최대 5000자로 제한
+        
+        return ''
+    except Exception as e:
+        logger.error(f"   글 내용 스크래핑 오류 ({url}): {str(e)}")
+        return ''
+
+def scrape_portone_blog_category(category_url, category_name, max_pages=5):
+    """
+    포트원 블로그 카테고리별 스크래핑
+    
+    Args:
+        category_url: 카테고리 URL
+        category_name: 카테고리명 (OPI, Recon 등)
+        max_pages: 최대 페이지 수
+    
+    Returns:
+        list: 블로그 글 정보 리스트
+    """
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        
+        logger.info(f"📰 [{category_name}] 스크래핑 시작: {category_url}")
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        all_posts = []
+        
+        for page in range(1, max_pages + 1):
+            # 페이지 URL 구성
+            page_url = f"{category_url}&page={page}"
+            logger.info(f"   페이지 {page}/{max_pages} 스크래핑...")
+            
+            try:
+                response = requests.get(page_url, headers=headers, timeout=15)
+                response.raise_for_status()
+                
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # h3 태그로 제목과 링크 추출
+                h3_tags = soup.find_all('h3', class_='group-hover:text-[#FC6B2D]')
+                
+                if not h3_tags:
+                    logger.info(f"   페이지 {page}에 더 이상 글이 없습니다.")
+                    break
+                
+                for h3 in h3_tags:
+                    try:
+                        title = h3.get_text(strip=True)
+                        
+                        # 링크 찾기 (h3의 부모나 형제 요소에서)
+                        link_elem = h3.find_parent('a') or h3.find('a')
+                        if not link_elem:
+                            # 형제 요소에서 링크 찾기
+                            parent = h3.find_parent()
+                            link_elem = parent.find('a') if parent else None
+                        
+                        if link_elem and link_elem.get('href'):
+                            link = link_elem['href']
+                            if not link.startswith('http'):
+                                link = 'https://blog.portone.io' + link
+                            
+                            logger.info(f"      ✅ {title[:40]}...")
+                            
+                            # 상세 내용 스크래핑
+                            content = scrape_article_content(link)
+                            
+                            # 요약은 content의 앞부분
+                            summary = content[:200] if content else ''
+                            
+                            all_posts.append({
+                                'title': title,
+                                'link': link,
+                                'summary': summary,
+                                'content': content,
+                                'category': category_name
+                            })
+                            
+                            # 과도한 요청 방지
+                            import time
+                            time.sleep(0.5)
+                            
+                    except Exception as e:
+                        logger.error(f"      글 파싱 오류: {str(e)}")
+                        continue
+                
+            except Exception as e:
+                logger.error(f"   페이지 {page} 스크래핑 오류: {str(e)}")
+                continue
+        
+        logger.info(f"📊 [{category_name}] 총 {len(all_posts)}개 글 수집 완료")
+        return all_posts
+        
+    except Exception as e:
+        logger.error(f"[{category_name}] 스크래핑 오류: {str(e)}")
+        return []
+
+def scrape_portone_blog_initial():
+    """
+    포트원 블로그 초기 데이터 스크래핑
+    - OPI (국내 결제): 5페이지
+    - Recon (매출 마감): 1페이지
+    """
+    try:
+        from portone_blog_cache import save_blog_cache, extract_keywords_from_post
+        
+        logger.info("🚀 포트원 블로그 초기 데이터 스크래핑 시작")
+        
+        all_posts = []
+        
+        # 1. OPI (국내 결제) - 5페이지
+        opi_url = 'https://blog.portone.io/?filter=%EA%B5%AD%EB%82%B4%20%EA%B2%B0%EC%A0%9C'
+        opi_posts = scrape_portone_blog_category(opi_url, 'OPI', max_pages=5)
+        all_posts.extend(opi_posts)
+        
+        # 2. Recon (매출 마감) - 1페이지
+        recon_url = 'https://blog.portone.io/?filter=%EB%A7%A4%EC%B6%9C%20%EB%A7%88%EA%B0%90'
+        recon_posts = scrape_portone_blog_category(recon_url, 'Recon', max_pages=1)
+        all_posts.extend(recon_posts)
+        
+        # 키워드 자동 추출
+        logger.info("🔍 블로그 글 키워드 추출 중...")
+        for post in all_posts:
+            keywords, industry_tags = extract_keywords_from_post(post)
+            post['keywords'] = keywords
+            post['industry_tags'] = industry_tags
+        
+        # DB에 저장
+        if all_posts:
+            save_blog_cache(all_posts, replace_all=True)
+            logger.info(f"✅ 초기 데이터 스크래핑 완료: 총 {len(all_posts)}개 글")
+            return all_posts
+        else:
+            logger.warning("⚠️ 스크래핑된 글이 없습니다")
+            return []
+        
+    except Exception as e:
+        logger.error(f"초기 데이터 스크래핑 오류: {str(e)}")
+        return []
+
+def get_blog_content_for_email():
+    """
+    메일 생성에 사용할 블로그 콘텐츠 가져오기 (캐시 우선)
+    
+    Returns:
+        str: 포맷팅된 블로그 콘텐츠
+    """
+    from portone_blog_cache import load_blog_cache, format_blog_content_for_email, get_blog_cache_age
+    
+    # 캐시에서 로드 시도
+    cached_posts = load_blog_cache()
+    
+    if cached_posts:
+        cache_age = get_blog_cache_age()
+        if cache_age and cache_age < 24:  # 24시간 이내면 캐시 사용
+            logger.info(f"📚 블로그 캐시 사용 (업데이트된 지 {cache_age:.1f}시간)")
+            return format_blog_content_for_email(cached_posts)
+        else:
+            logger.info("⏰ 블로그 캐시가 오래됨 (24시간 이상)")
+    
+    # 캐시가 없거나 오래되었으면 스크래핑
+    logger.info("🔄 블로그 새로 스크래핑...")
+    new_posts = scrape_portone_blog(max_posts=5)
+    
+    if new_posts:
+        return format_blog_content_for_email(new_posts)
+    elif cached_posts:
+        # 스크래핑 실패 시 오래된 캐시라도 사용
+        logger.info("⚠️ 스크래핑 실패, 오래된 캐시 사용")
+        return format_blog_content_for_email(cached_posts)
+    else:
+        return ""
+
+@app.route('/api/chat-reply', methods=['POST'])
+def chat_reply():
+    """
+    자유로운 챗봇 - 고객 답변/반박에 대한 재설득 메일 생성
+    
+    사용 사례:
+    1. 고객의 부정적 답변에 대한 반박 메일
+    2. 추가 질문에 대한 답변 메일
+    3. 자유로운 컨텍스트 기반 메일 생성
+    """
+    try:
+        data = request.json
+        user_context = data.get('context', '')  # 고객 답변/상황 설명
+        company_name = data.get('company_name', '')
+        email_name = data.get('email_name', '담당자님')
+        
+        if not user_context:
+            return jsonify({'error': '컨텍스트(고객 답변 또는 상황)를 입력해주세요'}), 400
+        
+        logger.info(f"💬 챗봇 재설득 메일 생성 시작 - {company_name}")
+        logger.info(f"   입력 컨텍스트: {user_context[:100]}...")
+        
+        # 포트원 블로그 콘텐츠 가져오기 (캐시 우선)
+        blog_content = get_blog_content_for_email()
+        logger.info(f"   📚 블로그 콘텐츠: {'사용' if blog_content else '없음'}")
+        
+        # 서비스 소개서(케이스 스터디) 로드 - 기본 케이스 사용
+        from case_database import PORTONE_CASES, format_case_for_email
+        
+        # 컨텍스트에서 키워드 추출하여 관련 케이스 선택
+        context_lower = user_context.lower()
+        selected_case_ids = []
+        
+        # 키워드 기반 케이스 선택
+        if 'pg' in context_lower or '결제' in context_lower or '비용' in context_lower:
+            selected_case_ids.append('development_resource_saving')
+        if '시간' in context_lower or '바빠' in context_lower or '개발' in context_lower:
+            selected_case_ids.append('quick_setup')
+        if '실패' in context_lower or '오류' in context_lower:
+            selected_case_ids.append('payment_failure_recovery')
+        
+        # 최소 2개 케이스 보장
+        if len(selected_case_ids) == 0:
+            selected_case_ids = ['development_resource_saving', 'payment_failure_recovery']
+        elif len(selected_case_ids) == 1:
+            selected_case_ids.append('multi_pg_management')
+        
+        # 최대 3개로 제한
+        selected_case_ids = selected_case_ids[:3]
+        
+        # 각 케이스를 포맷팅하여 결합
+        case_details = "\n".join([format_case_for_email(case_id) for case_id in selected_case_ids])
+        
+        # 케이스 스터디와 블로그 콘텐츠 결합
+        full_context = case_details + blog_content
+        
+        # Gemini로 재설득 메일 생성
+        result = generate_persuasive_reply(
+            context=user_context,
+            company_name=company_name,
+            email_name=email_name,
+            case_examples=full_context
+        )
+        
+        if result.get('success'):
+            logger.info(f"✅ {company_name} 재설득 메일 생성 완료")
+            return jsonify(result)
+        else:
+            logger.error(f"❌ {company_name} 재설득 메일 생성 실패: {result.get('error')}")
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logger.error(f"챗봇 오류: {str(e)}")
+        return jsonify({
+            'error': f'챗봇 오류: {str(e)}',
+            'success': False
+        }), 500
+
+@app.route('/api/scrape-blog-initial', methods=['POST'])
+def scrape_blog_initial():
+    """
+    포트원 블로그 초기 데이터 스크래핑
+    - OPI (국내 결제): 5페이지
+    - Recon (매출 마감): 1페이지
+    """
+    try:
+        logger.info("🚀 블로그 초기 데이터 스크래핑 요청")
+        
+        blog_posts = scrape_portone_blog_initial()
+        
+        if blog_posts:
+            return jsonify({
+                'success': True,
+                'message': f'초기 데이터 스크래핑 완료',
+                'posts_count': len(blog_posts),
+                'categories': {
+                    'OPI': len([p for p in blog_posts if p.get('category') == 'OPI']),
+                    'Recon': len([p for p in blog_posts if p.get('category') == 'Recon'])
+                },
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '블로그 스크래핑 실패'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"초기 스크래핑 오류: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/update-blog', methods=['POST'])
+def update_blog():
+    """
+    포트원 블로그 콘텐츠 업데이트
+    
+    OPI와 Recon 카테고리 모두 업데이트
+    """
+    try:
+        logger.info("🔄 블로그 업데이트 요청")
+        
+        blog_posts = scrape_portone_blog_initial()
+        
+        if blog_posts:
+            return jsonify({
+                'success': True,
+                'message': f'블로그 콘텐츠 업데이트 완료',
+                'posts_count': len(blog_posts),
+                'categories': {
+                    'OPI': len([p for p in blog_posts if p.get('category') == 'OPI']),
+                    'Recon': len([p for p in blog_posts if p.get('category') == 'Recon'])
+                },
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': '블로그 스크래핑 실패'
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"블로그 업데이트 오류: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/blog-cache-status', methods=['GET'])
+def blog_cache_status():
+    """
+    블로그 캐시 상태 확인
+    """
+    try:
+        from portone_blog_cache import load_blog_cache, get_blog_cache_age
+        
+        cached_posts = load_blog_cache()
+        cache_age = get_blog_cache_age()
+        
+        return jsonify({
+            'success': True,
+            'has_cache': cached_posts is not None,
+            'posts_count': len(cached_posts) if cached_posts else 0,
+            'cache_age_hours': cache_age if cache_age else None,
+            'cache_status': 'fresh' if cache_age and cache_age < 24 else 'stale' if cache_age else 'no_cache',
+            'posts': cached_posts[:3] if cached_posts else [],  # 최근 3개만 미리보기
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"캐시 상태 확인 오류: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """서비스 상태 확인"""
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'services': {
-            'perplexity': bool(os.getenv('PERPLEXITY_API_KEY')),
-            'gemini': bool(os.getenv('GEMINI_API_KEY')),
-            'claude': bool(os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY'))
-        }
+        'service': 'email-generation',
+        'timestamp': datetime.now().isoformat()
     })
 
 # 뉴스 분석 관련 함수들을 먼저 정의
@@ -5324,22 +6004,75 @@ PortOne의 결제 솔루션을 소개드리고 싶습니다.</textarea>
     </html>
     """
 
+def scheduled_blog_update():
+    """
+    스케줄러에 의해 자동으로 실행되는 블로그 업데이트 함수
+    하루 2번 (오전 9시, 오후 6시) 실행됨
+    """
+    try:
+        logger.info("⏰ 스케줄 블로그 업데이트 시작")
+        
+        from portone_blog_cache import get_blog_cache_age
+        
+        # 캐시 나이 확인 (12시간 이상 지났으면 업데이트)
+        cache_age = get_blog_cache_age()
+        
+        if cache_age is None or cache_age >= 12:
+            logger.info(f"📰 블로그 캐시 업데이트 필요 (나이: {cache_age}시간)")
+            blog_posts = scrape_portone_blog_initial()
+            
+            if blog_posts:
+                logger.info(f"✅ 자동 블로그 업데이트 완료: {len(blog_posts)}개 글")
+            else:
+                logger.warning("⚠️ 자동 블로그 업데이트 실패")
+        else:
+            logger.info(f"✅ 블로그 캐시 최신 상태 (나이: {cache_age:.1f}시간)")
+    except Exception as e:
+        logger.error(f"❌ 스케줄 블로그 업데이트 오류: {str(e)}")
+
+# 스케줄러 초기화
+scheduler = BackgroundScheduler()
+
+# 하루 2번 실행: 오전 9시, 오후 6시
+scheduler.add_job(
+    func=scheduled_blog_update,
+    trigger=CronTrigger(hour='9,18', minute='0'),
+    id='blog_update_job',
+    name='블로그 자동 업데이트',
+    replace_existing=True
+)
+
+# 스케줄러 시작
+scheduler.start()
+logger.info("⏰ 블로그 자동 업데이트 스케줄러 시작됨 (매일 9시, 18시 실행)")
+
+# 애플리케이션 종료 시 스케줄러 종료
+atexit.register(lambda: scheduler.shutdown())
+
 if __name__ == '__main__':
     # API 키 확인
     if not os.getenv('PERPLEXITY_API_KEY'):
         logger.warning("PERPLEXITY_API_KEY가 설정되지 않았습니다.")
     
-    if not (os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY')):
-        logger.warning("AWS 인증 정보가 설정되지 않았습니다. Claude API 사용이 제한됩니다.")
+    if not os.getenv('GEMINI_API_KEY'):
+        logger.warning("GEMINI_API_KEY가 설정되지 않았습니다.")
     
+    logger.info("🚀 이메일 생성 챗봇 서버 시작")
+    
+    # Flask 서버 시작
+    app.run(host='0.0.0.0', port=8000, debug=True)
+
     logger.info("이메일 생성 서비스 시작...")
     logger.info("사용 가능한 엔드포인트:")
     logger.info("- POST /api/research-company: 회사 조사")
     logger.info("- POST /api/generate-email: 이메일 생성")
     logger.info("- POST /api/batch-process: 일괄 처리")
     logger.info("- POST /api/refine-email: 이메일 개선")
-    logger.info("- POST /api/analyze-news: 뉴스 기사 분석 (NEW!)")
+    logger.info("- POST /api/chat-reply: 재설득 메일 생성 (챗봇)")
+    logger.info("- POST /api/analyze-news: 뉴스 기사 분석")
     logger.info("- POST /api/test-scraping: 뉴스 스크래핑 테스트")
+    logger.info("- POST /api/update-blog: 블로그 콘텐츠 업데이트 (NEW!)")
+    logger.info("- GET /api/blog-cache-status: 블로그 캐시 상태 확인 (NEW!)")
     logger.info("- GET /api/health: 서비스 상태 확인")
     
     app.run(debug=True, host='0.0.0.0', port=5001)

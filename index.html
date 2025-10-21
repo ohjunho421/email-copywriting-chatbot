@@ -399,11 +399,17 @@
                     </div>
                     <div class="card-footer">
                         <div class="input-group">
-                            <input type="text" class="form-control" id="userInput" placeholder="추가 요청사항이나 질문을 입력하세요..." disabled>
-                            <button class="btn btn-primary" id="sendBtn" disabled>
+                            <textarea class="form-control" id="userInput" rows="3" placeholder="예: '토스에서 비용이 부담된다고 했는데 재설득 메일 만들어줘'
+또는: '쿠팡 김철수 대표가 현재 다른 PG사 쓰고 있어서 바꾸기 어렵다고 했어'
+
+💡 Shift+Enter: 줄바꿈 | Enter: 전송" style="resize: vertical;"></textarea>
+                            <button class="btn btn-primary" id="sendBtn" style="align-self: flex-end;">
                                 <i class="fas fa-paper-plane"></i>
                             </button>
                         </div>
+                        <small class="text-muted mt-1 d-block">
+                            💬 자유롭게 요청하세요: 재설득 메일 생성, 문안 수정, 질문 등
+                        </small>
                     </div>
                 </div>
             </div>
