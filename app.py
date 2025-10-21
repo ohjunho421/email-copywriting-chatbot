@@ -2980,6 +2980,18 @@ def generate_email_with_gemini(company_data, research_data):
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
         
+        # 해외 진출 여부 확인 (뉴스/조사 내용에서 키워드 추출)
+        global_keywords = ['해외', '글로벌', 'global', '수출', 'export', '해외진출', '국제', '아시아', '유럽', '미국', '일본', '중국', '동남아']
+        is_global = any(keyword in research_summary.lower() for keyword in global_keywords)
+        
+        # PG사 개수 동적 표현
+        if is_global:
+            pg_count = "국내외 50여개"
+            logger.info(f"🌍 {company_name}: 해외 타겟 감지 → {pg_count} PG사 언급")
+        else:
+            pg_count = "국내 20여개"
+            logger.info(f"🇰🇷 {company_name}: 국내 타겟 → {pg_count} PG사 언급")
+        
         # 기본 context 정의
         if has_csv_news:
             news_instruction = """**🎯 최우선 지시: CSV에서 제공된 '관련 뉴스 기사' 섹션의 내용을 반드시 이메일 도입부에 활용하세요!**
@@ -3006,9 +3018,11 @@ def generate_email_with_gemini(company_data, research_data):
 **포트원 핵심 수치 (반드시 활용):**
 - 국내 3,000여개 유수 기업이 포트원 사용 중
 - 연환산 거래액 12조원 (2024년 12월 기준)
+- {pg_count} PG사 연동 가능 (타겟 회사의 해외 진출 여부에 따라 자동 조정됨)
 - 이 수치들을 활용하여 신뢰도를 높이세요
   예: "이미 국내 3,000여개 기업이..."
   예: "연 12조원 규모의 거래를 처리하는..."
+  예: "{pg_count} PG사를 한 번의 연동으로..."
 
 **타겟 회사 정보:**
 {company_info}
@@ -3128,7 +3142,7 @@ def generate_email_with_gemini(company_data, research_data):
    - **구체적 수치 활용**: "국내 3,000여개 기업의 재무 데이터를 관리하는..." / "연 12조원 규모 거래의 정산을..."
    - **블로그 정보 활용**: 위 Recon 참고 정보의 통계/효과를 근거로 제시하며 설득력 강화
    - **경쟁사가 있다면**: "{competitor_name}도 사업 확장 시<br>재무 자동화로 90% 시간 절약했습니다"
-   - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "PG사의 각기다른 양식에도 정확하게 데이터를 통합하고 주문건당 정산여부 파악이 가능합니다. 이를 통해 ERP연동도 가능하기 때문에 재무팀의 반복적인 수작업을 90% 이상 단축하고, 휴먼에러를 줄여 확보된 리소스를 더 가치 있는 성장 전략에 집중하실 수 있습니다"
+   - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "{pg_count} PG사의 각기다른 양식에도 정확하게 데이터를 통합하고 주문건당 정산여부 파악이 가능합니다. 이를 통해 ERP연동도 가능하기 때문에 재무팀의 반복적인 수작업을 90% 이상 단축하고, 휴먼에러를 줄여 확보된 리소스를 더 가치 있는 성장 전략에 집중하실 수 있습니다"
 
 4. **재무자동화 솔루션 (Recon) - 호기심 유발형**: 
 {recon_blog_content}
@@ -3137,7 +3151,7 @@ def generate_email_with_gemini(company_data, research_data):
    - **구체적 수치 활용**: "3,000여개 기업이 이미..." 같이 추상적 표현보다 명확한 숫자로
    - **블로그 정보 활용**: 위 Recon 참고 정보의 Pain Point를 자연스럽게 언급
    - **경쟁사가 있다면**: "{competitor_name}도 글로벌 진출 시<br>재무 통합 관리로 큰 도움을 받았는데..." 호기심 자극
-   - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "여러 PG사의 다른 데이터 형식도 자동으로 통합하고, ERP 연동으로 재무팀 업무를 90% 이상 줄여드릴 수 있습니다. 휴먼에러도 제거하고요"
+   - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "{pg_count} PG사의 다른 데이터 형식도 자동으로 통합하고, ERP 연동으로 재무팀 업무를 90% 이상 줄여드릴 수 있습니다. 휴먼에러도 제거하고요"
    - "구체적으로 어떤 도움이 되는지 보여드릴까요?" 관심 유도
 
 **구조 및 형식:**
