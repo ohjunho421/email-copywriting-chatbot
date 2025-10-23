@@ -3331,11 +3331,23 @@ def generate_email_with_gemini(company_data, research_data):
                     # JSON 파싱
                     email_variations = json.loads(clean_response)
                     
+                    # 마크다운을 HTML로 변환하는 함수
+                    def convert_markdown_to_html(text):
+                        """마크다운 문법을 HTML로 변환 (**볼드**, *이탤릭* 등)"""
+                        import re
+                        # **텍스트** → <strong>텍스트</strong>
+                        text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+                        # *텍스트* → <em>텍스트</em> (볼드 처리 후 남은 단일 *)
+                        text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+                        return text
+                    
                     # 플레이스홀더 교체 함수
                     def replace_placeholders(text, company_name, email_name, competitor_name=''):
                         result = text.replace('{company_name}', company_name).replace('{email_name}', email_name)
                         if competitor_name:
                             result = result.replace('{competitor_name}', competitor_name)
+                        # 마크다운 변환 적용
+                        result = convert_markdown_to_html(result)
                         return result
                     
                     # 응답 형식 변환 및 플레이스홀더 교체 (요청된 서비스만)
@@ -3645,12 +3657,24 @@ def generate_email_with_user_template(company_data, research_data, user_template
                 clean_response = clean_response.strip()
                 email_variations = json.loads(clean_response)
                 
+                # 마크다운을 HTML로 변환하는 함수
+                def convert_markdown_to_html(text):
+                    """마크다운 문법을 HTML로 변환 (**볼드**, *이탤릭* 등)"""
+                    import re
+                    # **텍스트** → <strong>텍스트</strong>
+                    text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+                    # *텍스트* → <em>텍스트</em> (볼드 처리 후 남은 단일 *)
+                    text = re.sub(r'\*(.+?)\*', r'<em>\1</em>', text)
+                    return text
+                
                 # 플레이스홀더 교체
                 def replace_placeholders(text, company_name, email_name, competitor_name=''):
                     result = text.replace('{company_name}', company_name).replace('{email_name}', email_name)
                     result = result.replace('{{company_name}}', company_name).replace('{{email_name}}', email_name)
                     if competitor_name:
                         result = result.replace('{competitor_name}', competitor_name).replace('{{competitor_name}}', competitor_name)
+                    # 마크다운 변환 적용
+                    result = convert_markdown_to_html(result)
                     return result
                 
                 formatted_variations = {}
