@@ -3169,12 +3169,12 @@ def generate_email_with_gemini(company_data, research_data):
 {f'- "실제로 {competitor_name} 같은 경우도 PortOne 도입 전에는 결제 시스템 구축에 6개월 이상 소요됐지만, 지금은 2주 내 새로운 기능을 출시할 수 있게 되었습니다."' if competitor_name else ''}
 
 **고정 서론 형식:**
-"안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다."
+"안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다."
 
 **고정 결론 형식 (필수!):**
 "⚠️  **반드시** 아래 CTA(행동 촉구)를 포함하세요. CTA가 없으면 이메일이 완성되지 않은 것입니다!"
 
-"<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>{user_name} 드림"
+"<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
 
 ‼️ **CTA 필수 포함 요구사항:**
 - 위의 "다음주 중 편하신 일정을 알려주시면" CTA는 **반드시** 포함해야 합니다
@@ -3264,16 +3264,16 @@ def generate_email_with_gemini(company_data, research_data):
 
 {{
   "opi_professional": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "opi_curiosity": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_professional": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_curiosity": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }}
 }}
 """
@@ -3584,7 +3584,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
    ‼️ **CTA는 반드시 포함해야 합니다!** "다음주 중 편하신 일정을 알려주시면..."이 빠지면 안 됩니다.
 
 **고정 서론 형식 (서론 시작 전):**
-"안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>"
+"안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>"
 
 **구조:**
 - 제목: "[PortOne] {{company_name}} {{email_name}}께 전달 부탁드립니다"
@@ -3596,16 +3596,16 @@ def generate_email_with_user_template(company_data, research_data, user_template
 
 {{
   "opi_professional": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "opi_curiosity": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_professional": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_curiosity": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne 오준호 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }}
 }}
 """
