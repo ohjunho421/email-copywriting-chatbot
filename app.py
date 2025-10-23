@@ -1235,7 +1235,7 @@ class CompanyResearcher:
             
             # DuckDuckGo Instant Answer API
             url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=20)
             
             if response.status_code == 200:
                 data = response.json()
@@ -1272,7 +1272,7 @@ class CompanyResearcher:
             
             # DuckDuckGo Instant Answer API
             url = f"https://api.duckduckgo.com/?q={encoded_query}&format=json&no_html=1&skip_disambig=1"
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=20)
             
             if response.status_code == 200:
                 data = response.json()
@@ -1295,8 +1295,8 @@ class CompanyResearcher:
             return f"정확한 검색 쿼리 '{search_query}'를 활용한 DuckDuckGo 검색 완료: 더 정밀한 정보 확보"
         
         except Exception as e:
-            logger.warning(f"이메일 추출 오류: {e}")
-            return []
+            logger.warning(f"DuckDuckGo 뉴스 검색 오류 (Perplexity 보조용): {e}")
+            return None
     
     def search_with_web_scraping(self, company_name):
         """웹 스크래핑을 통한 추가 정보 수집"""
