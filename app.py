@@ -4743,12 +4743,20 @@ def batch_process():
     try:
         data = request.json
         companies = data.get('companies', [])
-        max_workers = data.get('max_workers', 5)  # 동시 처리 개수 (기본 5개)
+        max_workers = data.get('max_workers', 3)  # 동시 처리 개수 (기본 3개로 감소)
         user_template = data.get('user_template', None)  # 사용자 문안 또는 요청사항
         user_input_mode = data.get('user_input_mode', 'template')  # 'request' 또는 'template'
         
         if not companies:
             return jsonify({'error': '처리할 회사 데이터가 없습니다'}), 400
+        
+        # ⚠️ 대량 처리 제한: 한 번에 최대 50개까지만
+        MAX_BATCH_SIZE = 50
+        if len(companies) > MAX_BATCH_SIZE:
+            return jsonify({
+                'error': f'한 번에 최대 {MAX_BATCH_SIZE}개까지만 처리 가능합니다. 현재: {len(companies)}개',
+                'suggestion': f'데이터를 {MAX_BATCH_SIZE}개씩 나누어서 처리해주세요.'
+            }), 400
         
         logger.info(f"병렬 처리 시작: {len(companies)}개 회사, {max_workers}개 동시 작업")
         if user_template:
