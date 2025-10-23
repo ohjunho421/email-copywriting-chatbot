@@ -5984,7 +5984,10 @@ PortOne 오준호 매니저입니다.</p>
 @login_required
 def index():
     """루트 경로 - index.html 제공 (챗봇 스타일 UI) - 로그인 필요"""
-    return render_template('index.html', user=current_user)
+    # 캐시 버스팅을 위한 버전 번호 (현재 타임스탬프)
+    import time
+    cache_version = str(int(time.time()))
+    return render_template('index.html', user=current_user, cache_version=cache_version)
 
 @app.route('/script.js')
 def serve_script():
