@@ -2969,12 +2969,18 @@ def generate_email_with_gemini(company_data, research_data):
                     logger.info(f"알 수 없는 sales_item '{sales_item}', 자체구축 아니므로 Recon만 생성: {company_name}")
         else:
             # sales_item이 없으면 호스팅사 기준으로 판단
-            if is_self_hosted:
+            if not hosting:
+                # 호스팅 정보가 없으면 4개 모두 생성
                 services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
-                logger.info(f"sales_item 없음, 자체구축이므로 4개 문안 생성: {company_name}")
+                logger.info(f"sales_item 없음 + 호스팅 정보 없음 → 4개 모두 생성: {company_name}")
+            elif is_self_hosted:
+                # 자체구축이면 4개 생성
+                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                logger.info(f"sales_item 없음 + 자체구축 → 4개 문안 생성 (호스팅: {hosting}): {company_name}")
             else:
+                # 호스팅 정보가 있고 자체구축이 아니면 Recon만
                 services_to_generate = ['finance_professional', 'finance_curiosity']
-                logger.info(f"sales_item 없음, 자체구축 아니므로 Recon만 생성 (호스팅: {hosting}): {company_name}")
+                logger.info(f"sales_item 없음 + 호스팅='{hosting}' (자체구축 아님) → Recon만 생성: {company_name}")
         
         # 서비스별 통합 지식베이스 로드 (서비스 소개서 + 블로그 전체)
         from portone_blog_cache import get_service_knowledge
@@ -3467,11 +3473,18 @@ def generate_email_with_user_template(company_data, research_data, user_template
                     logger.info(f"[사용자문안] 자체구축 아니므로 Recon만 생성: {company_name}")
         else:
             # sales_item이 없으면 호스팅사 기준으로 판단
-            if is_self_hosted:
+            if not hosting:
+                # 호스팅 정보가 없으면 4개 모두 생성
                 services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                logger.info(f"[사용자문안] sales_item 없음 + 호스팅 정보 없음 → 4개 모두 생성: {company_name}")
+            elif is_self_hosted:
+                # 자체구축이면 4개 생성
+                services_to_generate = ['opi_professional', 'opi_curiosity', 'finance_professional', 'finance_curiosity']
+                logger.info(f"[사용자문안] sales_item 없음 + 자체구축 → 4개 문안 생성 (호스팅: {hosting}): {company_name}")
             else:
+                # 호스팅 정보가 있고 자체구축이 아니면 Recon만
                 services_to_generate = ['finance_professional', 'finance_curiosity']
-                logger.info(f"[사용자문안] 자체구축 아니므로 Recon만 생성 (호스팅: {hosting}): {company_name}")
+                logger.info(f"[사용자문안] sales_item 없음 + 호스팅='{hosting}' (자체구축 아님) → Recon만 생성: {company_name}")
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
