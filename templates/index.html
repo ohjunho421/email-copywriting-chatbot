@@ -213,6 +213,28 @@
     </style>
 </head>
 <body>
+    <!-- 상단 헤더 -->
+    <nav class="navbar navbar-light bg-light border-bottom mb-3">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h5">
+                <i class="fas fa-envelope-open-text text-primary"></i> PortOne 이메일 생성기
+            </span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="text-muted">
+                    <i class="fas fa-user"></i> {{ user.name }}님
+                </span>
+                {% if user.is_admin %}
+                <a href="/admin/dashboard" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-crown"></i> 관리자 페이지
+                </a>
+                {% endif %}
+                <a href="/auth/logout" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-sign-out-alt"></i> 로그아웃
+                </a>
+            </div>
+        </div>
+    </nav>
+
     <!-- 수정 모달 -->
     <div class="edit-modal" id="editModal" onclick="handleModalClick(event)">
         <div class="edit-modal-content" onclick="event.stopPropagation()">

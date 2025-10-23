@@ -37,7 +37,12 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'portone-email-generation-secret-key-2025')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///email_gen.db')
+
+# Railway PostgreSQL 연결 (postgres:// → postgresql:// 변환)
+database_url = os.getenv('DATABASE_URL', 'sqlite:///email_gen.db')
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 CORS(app)
@@ -5971,7 +5976,7 @@ PortOne 오준호 매니저입니다.</p>
 @login_required
 def index():
     """루트 경로 - index.html 제공 (챗봇 스타일 UI) - 로그인 필요"""
-    return send_from_directory('.', 'index.html')
+    return render_template('index.html', user=current_user)
 
 @app.route('/script.js')
 def serve_script():
