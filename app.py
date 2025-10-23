@@ -9,6 +9,7 @@ from functools import partial
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
+from flask_login import LoginManager, login_required, current_user
 from dotenv import load_dotenv
 import boto3
 from botocore.exceptions import ClientError
@@ -35,7 +36,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'portone-email-generation-secret-key-2025')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///email_gen.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 CORS(app)
+
+# 데이터베이스 초기화
+from models import db, User, EmailGeneration
+db.init_app(app)
+
+# Flask-Login 설정
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'
+login_manager.login_message = '로그인이 필요한 페이지입니다.'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# Blueprint 등록
+from auth import auth_bp
+from admin import admin_bp
+app.register_blueprint(auth_bp)
+app.register_blueprint(admin_bp)
+
+# 데이터베이스 테이블 생성
+with app.app_context():
+    db.create_all()
+    logger.info("✅ 데이터베이스 초기화 완료")
 
 # API 키 설정 (환경변수에서 가져오기)
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY', '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')
@@ -2861,6 +2891,11 @@ https://www.portone.io'''
 def generate_email_with_gemini(company_data, research_data):
     """Gemini 2.5 Pro를 사용하여 개인화된 이메일 생성"""
     try:
+        # 사용자 정보 (서명용)
+        user_name = current_user.name if current_user.is_authenticated else "오준호"
+        user_company_nickname = current_user.company_nickname if current_user.is_authenticated else "PortOne 오준호 매니저"
+        user_phone = current_user.phone if current_user.is_authenticated else "010-2580-2580"
+        
         # 회사 정보 요약
         company_name = company_data.get('회사명', 'Unknown')
         
@@ -3134,12 +3169,12 @@ def generate_email_with_gemini(company_data, research_data):
 {f'- "실제로 {competitor_name} 같은 경우도 PortOne 도입 전에는 결제 시스템 구축에 6개월 이상 소요됐지만, 지금은 2주 내 새로운 기능을 출시할 수 있게 되었습니다."' if competitor_name else ''}
 
 **고정 서론 형식:**
-"안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다."
+"안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다."
 
 **고정 결론 형식 (필수!):**
 "⚠️  **반드시** 아래 CTA(행동 촉구)를 포함하세요. CTA가 없으면 이메일이 완성되지 않은 것입니다!"
 
-"<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
+"<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>{user_name} 드림"
 
 ‼️ **CTA 필수 포함 요구사항:**
 - 위의 "다음주 중 편하신 일정을 알려주시면" CTA는 **반드시** 포함해야 합니다
@@ -3229,16 +3264,16 @@ def generate_email_with_gemini(company_data, research_data):
 
 {{
   "opi_professional": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "opi_curiosity": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "finance_professional": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "finance_curiosity": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne 오준호 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>{user_company_nickname}입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }}
 }}
 """
@@ -3391,6 +3426,11 @@ def generate_email_with_user_template(company_data, research_data, user_template
     사용자 제공 문안 기반 이메일 생성 (뉴스 후킹 서론 + 사용자 본문 90%)
     """
     try:
+        # 사용자 정보 (서명용)
+        user_name = current_user.name if current_user.is_authenticated else "오준호"
+        user_company_nickname = current_user.company_nickname if current_user.is_authenticated else "PortOne 오준호 매니저"
+        user_phone = current_user.phone if current_user.is_authenticated else "010-2580-2580"
+        
         company_name = company_data.get('회사명', 'Unknown')
         
         # 담당자 정보 추출 (generate_email_with_gemini와 동일)
@@ -4692,8 +4732,9 @@ def process_single_company(company, index, user_template=None, user_input_mode='
         }
 
 @app.route('/api/batch-process', methods=['POST'])
+@login_required
 def batch_process():
-    """여러 회사 일괄 처리 API - 병렬 처리 최적화"""
+    """여러 회사 일괄 처리 API - 병렬 처리 최적화 (로그인 필요)"""
     try:
         data = request.json
         companies = data.get('companies', [])
@@ -4752,6 +4793,32 @@ def batch_process():
         processing_time = end_time - start_time
         
         logger.info(f"병렬 처리 완료: {processing_time:.2f}초, 평균 {processing_time/len(companies):.2f}초/회사")
+        
+        # 이메일 생성 기록 저장
+        try:
+            for result in results:
+                if 'emails' in result and result['emails'].get('success'):
+                    company = result.get('company', {})
+                    company_name = company.get('회사명', 'Unknown')
+                    company_email = company.get('대표이메일', '')
+                    
+                    # 생성된 각 이메일 타입 기록
+                    variations = result['emails'].get('variations', {})
+                    for email_type in variations.keys():
+                        email_gen = EmailGeneration(
+                            user_id=current_user.id,
+                            company_name=company_name,
+                            company_email=company_email,
+                            email_type=email_type,
+                            generation_mode='ssr' if not user_template else ('user_request' if user_input_mode == 'request' else 'user_template')
+                        )
+                        db.session.add(email_gen)
+            
+            db.session.commit()
+            logger.info(f"📊 {current_user.email}: {len(results)}개 회사, 이메일 생성 기록 저장 완료")
+        except Exception as e:
+            logger.error(f"이메일 생성 기록 저장 오류: {e}")
+            # 기록 저장 실패해도 결과는 반환
         
         return jsonify({
             'success': True,
@@ -5901,8 +5968,9 @@ PortOne 오준호 매니저입니다.</p>
 # ===== 웹 인터페이스 라우트 =====
 
 @app.route('/')
+@login_required
 def index():
-    """루트 경로 - index.html 제공 (챗봇 스타일 UI)"""
+    """루트 경로 - index.html 제공 (챗봇 스타일 UI) - 로그인 필요"""
     return send_from_directory('.', 'index.html')
 
 @app.route('/script.js')

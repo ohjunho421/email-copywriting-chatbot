@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 대시보드 - PortOne 이메일 생성기</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .stat-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        .stat-number {
+            font-size: 36px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .user-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .badge-pending {
+            background-color: #ffc107;
+        }
+        .badge-approved {
+            background-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-crown"></i> 관리자 대시보드
+            </a>
+            <div class="d-flex">
+                <span class="navbar-text text-white me-3">
+                    <i class="fas fa-user-shield"></i> {{ current_user.name }}님
+                </span>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-light btn-sm me-2">
+                    <i class="fas fa-home"></i> 메인
+                </a>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-sign-out-alt"></i> 로그아웃
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- 통계 -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="stat-card text-center">
+                    <i class="fas fa-users fa-2x text-primary mb-3"></i>
+                    <div class="stat-number">{{ total_users }}</div>
+                    <div class="text-muted">승인된 사용자</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card text-center">
+                    <i class="fas fa-clock fa-2x text-warning mb-3"></i>
+                    <div class="stat-number">{{ pending_count }}</div>
+                    <div class="text-muted">승인 대기</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card text-center">
+                    <i class="fas fa-envelope fa-2x text-success mb-3"></i>
+                    <div class="stat-number">{{ total_emails }}</div>
+                    <div class="text-muted">생성된 이메일</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 승인 대기 중인 사용자 -->
+        {% if pending_users %}
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-user-clock"></i> 승인 대기 중 ({{ pending_users|length }}명)</h5>
+            </div>
+            <div class="card-body">
+                {% for user in pending_users %}
+                <div class="user-card">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h6 class="mb-1">{{ user.name }}</h6>
+                            <small class="text-muted">
+                                <i class="fas fa-envelope"></i> {{ user.email }}<br>
+                                <i class="fas fa-building"></i> {{ user.company_nickname }}<br>
+                                <i class="fas fa-phone"></i> {{ user.phone }}<br>
+                                <i class="fas fa-calendar"></i> 가입일: {{ user.created_at.strftime('%Y-%m-%d %H:%M') }}
+                            </small>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <form method="POST" action="{{ url_for('admin.approve_user', user_id=user.id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-success btn-sm">
+                                    <i class="fas fa-check"></i> 승인
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('admin.reject_user', user_id=user.id) }}" style="display: inline;" onsubmit="return confirm('정말 거부하시겠습니까? 사용자 정보가 삭제됩니다.');">
+                                <button type="submit" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-times"></i> 거부
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- 사용자별 이메일 생성 통계 -->
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> 사용자별 이메일 생성 통계</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>순위</th>
+                                <th>이름</th>
+                                <th>이메일</th>
+                                <th>회사</th>
+                                <th class="text-end">생성 개수</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in user_stats %}
+                            <tr>
+                                <td>
+                                    {% if loop.index == 1 %}
+                                        <i class="fas fa-trophy text-warning"></i> {{ loop.index }}
+                                    {% elif loop.index == 2 %}
+                                        <i class="fas fa-medal" style="color: silver;"></i> {{ loop.index }}
+                                    {% elif loop.index == 3 %}
+                                        <i class="fas fa-medal" style="color: #cd7f32;"></i> {{ loop.index }}
+                                    {% else %}
+                                        {{ loop.index }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ stat.name }}</td>
+                                <td><small class="text-muted">{{ stat.email }}</small></td>
+                                <td>{{ stat.company_nickname }}</td>
+                                <td class="text-end">
+                                    <span class="badge bg-primary">{{ stat.email_count }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
