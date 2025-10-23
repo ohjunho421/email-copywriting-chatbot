@@ -2896,10 +2896,10 @@ https://www.portone.io'''
 def generate_email_with_gemini(company_data, research_data):
     """Gemini 2.5 Pro를 사용하여 개인화된 이메일 생성"""
     try:
-        # 사용자 정보 (서명용)
-        user_name = current_user.name if current_user.is_authenticated else "오준호"
-        user_company_nickname = current_user.company_nickname if current_user.is_authenticated else "PortOne 오준호 매니저"
-        user_phone = current_user.phone if current_user.is_authenticated else "010-2580-2580"
+        # 사용자 정보 (서명용) - current_user 안전 체크
+        user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
+        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne 오준호 매니저"
+        user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
         
         # 회사 정보 요약
         company_name = company_data.get('회사명', 'Unknown')
@@ -3431,10 +3431,10 @@ def generate_email_with_user_template(company_data, research_data, user_template
     사용자 제공 문안 기반 이메일 생성 (뉴스 후킹 서론 + 사용자 본문 90%)
     """
     try:
-        # 사용자 정보 (서명용)
-        user_name = current_user.name if current_user.is_authenticated else "오준호"
-        user_company_nickname = current_user.company_nickname if current_user.is_authenticated else "PortOne 오준호 매니저"
-        user_phone = current_user.phone if current_user.is_authenticated else "010-2580-2580"
+        # 사용자 정보 (서명용) - current_user 안전 체크
+        user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
+        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne 오준호 매니저"
+        user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
         
         company_name = company_data.get('회사명', 'Unknown')
         
