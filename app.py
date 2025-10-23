@@ -2925,7 +2925,21 @@ def generate_email_with_gemini(company_data, research_data):
         industry_trends = research_data.get('industry_trends', '')
         
         # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단)
-        hosting = company_data.get('호스팅사', '').lower().strip()
+        # CSV 컴럼 구조 디버깅
+        logger.debug(f"{company_name} CSV 컴럼들: {list(company_data.keys())}")
+        
+        # 다양한 호스팅사 컴럼명 지원
+        possible_hosting_columns = ['호스팅사', '호스팅', '호스팅서비스', 'hosting', 'Hosting', '웹호스팅', '호스팅업체']
+        hosting = ''
+        for col in possible_hosting_columns:
+            if col in company_data and company_data[col] and str(company_data[col]).strip():
+                hosting = str(company_data[col]).lower().strip()
+                logger.info(f"{company_name} 호스팅 정보 발견: '{col}' = '{hosting}'")
+                break
+        
+        if not hosting:
+            logger.warning(f"{company_name} 호스팅 정보 없음 - CSV에 호스팅사 컴럼이 있는지 확인하세요")
+        
         is_self_hosted = '자체' in hosting or 'self' in hosting or '직접' in hosting
         
         # sales_item에 따른 서비스 결정
@@ -3411,7 +3425,21 @@ def generate_email_with_user_template(company_data, research_data, user_template
         research_summary = research_data.get('company_info', '조사 정보 없음')
         
         # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단)
-        hosting = company_data.get('호스팅사', '').lower().strip()
+        # CSV 컴럼 구조 디버깅
+        logger.debug(f"[사용자문안] {company_name} CSV 컴럼들: {list(company_data.keys())}")
+        
+        # 다양한 호스팅사 컴럼명 지원
+        possible_hosting_columns = ['호스팅사', '호스팅', '호스팅서비스', 'hosting', 'Hosting', '웹호스팅', '호스팅업체']
+        hosting = ''
+        for col in possible_hosting_columns:
+            if col in company_data and company_data[col] and str(company_data[col]).strip():
+                hosting = str(company_data[col]).lower().strip()
+                logger.info(f"[사용자문안] {company_name} 호스팅 정보 발견: '{col}' = '{hosting}'")
+                break
+        
+        if not hosting:
+            logger.warning(f"[사용자문안] {company_name} 호스팅 정보 없음 - CSV에 호스팅사 컴럼이 있는지 확인하세요")
+        
         is_self_hosted = '자체' in hosting or 'self' in hosting or '직접' in hosting
         
         # sales_item에 따른 서비스 결정
