@@ -2178,18 +2178,58 @@ function copySubjectToClipboard(subject) {
 
 // 텍스트 복사 함수 (개선된 버전) - 본문만 복사 (서식 포함)
 function copyTextToClipboard(subject, body) {
-    // contentEditable div를 사용하여 실제 렌더링된 내용을 복사 (볼드, 줄바꿈 유지)
+    // 최신 Clipboard API 사용 (HTML 형식 복사 지원)
+    if (navigator.clipboard && window.ClipboardItem) {
+        try {
+            // HTML과 Plain Text 모두 제공
+            const htmlBlob = new Blob([body], { type: 'text/html' });
+            const plainText = body
+                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<\/p>/gi, '\n\n')
+                .replace(/<p[^>]*>/gi, '')
+                .replace(/<[^>]+>/g, '')
+                .replace(/&nbsp;/g, ' ')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&amp;/g, '&')
+                .trim();
+            const textBlob = new Blob([plainText], { type: 'text/plain' });
+            
+            const clipboardItem = new ClipboardItem({
+                'text/html': htmlBlob,
+                'text/plain': textBlob
+            });
+            
+            navigator.clipboard.write([clipboardItem]).then(() => {
+                showCopySuccess('📋 본문이 서식과 함께 클립보드에 복사되었습니다!');
+            }).catch(err => {
+                console.error('ClipboardItem 복사 실패:', err);
+                fallbackCopyWithContentEditable(body);
+            });
+            return;
+        } catch (err) {
+            console.error('ClipboardItem 생성 실패:', err);
+        }
+    }
+    
+    // 폴백: contentEditable 방식
+    fallbackCopyWithContentEditable(body);
+}
+
+// contentEditable을 사용한 폴백 복사
+function fallbackCopyWithContentEditable(body) {
     const tempDiv = document.createElement('div');
     tempDiv.contentEditable = true;
     tempDiv.style.position = 'fixed';
     tempDiv.style.left = '-9999px';
-    tempDiv.style.whiteSpace = 'pre-wrap'; // 줄바꿈 유지
-    tempDiv.innerHTML = body;
+    tempDiv.style.opacity = '0';
     
+    // HTML을 설정
+    tempDiv.innerHTML = body;
     document.body.appendChild(tempDiv);
     
     try {
-        // div 내용 선택
+        // 전체 선택
         const range = document.createRange();
         range.selectNodeContents(tempDiv);
         const selection = window.getSelection();
@@ -2209,46 +2249,13 @@ function copyTextToClipboard(subject, body) {
         selection.removeAllRanges();
     } catch (err) {
         console.error('서식 복사 실패:', err);
-        
-        // 폴백: ClipboardItem API 시도
-        if (navigator.clipboard && window.ClipboardItem) {
-            fallbackCopyWithClipboardItem(body);
-        } else {
-            // 마지막 폴백: 텍스트만 복사
-            const plainText = htmlToPlainText(body);
-            fallbackCopyTextToClipboard(plainText);
-        }
+        alert('복사에 실패했습니다. 수동으로 복사해주세요.');
     } finally {
         document.body.removeChild(tempDiv);
     }
 }
 
-// ClipboardItem을 사용한 폴백 복사
-function fallbackCopyWithClipboardItem(htmlBody) {
-    try {
-        const htmlBlob = new Blob([htmlBody], { type: 'text/html' });
-        const plainText = htmlToPlainText(htmlBody);
-        const textBlob = new Blob([plainText], { type: 'text/plain' });
-        
-        const clipboardItem = new ClipboardItem({
-            'text/html': htmlBlob,
-            'text/plain': textBlob
-        });
-        
-        navigator.clipboard.write([clipboardItem]).then(() => {
-            showCopySuccess('📋 본문이 클립보드에 복사되었습니다!');
-        }).catch(err => {
-            console.error('ClipboardItem 복사 실패:', err);
-            fallbackCopyTextToClipboard(plainText);
-        });
-    } catch (err) {
-        console.error('ClipboardItem 생성 실패:', err);
-        const plainText = htmlToPlainText(htmlBody);
-        fallbackCopyTextToClipboard(plainText);
-    }
-}
-
-// HTML을 순수 텍스트로 변환하는 개선된 함수
+// HTML을 순수 텍스트로 변환하는 개선된 함수 (폴백용 - 사용 안 함)
 function htmlToPlainText(html) {
     if (!html) return '';
     
