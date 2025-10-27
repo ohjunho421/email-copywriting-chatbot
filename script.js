@@ -929,6 +929,8 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                 'opi_curiosity': 'OPI - 호기심 유발형',
                                 'finance_professional': '재무자동화 - 전문적 톤',
                                 'finance_curiosity': '재무자동화 - 호기심 유발형',
+                                'prism_professional': 'Prism - 전문적 톤',
+                                'prism_curiosity': 'Prism - 호기심 유발형',
                                 'game_d2c_professional': '게임 D2C - 전문적 톤',
                                 'game_d2c_curiosity': '게임 D2C - 호기심 유발형',
                                 // 기존 호환성
@@ -3475,6 +3477,8 @@ function saveEmailDraftFromTextarea(companyIndex, variationIndex) {
             'opi_curiosity': 'OPI - 호기심 유발형',
             'finance_professional': '재무자동화 - 전문적 톤',
             'finance_curiosity': '재무자동화 - 호기심 유발형',
+            'prism_professional': 'Prism - 전문적 톤',
+            'prism_curiosity': 'Prism - 호기심 유발형',
             'game_d2c_professional': '게임 D2C - 전문적 톤',
             'game_d2c_curiosity': '게임 D2C - 호기심 유발형',
             'professional': '전문적 톤',

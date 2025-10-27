@@ -2997,6 +2997,9 @@ def generate_email_with_gemini(company_data, research_data):
             elif 'recon' in sales_item or '재무' in sales_item:
                 services_to_generate = ['finance_professional', 'finance_curiosity']
                 logger.info(f"Recon(재무자동화) 서비스 문안만 생성: {company_name}")
+            elif 'prism' in sales_item or '프리즘' in sales_item:
+                services_to_generate = ['prism_professional', 'prism_curiosity']
+                logger.info(f"Prism(매출 마감 자동화) 서비스 문안만 생성: {company_name}")
             else:
                 # 알 수 없는 sales_item인 경우
                 if is_self_hosted:
@@ -3036,6 +3039,12 @@ def generate_email_with_gemini(company_data, research_data):
         if any('finance' in s for s in services_to_generate):
             recon_blog_content = get_service_knowledge(service_type='Recon')
             logger.info(f"📚 [Recon] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
+        
+        # Prism용 통합 지식베이스 (Prism 서비스 생성 시)
+        prism_blog_content = ""
+        if any('prism' in s for s in services_to_generate):
+            prism_blog_content = get_service_knowledge(service_type='Prism')
+            logger.info(f"📚 [Prism] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
@@ -3114,6 +3123,8 @@ def generate_email_with_gemini(company_data, research_data):
         if len(services_to_generate) == 2:
             if 'opi' in services_to_generate[0]:
                 service_focus = "One Payment Infra (OPI) 서비스에 집중한 2개의"
+            elif 'prism' in services_to_generate[0]:
+                service_focus = "매출 마감 자동화 솔루션 (Prism)에 집중한 2개의"
             else:
                 service_focus = "재무자동화 솔루션에 집중한 2개의"
         else:
@@ -3228,6 +3239,28 @@ def generate_email_with_gemini(company_data, research_data):
    - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "{pg_count} PG사의 다른 데이터 형식도 자동으로 통합하고, ERP 연동으로 재무팀 업무를 90% 이상 줄여드릴 수 있습니다. 휴먼에러도 제거하고요"
    - "구체적으로 어떤 도움이 되는지 보여드릴까요?" 관심 유도
 
+5. **매출 마감 자동화 솔루션 (Prism) - 전문적 톤**: 
+{prism_blog_content}
+   - **필수**: 오픈마켓 확장/매출 증가 뉴스를 구체적으로 인용. 예: "'{company_name}가 쿠팡/11번가 입점 확대'라는 소식을 들었습니다"
+   - 다중 오픈마켓 운영 → 복잡한 정산 관리/현금흐름 파악 어려움 자연스럽게 연결
+   - **Prism 참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 채널/기능만 사용하세요
+   - **핵심 Pain Point**: 각 오픈마켓의 정산기준/주기 차이, 반복적인 엑셀 작업, 미수금 관리 어려움, 데이터 누락/오류
+   - **구체적 수치 활용**: "재무 마감 시간 **90% 이상 단축**" / "**100% 데이터 정합성** 확보"
+   - **블로그 정보 활용**: 위 Prism 참고 정보의 통계/효과를 근거로 제시하며 설득력 강화
+   - **경쟁사가 있다면**: "{competitor_name}도 다중 채널 운영 시<br>Prism으로 재무팀 업무를 90% 자동화했습니다"
+   - **Prism 핵심 가치 프로포지션 (반드시 포함)**: "네이버 스마트스토어, 쿠팡, 카카오스타일 등 각 오픈마켓의 서로 다른 정산기준과 주기를 자동으로 통합하여, 정확한 현금흐름과 미수금을 실시간으로 파악하실 수 있습니다. 월 수십 시간의 반복적인 엑셀 작업을 자동화하고, 100% 데이터 정합성으로 휴먼에러를 제거합니다"
+
+6. **매출 마감 자동화 솔루션 (Prism) - 호기심 유발형**: 
+{prism_blog_content}
+   - **필수**: 구체적 뉴스로 시작하는 질문. 예: "'{company_name}의 2분기 매출 150% 증가' 소식을 봤는데, 다중 오픈마켓 정산 관리는 어떻게 하고 계신가요?"
+   - 채널 확장에 따른 재무 복잡성 증가 공감 표현
+   - **구체적 수치 활용**: "이미 국내 3,000여개 기업이..." 같이 명확한 숫자로 신뢰도 제공
+   - **핵심 Pain Point 공감**: "혹시 네이버/쿠팡/11번가 등 각 채널마다 정산 데이터 다운로드하고 엑셀로 수작업하시나요?"
+   - **블로그 정보 활용**: 위 Prism 참고 정보의 Pain Point를 자연스럽게 언급
+   - **경쟁사가 있다면**: "{competitor_name}도 다중 채널 확장 시<br>재무 마감 자동화로 큰 도움을 받았는데..." 호기심 자극
+   - **Prism 핵심 가치 프로포지션 (반드시 포함)**: "각 오픈마켓의 다른 정산 형식도 자동으로 통합하고, 현금흐름/미수금을 실시간 파악하여 재무팀 업무를 **90% 이상** 줄여드릴 수 있습니다"
+   - "어떻게 월말 마감을 하루 만에 끝낼 수 있는지 보여드릴까요?" 관심 유도
+
 **구조 및 형식:**
 - 제목: 고정 형식 사용 ("[PortOne] {company_name} {email_name}께 전달 부탁드립니다") - 본문에 제목 포함하지 말것
 - 본문: 고정 서론 → Pain Point 제기(50-70단어) → 해결책 제시(50-70단어) → 경쟁사 사례/혜택(30-50단어) → 고정 결론
@@ -3278,6 +3311,12 @@ def generate_email_with_gemini(company_data, research_data):
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_curiosity": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }},
+  "prism_professional": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }},
+  "prism_curiosity": {{
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }}
 }}
@@ -3521,6 +3560,9 @@ def generate_email_with_user_template(company_data, research_data, user_template
             elif 'recon' in sales_item or '재무' in sales_item:
                 services_to_generate = ['finance_professional', 'finance_curiosity']
                 logger.info(f"[사용자문안] Recon(재무자동화) 서비스 문안만 생성: {company_name}")
+            elif 'prism' in sales_item or '프리즘' in sales_item:
+                services_to_generate = ['prism_professional', 'prism_curiosity']
+                logger.info(f"[사용자문안] Prism(매출 마감 자동화) 서비스 문안만 생성: {company_name}")
             else:
                 # 알 수 없는 sales_item인 경우
                 if is_self_hosted:
@@ -3622,6 +3664,12 @@ def generate_email_with_user_template(company_data, research_data, user_template
     "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }},
   "finance_curiosity": {{
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }},
+  "prism_professional": {{
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+  }},
+  "prism_curiosity": {{
     "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
   }}
 }}
