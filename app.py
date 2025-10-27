@@ -4670,8 +4670,9 @@ def research_company():
         return jsonify({'error': f'서버 오류: {str(e)}'}), 500
 
 @app.route('/api/generate-emails', methods=['POST'])
+@login_required
 def generate_emails():
-    """메일 문안 생성 API"""
+    """메일 문안 생성 API (로그인 필요)"""
     try:
         data = request.json
         company_data = data.get('company_data', {})
@@ -4933,8 +4934,9 @@ def batch_process():
         return jsonify({'error': f'일괄 처리 오류: {str(e)}'}), 500
 
 @app.route('/api/refine-email', methods=['POST'])
+@login_required
 def refine_email():
-    """이메일 문안 개선"""
+    """이메일 문안 개선 (로그인 필요)"""
     try:
         data = request.json
         current_email = data.get('current_email', '')
@@ -5236,9 +5238,10 @@ def get_blog_content_for_email():
         return ""
 
 @app.route('/api/chat-reply', methods=['POST'])
+@login_required
 def chat_reply():
     """
-    자유로운 챗봇 - 고객 답변/반박에 대한 재설득 메일 생성
+    자유로운 챗봇 - 고객 답변/반박에 대한 재설득 메일 생성 (로그인 필요)
     
     사용 사례:
     1. 고객의 부정적 답변에 대한 반박 메일
