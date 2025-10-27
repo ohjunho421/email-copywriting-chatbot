@@ -2280,7 +2280,7 @@ PG사별 정산 관리 업무도 콘솔에서 통합 관리하여 월 수십 시
 
 
 **명함 정보: 반드시 다음 서명으로 끝내기:**
-오준호 Junho Oh
+{user_name}
 Sales team
 Sales Manager
 E ocean@portone.io
@@ -2659,7 +2659,7 @@ https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브
 미팅을 통해 저희가 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.
 다음 주 중 편하신 시간을 알려주시면 감사하겠습니다.
 
-오준호 Junho Oh
+{user_name}
 Sales team
 Sales Manager
 E ocean@portone.io
@@ -2669,7 +2669,7 @@ https://www.portone.io'''
             },
             'opi_curiosity': {
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
-                'body': f'''{personalized_greeting} PortOne 오준호입니다.
+                'body': f'''{personalized_greeting} PortOne {user_name}입니다.
 
 혹시 대표님께서도 단일 PG사 종속으로 인한 리스크관리,
 여러 PG사 연동 시 발생하는 개발/유지보수 부담에 대한 고민을 하고계신가요?
@@ -2685,7 +2685,7 @@ https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브
 미팅을 통해 저희가 어떻게 기여할 수 있을지 깊이 있는 대화를 나누고 싶습니다.
 다음 주 중 편하신 시간을 알려주시면 감사하겠습니다.
 
-오준호 Junho Oh
+{user_name}
 Sales team
 Sales Manager
 E ocean@portone.io
@@ -2695,7 +2695,7 @@ https://www.portone.io'''
             },
             'finance_professional': {
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
-                'body': f'''{personalized_greeting} PortOne 오준호 매니저입니다.
+                'body': f'''{personalized_greeting} {user_company_nickname}입니다.
 
 현재 카페24와 같은 호스팅사를 통해 성공적으로 온라인 비즈니스를 운영하고 계시는데
 네이버페이, 쿠팡 등 오픈마켓에서 들어오는 매출과 실제 입금액이 맞는지 확인하는
@@ -2714,19 +2714,18 @@ https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브
 다음 주 중 편하신 시간 회신부탁드립니다.
 
 감사합니다.
-오준호 드림
+{user_name} 드림
 
-오준호 Junho Oh
+{user_name}
 Sales team
 Sales Manager
-E ocean@portone.io
-M 010 5001 2143
+M {user_phone}
 서울시 성동구 성수이로 20길 16 JK타워 4층
 https://www.portone.io'''
             },
             'finance_curiosity': {
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
-                'body': f'''{personalized_greeting} PortOne 오준호 매니저입니다.
+                'body': f'''{personalized_greeting} {user_company_nickname}입니다.
 
 우연히 {company_name}의 온라인 스토어를 방문했다가, 깊은 인상을 받았습니다.
 이렇게 훌륭한 제품을 만드시는 만큼, 사업도 빠르게 성장하고 있으리라 생각합니다.
@@ -2743,9 +2742,9 @@ https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브
 긍정적일 회신 부탁드립니다.
 
 감사합니다.
-오준호 드림
+{user_name} 드림
 
-오준호 Junho Oh
+{user_name}
 Sales team
 Sales Manager
 E ocean@portone.io
@@ -2755,7 +2754,7 @@ https://www.portone.io'''
             },
             'game_d2c_professional': {
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
-                'body': f'''{personalized_greeting} PortOne 오준호입니다.
+                'body': f'''{personalized_greeting} PortOne {user_name}입니다.
 
 혹시 애플 앱스토어와 구글 플레이스토어의 30% 인앱결제 수수료 때문에 고민이 많으시지 않나요?
 최근 Com2uS, Neptune 등 국내 주요 게임사들도 D2C 웹상점으로 수수료 부담을 대폭 줄이고 있습니다.
@@ -2768,7 +2767,7 @@ https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브
 
 다음 주 중 편하신 시간을 알려주시면, {company_name}에 최적화된 방안을 제안드리겠습니다.
 
-오준호 Junho Oh
+{user_name}
 Sales team
 Sales Manager
 E ocean@portone.io
@@ -2778,7 +2777,7 @@ https://www.portone.io'''
             },
             'game_d2c_curiosity': {
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
-                'body': f'''{personalized_greeting} PortOne 오준호입니다.
+                'body': f'''{personalized_greeting} PortOne {user_name}입니다.
 
 최근 많은 게임사들이 인앱결제 수수료 절감을 위해 D2C 웹상점을 구축하지만,
 막상 직접 구축하려다 보니 국내 25개 PG사 개별 연동, 정산 관리, 수수료 최적화 등이 부담스러우실 것 같습니다.
@@ -2792,7 +2791,7 @@ https://www.youtube.com/watch?v=2EjzX6uTlKc 간단한 서비스 소개 유튜브
 15분만 시간을 내어주시면, 어떻게 가능한지 보여드리겠습니다.
 다음 주 중 편하신 시간을 알려주시면 감사하겠습니다.
 
-오준호 Junho Oh
+{user_name}
 Sales team
 Sales Manager
 E ocean@portone.io
@@ -2898,7 +2897,7 @@ def generate_email_with_gemini(company_data, research_data):
     try:
         # 사용자 정보 (서명용) - current_user 안전 체크
         user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne 오준호 매니저"
+        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "{user_company_nickname}"
         user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
         
         # 디버깅: 사용자 정보 로그
@@ -3197,12 +3196,12 @@ def generate_email_with_gemini(company_data, research_data):
 **고정 결론 형식 (필수!):**
 "⚠️  **반드시** 아래 CTA(행동 촉구)를 포함하세요. CTA가 없으면 이메일이 완성되지 않은 것입니다!"
 
-"<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
+"<br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>{user_name} 드림"
 
 ‼️ **CTA 필수 포함 요구사항:**
 - 위의 "다음주 중 편하신 일정을 알려주시면" CTA는 **반드시** 포함해야 합니다
 - 이 CTA가 빠지면 이메일이 불완전하게 됩니다
-- 서명("감사합니다. 오준호 드림") 앞에 반드시 CTA를 배치하세요
+- 서명("감사합니다. {user_name} 드림") 앞에 반드시 CTA를 배치하세요
 
 **이메일 유형 (요청된 서비스에 따라 선택적 생성):**
 
@@ -3309,22 +3308,22 @@ def generate_email_with_gemini(company_data, research_data):
 
 {{
   "opi_professional": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "opi_curiosity": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "finance_professional": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "finance_curiosity": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "prism_professional": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "prism_curiosity": {{
-    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }}
 }}
 """
@@ -3491,7 +3490,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
     try:
         # 사용자 정보 (서명용) - current_user 안전 체크
         user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne 오준호 매니저"
+        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "{user_company_nickname}"
         user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
         
         # 디버깅: 사용자 정보 로그
@@ -3652,7 +3651,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
    - 단어 선택이나 문체도 **최대한 원본 유지**
 
 3. **고정 결론 (⚠️ 필수!)**: 
-   "<br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>오준호 드림"
+   "<br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.<br><br>감사합니다.<br>{user_name} 드림"
    
    ‼️ **CTA는 반드시 포함해야 합니다!** "다음주 중 편하신 일정을 알려주시면..."이 빠지면 안 됩니다.
 
@@ -3669,22 +3668,22 @@ def generate_email_with_user_template(company_data, research_data, user_template
 
 {{
   "opi_professional": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "opi_curiosity": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "finance_professional": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "finance_curiosity": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "prism_professional": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "prism_curiosity": {{
-    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+    "body": "<p>안녕하세요, {{company_name}} {{email_name}}.<br>PortOne {user_name} 매니저입니다.<br><br>[뉴스 후킹 서론 2-3문장]<br><br>[사용자 문안 90% 그대로]</p><p><br>다음주 중 편하신 일정을 알려주시면 {{company_name}}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }}
 }}
 """
@@ -3869,7 +3868,7 @@ E. **"내부 검토가 더 필요합니다"**
 **필수 포함 요소:**
 
 1. **서론**: 이전 메일 감사 + 공감
-   "안녕하세요, {company_name} {email_name}.<br>PortOne 오준호입니다.<br><br>
+   "안녕하세요, {company_name} {email_name}.<br>PortOne {user_name}입니다.<br><br>
    바쁘신 와중에도 답변 주셔서 감사합니다."
 
 2. **본문**: 
@@ -3883,7 +3882,7 @@ E. **"내부 검토가 더 필요합니다"**
    구체적인 해결책을 보여드리고 싶습니다.<br>
    다음 주 중 15분만 시간 내주실 수 있을까요?<br>
    긍정적인 회신 부탁드립니다.<br><br>
-   감사합니다.<br>오준호 드림"
+   감사합니다.<br>{user_name} 드림"
 
 **톤앤매너:**
 - 절대 강압적이거나 공격적이지 않게
@@ -3986,7 +3985,7 @@ def validate_and_fix_cta(email_body, company_name):
     # 표준 CTA 템플릿
     standard_cta = f"""<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p>
 
-<p>감사합니다.<br>오준호 드림</p>"""
+<p>감사합니다.<br>{user_name} 드림</p>"""
     
     # 서명 패턴 찾기
     import re
@@ -4229,7 +4228,7 @@ def refine_email_with_user_request(original_subject, original_body, user_request
 **줄바꿈 예시 (본문):**
 ```html
 <p>안녕하세요, ABC회사 김철수 대표님.<br>
-PortOne 오준호 매니저입니다.</p>
+{user_company_nickname}입니다.</p>
 
 <p>최근 'ABC회사 시리즈 A 투자 유치' 소식을 봤습니다.<br>
 정말 축하드립니다!</p>
@@ -4418,7 +4417,7 @@ PortOne 영업팀
    ```
    📧 인사 (20-30단어)
    안녕하세요, [회사명] [담당자명]님.
-   PortOne 오준호 매니저입니다.
+   {user_company_nickname}입니다.
    
    📰 기사 기반 컨텍스트 (30-40단어)  
    최근 [회사명]의 [구체적 사업/제품]에 대한 소식을 접했습니다.
@@ -4475,10 +4474,10 @@ PortOne 영업팀
 18. 버튼/링크 스타일: CTA 버튼이나 링크의 HTML 스타일 변경 요청 처리
 
 **기본 서론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
-"<p>안녕하세요, [회사명] [담당자명].<br>PortOne 오준호 매니저입니다.</p>"
+"<p>안녕하세요, [회사명] [담당자명].<br>{user_company_nickname}입니다.</p>"
 
 **기본 결론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
-"<p><br>다음주 중 편하신 일정을 알려주시면 [회사명]의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>오준호 드림</p>"
+"<p><br>다음주 중 편하신 일정을 알려주시면 [회사명]의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
 
 **중요 주의사항:**
 - 사용자가 구체적으로 "제목을 이렇게 바꿔줘", "인사말을 이렇게 해줘", "마무리를 이렇게 해줘" 등의 요청을 했다면 반드시 그대로 적용
@@ -4532,7 +4531,7 @@ PortOne 영업팀
 **출력 형식:**
 ```html
 <p>안녕하세요, [회사명] [담당자명]님.<br>
-PortOne 오준호 매니저입니다.</p>
+{user_company_nickname}입니다.</p>
 
 <p>최근 [기사에서 발견한 구체적 사실]에 대한 소식을 접했습니다.<br>
 [구체적 수치/목표]는 정말 인상적이었습니다.</p>
@@ -4557,7 +4556,7 @@ PortOne 오준호 매니저입니다.</p>
 이야기 나누고 싶습니다.</p>
 
 <p>감사합니다.<br>
-오준호 드림</p>
+{user_name} 드림</p>
 ```
 
 ---
@@ -6042,7 +6041,7 @@ def generate_fallback_news_email(article_content, company_name, current_email, n
     return f"""제목: {company_name} 최신 업계 동향 대응 방안
 
 <p>안녕하세요, {company_name} 담당자님.<br>
-PortOne 오준호 매니저입니다.</p>
+{user_company_nickname}입니다.</p>
 
 <p>방금 전 "<strong>{title}</strong>" 관련 뉴스를 봤는데,<br>
 {current_date} 들어 이런 업계 변화가 가속화되고 있어<br>
@@ -6063,7 +6062,7 @@ PortOne 오준호 매니저입니다.</p>
 어떻게 즉시 도움을 드릴 수 있을지 구체적인 방안을 제안해드리겠습니다.</p>
 
 <p>감사합니다.<br>
-오준호 드림</p>
+{user_name} 드림</p>
 
 <p><small>참고 뉴스 (9월 17일 확인): <a href="{news_url}">{title}</a></small></p>"""
 
