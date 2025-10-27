@@ -3391,6 +3391,9 @@ def generate_email_with_gemini(company_data, research_data):
                         result = text.replace('{company_name}', company_name).replace('{email_name}', email_name)
                         if competitor_name:
                             result = result.replace('{competitor_name}', competitor_name)
+                        # 사용자 이름 동적 치환
+                        result = result.replace('오준호', user_name)
+                        result = result.replace('PortOne 오준호 매니저', f'PortOne {user_name} 매니저')
                         # 마크다운 변환 적용
                         result = convert_markdown_to_html(result)
                         return result
@@ -3734,6 +3737,9 @@ def generate_email_with_user_template(company_data, research_data, user_template
                     result = result.replace('{{company_name}}', company_name).replace('{{email_name}}', email_name)
                     if competitor_name:
                         result = result.replace('{competitor_name}', competitor_name).replace('{{competitor_name}}', competitor_name)
+                    # 사용자 이름 동적 치환
+                    result = result.replace('오준호', user_name)
+                    result = result.replace('PortOne 오준호 매니저', f'PortOne {user_name} 매니저')
                     # 마크다운 변환 적용
                     result = convert_markdown_to_html(result)
                     return result
@@ -4950,6 +4956,11 @@ def refine_email():
         # Gemini 2.5 Pro로 이메일 개선 요청
         refined_email = refine_email_with_gemini(current_email, refinement_request)
         
+        # 사용자 이름 동적 치환
+        user_name = current_user.name if current_user and current_user.is_authenticated else "오준호"
+        refined_email = refined_email.replace('오준호', user_name)
+        refined_email = refined_email.replace('PortOne 오준호 매니저', f'PortOne {user_name} 매니저')
+        
         return jsonify({
             'success': True,
             'refined_email': refined_email,
@@ -5300,6 +5311,12 @@ def chat_reply():
             email_name=email_name,
             case_examples=full_context
         )
+        
+        # 사용자 이름 동적 치환
+        if result.get('success') and result.get('email', {}).get('body'):
+            user_name = current_user.name if current_user and current_user.is_authenticated else "오준호"
+            result['email']['body'] = result['email']['body'].replace('오준호', user_name)
+            result['email']['body'] = result['email']['body'].replace('PortOne 오준호 매니저', f'PortOne {user_name} 매니저')
         
         if result.get('success'):
             logger.info(f"✅ {company_name} 재설득 메일 생성 완료")
