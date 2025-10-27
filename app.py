@@ -2695,7 +2695,7 @@ https://www.portone.io'''
             },
             'finance_professional': {
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
-                'body': f'''{personalized_greeting} {user_company_nickname}입니다.
+                'body': f'''{personalized_greeting} PortOne {user_name} 매니저입니다.
 
 현재 카페24와 같은 호스팅사를 통해 성공적으로 온라인 비즈니스를 운영하고 계시는데
 네이버페이, 쿠팡 등 오픈마켓에서 들어오는 매출과 실제 입금액이 맞는지 확인하는
@@ -2725,7 +2725,7 @@ https://www.portone.io'''
             },
             'finance_curiosity': {
                 'subject': f'[PortOne] {company_name} {contact_name if contact_name and contact_name != "담당자" else "담당자님"}께 전달 부탁드립니다',
-                'body': f'''{personalized_greeting} {user_company_nickname}입니다.
+                'body': f'''{personalized_greeting} PortOne {user_name} 매니저입니다.
 
 우연히 {company_name}의 온라인 스토어를 방문했다가, 깊은 인상을 받았습니다.
 이렇게 훌륭한 제품을 만드시는 만큼, 사업도 빠르게 성장하고 있으리라 생각합니다.
@@ -2897,11 +2897,11 @@ def generate_email_with_gemini(company_data, research_data):
     try:
         # 사용자 정보 (서명용) - current_user 안전 체크
         user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "{user_company_nickname}"
+        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
         user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
         
         # 디버깅: 사용자 정보 로그
-        logger.info(f"👤 이메일 생성자: {user_name} ({user_company_nickname})")
+        logger.info(f"👤 이메일 생성자: {user_name} (PortOne {user_name} 매니저)")
         if current_user and current_user.is_authenticated:
             logger.info(f"✅ 로그인 사용자 인증됨: {current_user.email}")
         else:
@@ -3490,11 +3490,11 @@ def generate_email_with_user_template(company_data, research_data, user_template
     try:
         # 사용자 정보 (서명용) - current_user 안전 체크
         user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "{user_company_nickname}"
+        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
         user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
         
         # 디버깅: 사용자 정보 로그
-        logger.info(f"👤 [사용자문안] 이메일 생성자: {user_name} ({user_company_nickname})")
+        logger.info(f"👤 [사용자문안] 이메일 생성자: {user_name} (PortOne {user_name} 매니저)")
         if current_user and current_user.is_authenticated:
             logger.info(f"✅ [사용자문안] 로그인 사용자 인증됨: {current_user.email}")
         else:
@@ -4228,7 +4228,7 @@ def refine_email_with_user_request(original_subject, original_body, user_request
 **줄바꿈 예시 (본문):**
 ```html
 <p>안녕하세요, ABC회사 김철수 대표님.<br>
-{user_company_nickname}입니다.</p>
+PortOne {user_name} 매니저입니다.</p>
 
 <p>최근 'ABC회사 시리즈 A 투자 유치' 소식을 봤습니다.<br>
 정말 축하드립니다!</p>
@@ -4417,7 +4417,7 @@ PortOne 영업팀
    ```
    📧 인사 (20-30단어)
    안녕하세요, [회사명] [담당자명]님.
-   {user_company_nickname}입니다.
+   PortOne {user_name} 매니저입니다.
    
    📰 기사 기반 컨텍스트 (30-40단어)  
    최근 [회사명]의 [구체적 사업/제품]에 대한 소식을 접했습니다.
@@ -4474,7 +4474,7 @@ PortOne 영업팀
 18. 버튼/링크 스타일: CTA 버튼이나 링크의 HTML 스타일 변경 요청 처리
 
 **기본 서론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
-"<p>안녕하세요, [회사명] [담당자명].<br>{user_company_nickname}입니다.</p>"
+"<p>안녕하세요, [회사명] [담당자명].<br>PortOne {user_name} 매니저입니다.</p>"
 
 **기본 결론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
 "<p><br>다음주 중 편하신 일정을 알려주시면 [회사명]의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
@@ -4531,7 +4531,7 @@ PortOne 영업팀
 **출력 형식:**
 ```html
 <p>안녕하세요, [회사명] [담당자명]님.<br>
-{user_company_nickname}입니다.</p>
+PortOne {user_name} 매니저입니다.</p>
 
 <p>최근 [기사에서 발견한 구체적 사실]에 대한 소식을 접했습니다.<br>
 [구체적 수치/목표]는 정말 인상적이었습니다.</p>
@@ -6041,7 +6041,7 @@ def generate_fallback_news_email(article_content, company_name, current_email, n
     return f"""제목: {company_name} 최신 업계 동향 대응 방안
 
 <p>안녕하세요, {company_name} 담당자님.<br>
-{user_company_nickname}입니다.</p>
+PortOne {user_name} 매니저입니다.</p>
 
 <p>방금 전 "<strong>{title}</strong>" 관련 뉴스를 봤는데,<br>
 {current_date} 들어 이런 업계 변화가 가속화되고 있어<br>
