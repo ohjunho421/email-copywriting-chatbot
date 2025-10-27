@@ -2901,6 +2901,13 @@ def generate_email_with_gemini(company_data, research_data):
         user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne 오준호 매니저"
         user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
         
+        # 디버깅: 사용자 정보 로그
+        logger.info(f"👤 이메일 생성자: {user_name} ({user_company_nickname})")
+        if current_user and current_user.is_authenticated:
+            logger.info(f"✅ 로그인 사용자 인증됨: {current_user.email}")
+        else:
+            logger.warning(f"⚠️  current_user 인증 안 됨 - 기본값 사용")
+        
         # 회사 정보 요약
         company_name = company_data.get('회사명', 'Unknown')
         
@@ -3486,6 +3493,13 @@ def generate_email_with_user_template(company_data, research_data, user_template
         user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
         user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne 오준호 매니저"
         user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
+        
+        # 디버깅: 사용자 정보 로그
+        logger.info(f"👤 [사용자문안] 이메일 생성자: {user_name} ({user_company_nickname})")
+        if current_user and current_user.is_authenticated:
+            logger.info(f"✅ [사용자문안] 로그인 사용자 인증됨: {current_user.email}")
+        else:
+            logger.warning(f"⚠️  [사용자문안] current_user 인증 안 됨 - 기본값 사용")
         
         company_name = company_data.get('회사명', 'Unknown')
         
