@@ -128,8 +128,19 @@ class EmailCopywritingChatbot {
         sendBtn.addEventListener('click', this.sendMessage.bind(this));
         
         // Enter 키 이벤트 (Shift+Enter: 줄바꿈, Enter: 전송)
+        // 한국어 IME 조합 중 상태 추적
+        let isComposing = false;
+        
+        userInput.addEventListener('compositionstart', () => {
+            isComposing = true;
+        });
+        
+        userInput.addEventListener('compositionend', () => {
+            isComposing = false;
+        });
+        
         userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && !isComposing) {
                 e.preventDefault(); // 기본 줄바꿈 방지
                 this.sendMessage();
             }
