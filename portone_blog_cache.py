@@ -495,7 +495,7 @@ def get_service_knowledge(service_type=''):
         try:
             with open('prism_service_info.txt', 'r', encoding='utf-8') as f:
                 service_doc = f.read()
-            knowledge += f"\n\n**📖 매출 마감 자동화 솔루션 (Prism) 서비스 소개:**\n\n"
+            knowledge += f"\n\n**📖 멀티 오픈마켓 정산 통합 솔루션 (Prism) 서비스 소개:**\n\n"
             knowledge += f"{service_doc[:3000]}...\n\n"  # 처음 3000자
             logger.info("✅ Prism 서비스 소개서 로드 완료")
         except:

@@ -3005,7 +3005,7 @@ def generate_email_with_gemini(company_data, research_data):
                 logger.info(f"Recon(재무자동화) 서비스 문안만 생성: {company_name}")
             elif 'prism' in sales_item or '프리즘' in sales_item:
                 services_to_generate = ['prism_professional', 'prism_curiosity']
-                logger.info(f"Prism(매출 마감 자동화) 서비스 문안만 생성: {company_name}")
+                logger.info(f"Prism(멀티 오픈마켓 정산 통합) 서비스 문안만 생성: {company_name}")
             else:
                 # 알 수 없는 sales_item인 경우
                 if is_self_hosted:
@@ -3130,7 +3130,7 @@ def generate_email_with_gemini(company_data, research_data):
             if 'opi' in services_to_generate[0]:
                 service_focus = "One Payment Infra (OPI) 서비스에 집중한 2개의"
             elif 'prism' in services_to_generate[0]:
-                service_focus = "매출 마감 자동화 솔루션 (Prism)에 집중한 2개의"
+                service_focus = "멀티 오픈마켓 정산 통합 솔루션 (Prism)에 집중한 2개의"
             else:
                 service_focus = "재무자동화 솔루션에 집중한 2개의"
         else:
@@ -3245,10 +3245,10 @@ def generate_email_with_gemini(company_data, research_data):
    - **Recon 핵심 가치 프로포지션 (반드시 포함)**: "{pg_count} PG사의 다른 데이터 형식도 자동으로 통합하고, ERP 연동으로 재무팀 업무를 90% 이상 줄여드릴 수 있습니다. 휴먼에러도 제거하고요"
    - "구체적으로 어떤 도움이 되는지 보여드릴까요?" 관심 유도
 
-5. **매출 마감 자동화 솔루션 (Prism) - 전문적 톤**: 
+5. **멀티 오픈마켓 정산 통합 솔루션 (Prism) - 전문적 톤**: 
 {prism_blog_content}
    - **필수**: 오픈마켓 확장/매출 증가 뉴스를 구체적으로 인용. 예: "'{company_name}가 쿠팡/11번가 입점 확대'라는 소식을 들었습니다"
-   - 다중 오픈마켓 운영 → 복잡한 정산 관리/현금흐름 파악 어려움 자연스럽게 연결
+   - 다중 오픈마켓 운영 → 각 플랫폼마다 다른 정산 기준과 데이터 형식으로 인한 복잡한 정산 관리/현금흐름 파악 어려움 자연스럽게 연결
    - **Prism 참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 채널/기능만 사용하세요
    - **핵심 Pain Point**: 각 오픈마켓의 정산기준/주기 차이, 반복적인 엑셀 작업, 미수금 관리 어려움, 데이터 누락/오류
    - **구체적 수치 활용**: "재무 마감 시간 **90% 이상 단축**" / "**100% 데이터 정합성** 확보"
@@ -3256,9 +3256,9 @@ def generate_email_with_gemini(company_data, research_data):
    - **경쟁사가 있다면**: "{competitor_name}도 다중 채널 운영 시<br>Prism으로 재무팀 업무를 90% 자동화했습니다"
    - **Prism 핵심 가치 프로포지션 (반드시 포함)**: "네이버 스마트스토어, 쿠팡, 카카오스타일 등 각 오픈마켓의 서로 다른 정산기준과 주기를 자동으로 통합하여, 정확한 현금흐름과 미수금을 실시간으로 파악하실 수 있습니다. 월 수십 시간의 반복적인 엑셀 작업을 자동화하고, 100% 데이터 정합성으로 휴먼에러를 제거합니다"
 
-6. **매출 마감 자동화 솔루션 (Prism) - 호기심 유발형**: 
+6. **멀티 오픈마켓 정산 통합 솔루션 (Prism) - 호기심 유발형**: 
 {prism_blog_content}
-   - **필수**: 구체적 뉴스로 시작하는 질문. 예: "'{company_name}의 2분기 매출 150% 증가' 소식을 봤는데, 다중 오픈마켓 정산 관리는 어떻게 하고 계신가요?"
+   - **필수**: 구체적 뉴스로 시작하는 질문. 예: "'{company_name}의 2분기 매출 150% 증가' 소식을 봤는데, 네이버/쿠팡/11번가 등 여러 오픈마켓의 서로 다른 정산 데이터는 어떻게 관리하고 계신가요?"
    - 채널 확장에 따른 재무 복잡성 증가 공감 표현
    - **구체적 수치 활용**: "이미 국내 3,000여개 기업이..." 같이 명확한 숫자로 신뢰도 제공
    - **핵심 Pain Point 공감**: "혹시 네이버/쿠팡/11번가 등 각 채널마다 정산 데이터 다운로드하고 엑셀로 수작업하시나요?"
@@ -3578,7 +3578,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
                 logger.info(f"[사용자문안] Recon(재무자동화) 서비스 문안만 생성: {company_name}")
             elif 'prism' in sales_item or '프리즘' in sales_item:
                 services_to_generate = ['prism_professional', 'prism_curiosity']
-                logger.info(f"[사용자문안] Prism(매출 마감 자동화) 서비스 문안만 생성: {company_name}")
+                logger.info(f"[사용자문안] Prism(멀티 오픈마켓 정산 통합) 서비스 문안만 생성: {company_name}")
             else:
                 # 알 수 없는 sales_item인 경우
                 if is_self_hosted:
@@ -4382,7 +4382,7 @@ PortOne 영업팀
 
 **제품별 정보:**
 - **OPI (One Payment Infra)**: 통합 결제 시스템, 2주 내 구축, 개발 리소스 85% 절감, 여러 PG사 통합 관리
-- **Prism**: 데이터 분석 및 인사이트 플랫폼, 실시간 비즈니스 인텔리전스, 거래 데이터 시각화 및 분석
+- **Prism**: 멀티 오픈마켓 정산 통합 관리, 네이버/쿠팡/11번가 등 각 플랫폼의 서로 다른 정산 데이터와 기준을 한 눈에 통합, 재무 마감 시간 90% 단축, 월 수십 시간의 엑셀 작업 자동화
 - **재무자동화**: 정산 데이터 자동화, 정산 프로세스 90% 시간 단축, 실시간 대시보드, 회계 시스템 연동
 - **Recon**: 거래 내역 자동 대사, 정산 오류 자동 감지 및 방지, 수작업 대사 시간 95% 절감
 
@@ -4458,9 +4458,9 @@ PortOne 영업팀
    - 여러 PG사 관리 → 스마트 라우팅으로 최적 결제 경로 자동 선택
    
    **Prism만 선택:**
-   - 거래 데이터 분석 필요 → Prism으로 실시간 비즈니스 인텔리전스 제공
-   - 의사결정 지원 필요 → 데이터 시각화 및 인사이트 자동 생성
-   - 성과 측정 어려움 → 맞춤형 대시보드로 KPI 실시간 추적
+   - 다중 오픈마켓 운영 → Prism으로 네이버/쿠팡/11번가 등 각 플랫폼의 서로 다른 정산 데이터를 한 눈에 통합
+   - 반복적인 엑셀 작업 → 월 수십 시간의 정산 데이터 다운로드 및 통합 작업을 자동화
+   - 정산 기준 차이 → 각 오픈마켓의 다른 정산 주기와 기준을 자동으로 정규화하여 현금흐름 실시간 파악
    
    **재무자동화만 선택:**
    - 정산 데이터 수작업 → 재무자동화로 정산 프로세스 90% 시간 단축
@@ -4478,9 +4478,9 @@ PortOne 영업팀
    - 종합 가치 제안 → 결제부터 정산까지 end-to-end 자동화
    
    **복수 제품 선택 시 (예: Prism + 재무자동화):**
-   - Pain Point 1 (데이터 분석) → Prism으로 거래 데이터 실시간 분석
+   - Pain Point 1 (멀티 채널 정산 관리) → Prism으로 네이버/쿠팡 등 각 플랫폼의 정산 데이터를 한 눈에 통합
    - Pain Point 2 (정산 자동화) → 재무자동화로 정산 프로세스 90% 단축
-   - 시너지 효과 → 분석 인사이트 기반 정산 최적화
+   - 시너지 효과 → 오픈마켓 정산 통합 + 재무 프로세스 자동화로 end-to-end 재무 관리
 
 4. **이메일 문안 구조 (Pain Point 중심)**:
 
@@ -5555,7 +5555,7 @@ def fallback_intent_classification(user_message):
             'reasoning': 'Keyword matching (fallback)'
         }
     
-    if any(keyword in message_lower for keyword in ['prism', '프리즘', '매출 마감', '마감 자동화', '데이터 분석']):
+    if any(keyword in message_lower for keyword in ['prism', '프리즘', '오픈마켓', '멀티채널', '다중채널', '정산 통합', '쿠팡', '11번가']):
         return {
             'intent': 'regenerate_with_sales_change',
             'parameters': {'sales_point': 'prism', 'company_name': None},
@@ -5671,7 +5671,7 @@ def smart_chat():
             product_name_map = {
                 'opi': 'OPI (One Payment Infra)',
                 'recon': 'Recon (재무자동화)',
-                'prism': 'Prism (매출 마감 자동화)',
+                'prism': 'Prism (멀티 오픈마켓 정산 통합)',
                 '인앱수수료절감': '게임 웹상점 (인앱수수료절감)'
             }
             product_display_name = product_name_map.get(sales_point, sales_point.upper())
@@ -5823,6 +5823,7 @@ def answer_general_question(question):
 **포트원 제품 정보:**
 - One Payment Infra (OPI): 결제 시스템 통합 관리, PG사 통합, 85% 리소스 절감
 - Recon (재무자동화): 커머스 재무 마감 자동화, 정산 관리
+- Prism (멀티 오픈마켓 정산 통합): 네이버/쿠팡/11번가 등 각 플랫폼의 서로 다른 정산 데이터를 한 눈에 통합, 재무 마감 시간 90% 단축
 - 인앱수수료절감: 게임 웹상점 구축, 인앱결제 수수료(30%) 회피
 
 **답변 형식:**
