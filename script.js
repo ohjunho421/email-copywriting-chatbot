@@ -14,6 +14,12 @@ class EmailCopywritingChatbot {
         this.isRefinementMode = false;
         this.currentRefinementTarget = null;
         this.userInputMode = 'request'; // 'template' 또는 'request'
+        this.sessionData = {  // 세션 데이터 저장
+            company_data: null,
+            research_data: null,
+            current_email: null,
+            all_results: []  // 모든 생성 결과
+        };
         this.initializeEventListeners();
         this.loadRequestHistory();
         this.portOneValueProps = {
@@ -326,6 +332,21 @@ class EmailCopywritingChatbot {
                 this.addBotMessage(`📈 처리 결과: ${result.total_processed}개 회사, ${processingTime}초 소요 (평균 ${(processingTime/totalCompanies).toFixed(1)}초/회사)`);
                 this.addBotMessage(`🔥 ${maxWorkers}개 병렬 처리로 ${Math.round((1 - 1/maxWorkers) * 100)}% 시간 단축 효과!`);
                 
+                // 세션 데이터 저장 (첫 번째 회사 데이터)
+                if (result.results && result.results.length > 0) {
+                    const firstResult = result.results[0];
+                    this.sessionData.company_data = companiesToProcess[0];
+                    this.sessionData.research_data = firstResult.research_data || {};
+                    this.sessionData.all_results = result.results;
+                    
+                    // 첫 번째 생성된 이메일 저장
+                    if (firstResult.variations) {
+                        this.sessionData.current_email = Object.values(firstResult.variations)[0];
+                    }
+                    
+                    console.log('✅ 세션 데이터 저장 완료');
+                }
+                
                 // 메일 생성 완료 후 텍스트박스 활성화
                 this.enableUserInput();
             } else {
@@ -342,32 +363,19 @@ class EmailCopywritingChatbot {
     }
 
     async handleChatReply(userMessage) {
-        // 자연어 메시지에서 회사명, 담당자, 상황 파싱
-        const parseInfo = this.parseUserRequest(userMessage);
-        
-        if (!parseInfo.companyName) {
-            this.addBotMessage('❌ 회사명을 찾을 수 없습니다. 예: "토스에서 비용이 부담된다고 했어"');
-            return;
-        }
-        
-        if (!parseInfo.context) {
-            this.addBotMessage('❌ 상황이나 고객 답변을 찾을 수 없습니다.');
-            return;
-        }
-        
+        // 새로운 스마트 챗봇 API 사용
         this.showLoading(true);
-        this.addBotMessage(`💬 ${parseInfo.companyName}님의 상황을 분석하여 재설득 메일을 생성하고 있습니다...`);
+        this.addBotMessage(`💬 요청을 분석하고 있습니다...`);
         
         try {
-            const response = await fetch('/api/chat-reply', {
+            const response = await fetch('/api/smart-chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    context: parseInfo.context,
-                    company_name: parseInfo.companyName,
-                    email_name: parseInfo.emailName || '담당자님'
+                    message: userMessage,
+                    session_data: this.sessionData  // 세션 데이터 전달
                 })
             });
             
@@ -378,26 +386,58 @@ class EmailCopywritingChatbot {
             const result = await response.json();
             
             if (result.success) {
-                this.displayChatReply(result.email, parseInfo.companyName);
-                this.addBotMessage(`✅ ${parseInfo.companyName}님을 위한 재설득 메일이 생성되었습니다!`);
+                // 의도에 따라 다른 표시
+                const intent = result.intent;
                 
-                // 전략 설명
-                if (result.email.strategy_used) {
-                    this.addBotMessage(`📋 사용된 전략: ${result.email.strategy_used}`);
-                }
+                this.addBotMessage(`✅ ${result.message}`);
                 
-                // 핵심 포인트
-                if (result.email.key_points && result.email.key_points.length > 0) {
-                    const points = result.email.key_points.map((p, i) => `${i+1}. ${p}`).join('<br>');
-                    this.addBotMessage(`🎯 핵심 포인트:<br>${points}`);
+                if (intent === 'regenerate_with_sales_change') {
+                    // 메일 재생성 결과 표시
+                    if (result.result && result.result.variations) {
+                        this.displayGeneratedEmails(result.result.variations, result.sales_point);
+                        // 세션 데이터 업데이트
+                        this.sessionData.current_email = Object.values(result.result.variations)[0];
+                    }
+                } else if (intent === 'change_tone' || intent === 'refine_content') {
+                    // 개선된 이메일 표시
+                    if (result.result) {
+                        this.displayRefinedEmail(result.result);
+                        // 세션 데이터 업데이트
+                        this.sessionData.current_email = result.result;
+                    }
+                } else if (intent === 'persuasive_reply') {
+                    // 재설득 메일 표시
+                    if (result.result && result.result.email) {
+                        this.displayChatReply(result.result.email, this.sessionData.company_data?.회사명 || '회사');
+                        
+                        // 전략 설명
+                        if (result.result.email.strategy_used) {
+                            this.addBotMessage(`📋 사용된 전략: ${result.result.email.strategy_used}`);
+                        }
+                        
+                        // 핵심 포인트
+                        if (result.result.email.key_points && result.result.email.key_points.length > 0) {
+                            const points = result.result.email.key_points.map((p, i) => `${i+1}. ${p}`).join('<br>');
+                            this.addBotMessage(`🎯 핵심 포인트:<br>${points}`);
+                        }
+                    }
+                } else if (intent === 'question') {
+                    // 질문 답변은 이미 message에 포함됨
+                    // 추가 처리 없음
                 }
             } else {
-                throw new Error(result.error || '알 수 없는 오류');
+                // 실패 시에도 message 표시
+                this.addBotMessage(`❌ ${result.message || result.error}`);
+                
+                // 의도 분류 결과 표시 (디버깅용)
+                if (result.intent) {
+                    this.addBotMessage(`💡 인식된 의도: ${result.intent}`);
+                }
             }
             
         } catch (error) {
-            this.addBotMessage('❌ 재설득 메일 생성 중 오류가 발생했습니다: ' + error.message);
-            this.addBotMessage('💡 백엔드 서버가 실행 중인지 확인해주세요 (python app.py)');
+            this.addBotMessage('❌ 챗봇 처리 중 오류가 발생했습니다: ' + error.message);
+            this.addBotMessage('💡 백엔드 서버가 실행 중인지 확인해주세요');
         } finally {
             this.showLoading(false);
         }
@@ -550,6 +590,119 @@ class EmailCopywritingChatbot {
                 <strong>본문:</strong>
                 <div class="p-3 bg-light rounded mt-1" id="chat-body-${companyName}">
                     ${email.body}
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(emailCard);
+        document.getElementById('templatesSection').style.display = 'block';
+        
+        // 스크롤 이동
+        emailCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    displayGeneratedEmails(variations, salesPoint) {
+        // 판매 상품 변경으로 재생성된 메일 표시
+        const container = document.getElementById('templatesContainer');
+        container.innerHTML = '';
+        
+        const salesPointLabel = {
+            'opi': 'One Payment Infra',
+            'recon': '재무자동화',
+            '인앱수수료절감': '게임 웹상점 (인앱수수료절감)'
+        }[salesPoint] || salesPoint;
+        
+        container.innerHTML = `
+            <div class="alert alert-success mb-3">
+                <i class="fas fa-check-circle"></i> <strong>${salesPointLabel}</strong> 제품으로 메일을 재생성했습니다!
+            </div>
+        `;
+        
+        // 각 variation 표시
+        Object.entries(variations).forEach(([key, email]) => {
+            const emailCard = document.createElement('div');
+            emailCard.className = 'email-template mb-3';
+            
+            const typeLabel = {
+                'opi_professional': 'OPI 전문적',
+                'opi_curiosity': 'OPI 호기심',
+                'finance_professional': '재무 전문적',
+                'finance_curiosity': '재무 호기심',
+                'game_d2c_professional': '게임 D2C 전문적',
+                'game_d2c_curiosity': '게임 D2C 호기심'
+            }[key] || key;
+            
+            emailCard.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="mb-1">
+                            <i class="fas fa-envelope text-primary"></i> ${typeLabel}
+                        </h5>
+                        <span class="badge bg-primary">재생성</span>
+                    </div>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary me-2" onclick="copyEmail('${key}')">
+                            <i class="fas fa-copy"></i> 복사
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <strong>제목:</strong>
+                    <div class="p-2 bg-light rounded mt-1" id="subject-${key}">
+                        ${email.subject}
+                    </div>
+                </div>
+                
+                <div>
+                    <strong>본문:</strong>
+                    <div class="p-3 bg-light rounded mt-1" style="word-break: keep-all; line-break: strict; line-height: 1.8;" id="body-${key}">
+                        ${convertMarkdownToHtml(email.body)}
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(emailCard);
+        });
+        
+        document.getElementById('templatesSection').style.display = 'block';
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    displayRefinedEmail(email) {
+        // 톤 변경 또는 개선된 메일 표시
+        const container = document.getElementById('templatesContainer');
+        container.innerHTML = '';
+        
+        const emailCard = document.createElement('div');
+        emailCard.className = 'email-template';
+        
+        emailCard.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h5 class="mb-1">
+                        <i class="fas fa-magic text-success"></i> 개선된 메일
+                    </h5>
+                    <span class="badge bg-success">개선 완료</span>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="copyRefinedEmail()">
+                        <i class="fas fa-copy"></i> 복사
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <strong>제목:</strong>
+                <div class="p-2 bg-light rounded mt-1" id="refined-subject">
+                    ${email.subject}
+                </div>
+            </div>
+            
+            <div>
+                <strong>본문:</strong>
+                <div class="p-3 bg-light rounded mt-1" style="word-break: keep-all; line-break: strict; line-height: 1.8;" id="refined-body">
+                    ${convertMarkdownToHtml(email.body)}
                 </div>
             </div>
         `;
@@ -3627,4 +3780,24 @@ function saveChatEmail(companyName) {
     
     saveEmailDraft(companyName, '챗봇 재설득 메일', subject, body);
     showToast('💾 재설득 메일이 저장되었습니다!', 'success');
+}
+
+// 개선된 메일 복사
+function copyRefinedEmail() {
+    const subject = document.getElementById('refined-subject')?.innerText;
+    const body = document.getElementById('refined-body')?.innerHTML;
+    
+    if (!subject || !body) {
+        showToast('❌ 복사할 내용이 없습니다.', 'danger');
+        return;
+    }
+    
+    const emailText = `제목: ${subject}\n\n본문:\n${body.replace(/<br>/g, '\n').replace(/<strong>/g, '').replace(/<\/strong>/g, '').replace(/<[^>]*>/g, '')}`;
+    
+    navigator.clipboard.writeText(emailText).then(() => {
+        showToast('📋 개선된 메일이 클립보드에 복사되었습니다!', 'success');
+    }).catch(err => {
+        console.error('복사 실패:', err);
+        showToast('❌ 복사 중 오류가 발생했습니다.', 'danger');
+    });
 }

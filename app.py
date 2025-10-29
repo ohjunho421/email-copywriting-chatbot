@@ -5332,6 +5332,394 @@ def chat_reply():
             'success': False
         }), 500
 
+def classify_user_intent(user_message):
+    """
+    사용자 요청의 의도를 Gemini를 사용하여 분류
+    
+    Returns:
+        dict: {
+            'intent': 요청 유형,
+            'parameters': 추출된 파라미터,
+            'confidence': 신뢰도
+        }
+    """
+    try:
+        logger.info(f"🔍 사용자 요청 분석: {user_message[:100]}...")
+        
+        prompt = f"""
+다음은 사용자의 이메일 챗봇 요청입니다. 요청의 의도를 분석하고 필요한 파라미터를 추출하세요.
+
+**사용자 요청:**
+{user_message}
+
+**가능한 요청 유형:**
+1. **regenerate_with_sales_change**: 판매 상품을 변경해서 메일 재생성
+   - 예: "OPI로 다시 써줘", "재무자동화 제품으로 바꿔줘", "recon 상품으로 변경"
+   - 파라미터: sales_point (opi, recon, 인앱수수료절감 중 하나)
+
+2. **change_tone**: 톤이나 스타일 변경
+   - 예: "더 친근하게", "전문적으로", "캐주얼하게", "공손하게"
+   - 파라미터: tone (casual, professional, friendly, formal)
+
+3. **refine_content**: 특정 부분 개선
+   - 예: "제목을 더 임팩트있게", "본문 짧게", "수치 강조해줘"
+   - 파라미터: refinement_request (구체적 요청사항)
+
+4. **persuasive_reply**: 고객 반박/부정 답변에 대한 재설득
+   - 예: "비용이 부담된다고 했어", "지금은 바빠서 어렵대"
+   - 파라미터: customer_response (고객 답변)
+
+5. **question**: 일반 질문이나 정보 요청
+   - 예: "포트원이 뭐야?", "OPI가 뭔지 설명해줘"
+
+6. **other**: 기타 요청
+
+**회사명 추출:**
+- 회사명이 언급되면 추출 (예: "토스", "쿠팡", "네이버" 등)
+
+**JSON 형식으로만 응답:**
+{{
+  "intent": "요청 유형 (위 6가지 중 하나)",
+  "parameters": {{
+    "sales_point": "opi/recon/인앱수수료절감/null",
+    "tone": "톤 설명 또는 null",
+    "refinement_request": "개선 요청사항 또는 null",
+    "customer_response": "고객 답변 또는 null",
+    "company_name": "회사명 또는 null"
+  }},
+  "confidence": 0.0-1.0,
+  "reasoning": "판단 근거 간단히"
+}}
+"""
+
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        response = model.generate_content(prompt)
+        
+        if not response or not response.text:
+            raise Exception("Gemini API 응답이 비어있습니다")
+        
+        # JSON 파싱
+        import re
+        response_text = response.text.strip()
+        
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1)
+        elif '{' in response_text and '}' in response_text:
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            json_str = response_text[json_start:json_end]
+        else:
+            json_str = response_text
+        
+        intent_data = json.loads(json_str)
+        
+        logger.info(f"✅ 의도 분석 완료: {intent_data.get('intent')} (신뢰도: {intent_data.get('confidence')})")
+        logger.info(f"   추출된 파라미터: {intent_data.get('parameters')}")
+        
+        return intent_data
+        
+    except Exception as e:
+        logger.error(f"의도 분석 오류: {str(e)}")
+        # Fallback: 단순 키워드 매칭
+        return fallback_intent_classification(user_message)
+
+def fallback_intent_classification(user_message):
+    """
+    Gemini 실패 시 폴백: 단순 키워드 기반 의도 분류
+    """
+    message_lower = user_message.lower()
+    
+    # sales_point 변경 키워드
+    if any(keyword in message_lower for keyword in ['opi', 'one payment infra', '결제 인프라']):
+        return {
+            'intent': 'regenerate_with_sales_change',
+            'parameters': {'sales_point': 'opi', 'company_name': None},
+            'confidence': 0.7,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    if any(keyword in message_lower for keyword in ['recon', '재무자동화', '재무 자동화', '정산']):
+        return {
+            'intent': 'regenerate_with_sales_change',
+            'parameters': {'sales_point': 'recon', 'company_name': None},
+            'confidence': 0.7,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    if any(keyword in message_lower for keyword in ['인앱수수료', '게임', 'd2c', '웹상점']):
+        return {
+            'intent': 'regenerate_with_sales_change',
+            'parameters': {'sales_point': '인앱수수료절감', 'company_name': None},
+            'confidence': 0.7,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    # 톤 변경 키워드
+    if any(keyword in message_lower for keyword in ['친근', '캐주얼', '부드럽', '편하게']):
+        return {
+            'intent': 'change_tone',
+            'parameters': {'tone': 'friendly', 'company_name': None},
+            'confidence': 0.6,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    if any(keyword in message_lower for keyword in ['전문적', '프로페셔널', '공식적']):
+        return {
+            'intent': 'change_tone',
+            'parameters': {'tone': 'professional', 'company_name': None},
+            'confidence': 0.6,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    # 재설득 키워드
+    if any(keyword in message_lower for keyword in ['비용', '부담', '바빠', '거절', '안된다', '어렵다']):
+        return {
+            'intent': 'persuasive_reply',
+            'parameters': {'customer_response': user_message, 'company_name': None},
+            'confidence': 0.6,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    # 개선 요청 키워드
+    if any(keyword in message_lower for keyword in ['개선', '수정', '바꿔', '다시', '더', '짧게', '길게']):
+        return {
+            'intent': 'refine_content',
+            'parameters': {'refinement_request': user_message, 'company_name': None},
+            'confidence': 0.5,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    # 기본: 질문으로 분류
+    return {
+        'intent': 'question',
+        'parameters': {'company_name': None},
+        'confidence': 0.3,
+        'reasoning': 'Default fallback'
+    }
+
+@app.route('/api/smart-chat', methods=['POST'])
+@login_required
+def smart_chat():
+    """
+    통합 스마트 챗봇 - 다양한 사용자 요청을 이해하고 처리
+    
+    요청 유형:
+    - 메일 재생성 (sales_point 변경)
+    - 톤/스타일 변경
+    - 문안 개선
+    - 재설득 메일 생성
+    - 일반 질문
+    """
+    try:
+        data = request.json
+        user_message = data.get('message', '')
+        session_data = data.get('session_data', {})  # 이전 생성 결과 등
+        
+        if not user_message:
+            return jsonify({'error': '메시지를 입력해주세요'}), 400
+        
+        logger.info(f"💬 스마트 챗봇 요청: {user_message[:100]}...")
+        
+        # 1단계: 사용자 의도 파악
+        intent_result = classify_user_intent(user_message)
+        intent = intent_result.get('intent')
+        params = intent_result.get('parameters', {})
+        
+        logger.info(f"📊 분류 결과: {intent} (신뢰도: {intent_result.get('confidence')})")
+        
+        # 2단계: 의도에 따라 처리
+        if intent == 'regenerate_with_sales_change':
+            # 판매 상품 변경해서 메일 재생성
+            sales_point = params.get('sales_point')
+            company_data = session_data.get('company_data', {})
+            
+            if not company_data:
+                return jsonify({
+                    'success': False,
+                    'error': '이전 생성 데이터가 없습니다. 먼저 메일을 생성해주세요.',
+                    'intent': intent
+                }), 400
+            
+            # sales_point 변경
+            company_data['세일즈포인트'] = sales_point
+            logger.info(f"🔄 판매 상품 변경: {sales_point}")
+            
+            # 메일 재생성
+            # 기존 research_data 재사용
+            research_data = session_data.get('research_data', {})
+            
+            result = generate_email_with_gemini(company_data, research_data)
+            
+            return jsonify({
+                'success': True,
+                'intent': intent,
+                'message': f'✅ {sales_point.upper()} 제품으로 메일을 재생성했습니다!',
+                'result': result,
+                'sales_point': sales_point
+            })
+        
+        elif intent == 'change_tone':
+            # 톤 변경
+            tone = params.get('tone', '')
+            current_email = session_data.get('current_email', {})
+            
+            if not current_email:
+                return jsonify({
+                    'success': False,
+                    'error': '변경할 이메일이 없습니다.',
+                    'intent': intent
+                }), 400
+            
+            # 톤 변경 요청 생성
+            refinement_request = f"이메일의 톤을 {tone}으로 변경해주세요. 내용은 유지하되 톤만 조정합니다."
+            
+            # refine_email_with_user_request 사용
+            company_data = session_data.get('company_data', {})
+            refined = refine_email_with_user_request(
+                original_subject=current_email.get('subject', ''),
+                original_body=current_email.get('body', ''),
+                user_request=refinement_request,
+                company_data=company_data
+            )
+            
+            return jsonify({
+                'success': True,
+                'intent': intent,
+                'message': f'✅ 톤을 {tone}으로 변경했습니다!',
+                'result': refined
+            })
+        
+        elif intent == 'refine_content':
+            # 문안 개선
+            refinement_request = params.get('refinement_request', user_message)
+            current_email = session_data.get('current_email', {})
+            
+            if not current_email:
+                return jsonify({
+                    'success': False,
+                    'error': '개선할 이메일이 없습니다.',
+                    'intent': intent
+                }), 400
+            
+            company_data = session_data.get('company_data', {})
+            refined = refine_email_with_user_request(
+                original_subject=current_email.get('subject', ''),
+                original_body=current_email.get('body', ''),
+                user_request=refinement_request,
+                company_data=company_data
+            )
+            
+            return jsonify({
+                'success': True,
+                'intent': intent,
+                'message': '✅ 이메일을 개선했습니다!',
+                'result': refined
+            })
+        
+        elif intent == 'persuasive_reply':
+            # 재설득 메일 생성
+            company_name = params.get('company_name', session_data.get('company_data', {}).get('회사명', ''))
+            customer_response = params.get('customer_response', user_message)
+            email_name = session_data.get('company_data', {}).get('대표자명', '담당자님')
+            
+            if not company_name:
+                return jsonify({
+                    'success': False,
+                    'error': '회사명을 찾을 수 없습니다.',
+                    'intent': intent
+                }), 400
+            
+            # 포트원 블로그 콘텐츠 가져오기
+            blog_content = get_blog_content_for_email()
+            
+            # 케이스 스터디
+            from case_database import format_case_for_email
+            selected_case_ids = ['development_resource_saving', 'payment_failure_recovery']
+            case_details = "\n".join([format_case_for_email(case_id) for case_id in selected_case_ids])
+            full_context = case_details + blog_content
+            
+            result = generate_persuasive_reply(
+                context=customer_response,
+                company_name=company_name,
+                email_name=email_name,
+                case_examples=full_context
+            )
+            
+            # 사용자 이름 동적 치환
+            if result.get('success') and result.get('email', {}).get('body'):
+                user_name = current_user.name if current_user and current_user.is_authenticated else "오준호"
+                result['email']['body'] = result['email']['body'].replace('오준호', user_name)
+            
+            return jsonify({
+                'success': result.get('success'),
+                'intent': intent,
+                'message': '✅ 재설득 메일을 생성했습니다!' if result.get('success') else '❌ 생성 실패',
+                'result': result
+            })
+        
+        elif intent == 'question':
+            # 일반 질문 - Gemini로 답변 생성
+            answer = answer_general_question(user_message)
+            
+            return jsonify({
+                'success': True,
+                'intent': intent,
+                'message': answer,
+                'result': {'answer': answer}
+            })
+        
+        else:
+            # 기타 요청
+            return jsonify({
+                'success': False,
+                'intent': intent,
+                'message': '죄송합니다. 요청을 이해하지 못했습니다. 다시 설명해주시겠어요?',
+                'confidence': intent_result.get('confidence')
+            })
+    
+    except Exception as e:
+        logger.error(f"스마트 챗봇 오류: {str(e)}")
+        return jsonify({
+            'error': f'챗봇 오류: {str(e)}',
+            'success': False
+        }), 500
+
+def answer_general_question(question):
+    """
+    일반 질문에 대한 답변 생성
+    """
+    try:
+        prompt = f"""
+당신은 포트원(PortOne)의 제품 전문가입니다. 다음 질문에 친절하고 정확하게 답변하세요.
+
+**질문:** {question}
+
+**포트원 제품 정보:**
+- One Payment Infra (OPI): 결제 시스템 통합 관리, PG사 통합, 85% 리소스 절감
+- Recon (재무자동화): 커머스 재무 마감 자동화, 정산 관리
+- 인앱수수료절감: 게임 웹상점 구축, 인앱결제 수수료(30%) 회피
+
+**답변 형식:**
+- 간결하고 이해하기 쉽게 (3-5문장)
+- 구체적인 수치나 예시 포함
+- 친근하고 전문적인 톤
+
+답변만 작성하세요 (설명이나 추가 정보 없이):
+"""
+        
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        response = model.generate_content(prompt)
+        
+        if response and response.text:
+            return response.text.strip()
+        else:
+            return "죄송합니다. 답변을 생성하지 못했습니다."
+    
+    except Exception as e:
+        logger.error(f"질문 답변 생성 오류: {str(e)}")
+        return "죄송합니다. 일시적인 오류가 발생했습니다."
+
 @app.route('/api/scrape-blog-initial', methods=['POST'])
 def scrape_blog_initial():
     """
@@ -6312,10 +6700,12 @@ if __name__ == '__main__':
     logger.info("- POST /api/batch-process: 일괄 처리")
     logger.info("- POST /api/refine-email: 이메일 개선")
     logger.info("- POST /api/chat-reply: 재설득 메일 생성 (챗봇)")
+    logger.info("- POST /api/smart-chat: 통합 스마트 챗봇 (NEW! 🤖)")
+    logger.info("  → 판매 상품 변경, 톤 변경, 문안 개선, 재설득, 질문 답변")
     logger.info("- POST /api/analyze-news: 뉴스 기사 분석")
     logger.info("- POST /api/test-scraping: 뉴스 스크래핑 테스트")
-    logger.info("- POST /api/update-blog: 블로그 콘텐츠 업데이트 (NEW!)")
-    logger.info("- GET /api/blog-cache-status: 블로그 캐시 상태 확인 (NEW!)")
+    logger.info("- POST /api/update-blog: 블로그 콘텐츠 업데이트")
+    logger.info("- GET /api/blog-cache-status: 블로그 캐시 상태 확인")
     logger.info("- GET /api/health: 서비스 상태 확인")
     
     # Flask 서버 시작
