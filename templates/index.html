@@ -263,9 +263,14 @@
                 <small class="text-muted">개선 요청사항을 입력하고 "AI로 개선" 버튼을 클릭하세요</small>
             </div>
             <div class="d-flex gap-2 justify-content-between">
-                <button class="btn btn-info" onclick="aiRefineDraft()" id="aiRefineBtn">
-                    <i class="fas fa-magic"></i> AI로 개선
-                </button>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-info" onclick="aiRefineDraft()" id="aiRefineBtn">
+                        <i class="fas fa-magic"></i> AI로 개선
+                    </button>
+                    <button class="btn btn-warning" onclick="restoreOriginalDraft()" id="restoreOriginalBtn" style="display: none;">
+                        <i class="fas fa-undo"></i> 개선 전으로 되돌리기
+                    </button>
+                </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-secondary" onclick="closeEditModal()">
                         <i class="fas fa-times"></i> 취소

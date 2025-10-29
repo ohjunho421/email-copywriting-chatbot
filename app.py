@@ -4664,7 +4664,29 @@ PortOne {{user_name}} 매니저입니다.</p>
 - [ ] 솔루션에 해당 제품의 **구체적 수치** 포함
 - [ ] <ul><li> 태그로 솔루션 불릿 포인트 작성
 
-이제 개선된 이메일 **본문만** HTML 형식으로 출력하세요 (제목 없이):
+---
+
+### 🚨 출력 형식 (매우 중요 - 반드시 준수)
+
+**절대 금지사항:**
+- ❌ "핵심 개선 포인트는 다음과 같습니다" 같은 설명 텍스트
+- ❌ "개선된 이메일 문안:" 같은 제목이나 헤더
+- ❌ "제목: ~" 형식의 제목 생성
+- ❌ 개선 이유나 변경 사항 설명
+- ❌ 코드 블록(```) 또는 마크다운 형식
+- ❌ 그 외 어떠한 부가 설명이나 주석
+
+**반드시 출력:**
+- ✅ HTML 형식의 이메일 **본문만** 출력
+- ✅ <p>, <br>, <strong>, <ul>, <li> 등 HTML 태그 사용
+- ✅ 첫 줄부터 바로 "<p>안녕하세요..." 로 시작
+
+**출력 예시:**
+<p>안녕하세요, [회사명] [담당자명].<br>PortOne {{user_name}} 매니저입니다.</p>
+<p>최근 [내용]...</p>
+...
+
+이제 개선된 이메일 본문만 출력하세요 (다른 텍스트 없이):
 """
         
         # Gemini API 호출
@@ -5440,8 +5462,8 @@ def classify_user_intent(user_message):
 
 **가능한 요청 유형:**
 1. **regenerate_with_sales_change**: 판매 상품을 변경해서 메일 재생성
-   - 예: "OPI로 다시 써줘", "재무자동화 제품으로 바꿔줘", "recon 상품으로 변경"
-   - 파라미터: sales_point (opi, recon, 인앱수수료절감 중 하나)
+   - 예: "OPI로 다시 써줘", "재무자동화 제품으로 바꿔줘", "recon 상품으로 변경", "prism으로 소개해줘"
+   - 파라미터: sales_point (opi, recon, prism, 인앱수수료절감 중 하나)
 
 2. **change_tone**: 톤이나 스타일 변경
    - 예: "더 친근하게", "전문적으로", "캐주얼하게", "공손하게"
@@ -5467,7 +5489,7 @@ def classify_user_intent(user_message):
 {{
   "intent": "요청 유형 (위 6가지 중 하나)",
   "parameters": {{
-    "sales_point": "opi/recon/인앱수수료절감/null",
+    "sales_point": "opi/recon/prism/인앱수수료절감/null",
     "tone": "톤 설명 또는 null",
     "refinement_request": "개선 요청사항 또는 null",
     "customer_response": "고객 답변 또는 null",
@@ -5529,6 +5551,14 @@ def fallback_intent_classification(user_message):
         return {
             'intent': 'regenerate_with_sales_change',
             'parameters': {'sales_point': 'recon', 'company_name': None},
+            'confidence': 0.7,
+            'reasoning': 'Keyword matching (fallback)'
+        }
+    
+    if any(keyword in message_lower for keyword in ['prism', '프리즘', '매출 마감', '마감 자동화', '데이터 분석']):
+        return {
+            'intent': 'regenerate_with_sales_change',
+            'parameters': {'sales_point': 'prism', 'company_name': None},
             'confidence': 0.7,
             'reasoning': 'Keyword matching (fallback)'
         }
@@ -5627,9 +5657,9 @@ def smart_chat():
                     'intent': intent
                 }), 400
             
-            # sales_point 변경
-            company_data['세일즈포인트'] = sales_point
-            logger.info(f"🔄 판매 상품 변경: {sales_point}")
+            # sales_item 필드 업데이트 (CSV의 sales_item 컬럼)
+            company_data['sales_item'] = sales_point
+            logger.info(f"🔄 판매 상품 변경: {sales_point} (company_data['sales_item'] 업데이트)")
             
             # 메일 재생성
             # 기존 research_data 재사용
@@ -5637,10 +5667,19 @@ def smart_chat():
             
             result = generate_email_with_gemini(company_data, research_data)
             
+            # 제품명 표시 개선
+            product_name_map = {
+                'opi': 'OPI (One Payment Infra)',
+                'recon': 'Recon (재무자동화)',
+                'prism': 'Prism (매출 마감 자동화)',
+                '인앱수수료절감': '게임 웹상점 (인앱수수료절감)'
+            }
+            product_display_name = product_name_map.get(sales_point, sales_point.upper())
+            
             return jsonify({
                 'success': True,
                 'intent': intent,
-                'message': f'✅ {sales_point.upper()} 제품으로 메일을 재생성했습니다!',
+                'message': f'✅ {product_display_name} 제품으로 메일을 재생성했습니다!',
                 'result': result,
                 'sales_point': sales_point
             })

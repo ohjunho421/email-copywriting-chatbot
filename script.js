@@ -3214,7 +3214,9 @@ function closeEditModal() {
     document.getElementById('editModal').classList.remove('active');
     document.getElementById('aiRefinementRequest').value = ''; // 개선 요청 필드 초기화
     document.getElementById('aiRefineLoading').style.display = 'none'; // 로딩 숨김
+    document.getElementById('restoreOriginalBtn').style.display = 'none'; // 되돌리기 버튼 숨김
     currentEditingDraftId = null;
+    originalDraftBeforeRefinement = null; // 원본 데이터 초기화
 }
 
 // 모달 외부 클릭 시 닫기
@@ -3254,6 +3256,9 @@ function saveEditedDraft() {
     showToast('✅ 문안이 수정되었습니다!', 'success');
 }
 
+// 개선 전 원본 저장용 변수
+let originalDraftBeforeRefinement = null;
+
 // AI로 저장된 문안 개선
 async function aiRefineDraft() {
     if (!currentEditingDraftId) return;
@@ -3264,6 +3269,14 @@ async function aiRefineDraft() {
     if (!refinementRequest) {
         showToast('개선 요청사항을 입력해주세요.', 'error');
         return;
+    }
+    
+    // 개선 전 원본 저장 (처음 개선 시에만)
+    if (!originalDraftBeforeRefinement) {
+        originalDraftBeforeRefinement = {
+            subject: document.getElementById('editSubject').value,
+            body: currentBody
+        };
     }
     
     // 로딩 표시
@@ -3296,6 +3309,9 @@ async function aiRefineDraft() {
             // 개선 요청 필드 초기화
             document.getElementById('aiRefinementRequest').value = '';
             
+            // 되돌리기 버튼 표시
+            document.getElementById('restoreOriginalBtn').style.display = 'inline-block';
+            
             showToast('✅ AI가 문안을 개선했습니다!', 'success');
         } else {
             throw new Error(result.error || '개선 실패');
@@ -3308,6 +3324,26 @@ async function aiRefineDraft() {
         document.getElementById('aiRefineLoading').style.display = 'none';
         document.getElementById('aiRefineBtn').disabled = false;
     }
+}
+
+// 개선 전 문안으로 되돌리기
+function restoreOriginalDraft() {
+    if (!originalDraftBeforeRefinement) {
+        showToast('되돌릴 원본이 없습니다.', 'error');
+        return;
+    }
+    
+    // 원본으로 복원
+    document.getElementById('editSubject').value = originalDraftBeforeRefinement.subject;
+    document.getElementById('editBody').value = originalDraftBeforeRefinement.body;
+    
+    // 원본 데이터 초기화
+    originalDraftBeforeRefinement = null;
+    
+    // 되돌리기 버튼 숨김
+    document.getElementById('restoreOriginalBtn').style.display = 'none';
+    
+    showToast('✅ 개선 전 문안으로 되돌렸습니다!', 'success');
 }
 
 // ESC 키로 모달 닫기
