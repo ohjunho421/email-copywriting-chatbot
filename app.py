@@ -4423,7 +4423,7 @@ PortOne 영업팀
    ```
    📧 인사 (20-30단어)
    안녕하세요, [회사명] [담당자명]님.
-   PortOne {user_name} 매니저입니다.
+   PortOne {{user_name}} 매니저입니다.
    
    📰 기사 기반 컨텍스트 (30-40단어)  
    최근 [회사명]의 [구체적 사업/제품]에 대한 소식을 접했습니다.
@@ -4480,10 +4480,10 @@ PortOne 영업팀
 18. 버튼/링크 스타일: CTA 버튼이나 링크의 HTML 스타일 변경 요청 처리
 
 **기본 서론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
-"<p>안녕하세요, [회사명] [담당자명].<br>PortOne {user_name} 매니저입니다.</p>"
+"<p>안녕하세요, [회사명] [담당자명].<br>PortOne {{user_name}} 매니저입니다.</p>"
 
 **기본 결론 형식 (사용자가 다른 요청을 하지 않은 경우만):**
-"<p><br>다음주 중 편하신 일정을 알려주시면 [회사명]의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+"<p><br>다음주 중 편하신 일정을 알려주시면 [회사명]의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{{user_name}} 드림</p>"
 
 **중요 주의사항:**
 - 사용자가 구체적으로 "제목을 이렇게 바꿔줘", "인사말을 이렇게 해줘", "마무리를 이렇게 해줘" 등의 요청을 했다면 반드시 그대로 적용
@@ -4537,7 +4537,7 @@ PortOne 영업팀
 **출력 형식:**
 ```html
 <p>안녕하세요, [회사명] [담당자명]님.<br>
-PortOne {user_name} 매니저입니다.</p>
+PortOne {{user_name}} 매니저입니다.</p>
 
 <p>최근 [기사에서 발견한 구체적 사실]에 대한 소식을 접했습니다.<br>
 [구체적 수치/목표]는 정말 인상적이었습니다.</p>
@@ -4562,7 +4562,7 @@ PortOne {user_name} 매니저입니다.</p>
 이야기 나누고 싶습니다.</p>
 
 <p>감사합니다.<br>
-{user_name} 드림</p>
+{{user_name}} 드림</p>
 ```
 
 ---
@@ -4958,6 +4958,7 @@ def refine_email():
         
         # 사용자 이름 동적 치환
         user_name = current_user.name if current_user and current_user.is_authenticated else "오준호"
+        refined_email = refined_email.replace('{user_name}', user_name)
         refined_email = refined_email.replace('오준호', user_name)
         refined_email = refined_email.replace('PortOne 오준호 매니저', f'PortOne {user_name} 매니저')
         
