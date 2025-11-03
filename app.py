@@ -2893,20 +2893,27 @@ https://www.portone.io'''
             return None
 
 
-def generate_email_with_gemini(company_data, research_data):
+def generate_email_with_gemini(company_data, research_data, user_info=None):
     """Gemini 2.5 Pro를 사용하여 개인화된 이메일 생성"""
     try:
-        # 사용자 정보 (서명용) - current_user 안전 체크
-        user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
-        user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
-        
-        # 디버깅: 사용자 정보 로그
-        logger.info(f"👤 이메일 생성자: {user_name} (PortOne {user_name} 매니저)")
-        if current_user and current_user.is_authenticated:
-            logger.info(f"✅ 로그인 사용자 인증됨: {current_user.email}")
+        # 사용자 정보 (서명용) - user_info 파라미터 우선, 없으면 current_user 체크
+        if user_info:
+            user_name = user_info.get('name', '오준호')
+            user_company_nickname = user_info.get('company_nickname', f'PortOne {user_name} 매니저')
+            user_phone = user_info.get('phone', '010-2580-2580')
+            logger.info(f"👤 이메일 생성자: {user_name} ({user_company_nickname})")
+            logger.info(f"✅ 전달받은 사용자 정보 사용: {user_info.get('email', 'N/A')}")
         else:
-            logger.warning(f"⚠️  current_user 인증 안 됨 - 기본값 사용")
+            user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
+            user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
+            user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
+            
+            # 디버깅: 사용자 정보 로그
+            logger.info(f"👤 이메일 생성자: {user_name} (PortOne {user_name} 매니저)")
+            if current_user and current_user.is_authenticated:
+                logger.info(f"✅ 로그인 사용자 인증됨: {current_user.email}")
+            else:
+                logger.warning(f"⚠️  current_user 인증 안 됨 - 기본값 사용")
         
         # 회사 정보 요약
         company_name = company_data.get('회사명', 'Unknown')
@@ -3525,22 +3532,32 @@ def generate_email_with_gemini(company_data, research_data):
             'timestamp': datetime.now().isoformat()
         }
 
-def generate_email_with_user_template(company_data, research_data, user_template, case_examples="", news_content=None):
+def generate_email_with_user_template(company_data, research_data, user_template, case_examples="", news_content=None, user_info=None):
     """
     사용자 제공 문안 기반 이메일 생성 (뉴스 후킹 서론 + 사용자 본문 90%)
+    
+    Args:
+        user_info: 로그인한 사용자 정보 (name, email, company_nickname, phone)
     """
     try:
-        # 사용자 정보 (서명용) - current_user 안전 체크
-        user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-        user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
-        user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
-        
-        # 디버깅: 사용자 정보 로그
-        logger.info(f"👤 [사용자문안] 이메일 생성자: {user_name} (PortOne {user_name} 매니저)")
-        if current_user and current_user.is_authenticated:
-            logger.info(f"✅ [사용자문안] 로그인 사용자 인증됨: {current_user.email}")
+        # 사용자 정보 (서명용) - user_info 파라미터 우선, 없으면 current_user 체크
+        if user_info:
+            user_name = user_info.get('name', '오준호')
+            user_company_nickname = user_info.get('company_nickname', f'PortOne {user_name} 매니저')
+            user_phone = user_info.get('phone', '010-2580-2580')
+            logger.info(f"👤 [사용자문안] 이메일 생성자: {user_name} ({user_company_nickname})")
+            logger.info(f"✅ [사용자문안] 전달받은 사용자 정보 사용: {user_info.get('email', 'N/A')}")
         else:
-            logger.warning(f"⚠️  [사용자문안] current_user 인증 안 됨 - 기본값 사용")
+            user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
+            user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
+            user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
+            
+            # 디버깅: 사용자 정보 로그
+            logger.info(f"👤 [사용자문안] 이메일 생성자: {user_name} (PortOne {user_name} 매니저)")
+            if current_user and current_user.is_authenticated:
+                logger.info(f"✅ [사용자문안] 로그인 사용자 인증됨: {current_user.email}")
+            else:
+                logger.warning(f"⚠️  [사용자문안] current_user 인증 안 됨 - 기본값 사용")
         
         company_name = company_data.get('회사명', 'Unknown')
         
@@ -4064,7 +4081,7 @@ def validate_and_fix_cta(email_body, company_name):
     
     return email_body
 
-def generate_email_with_gemini_and_cases(company_data, research_data, case_examples="", user_template=None, news_content=None, user_input_mode='template'):
+def generate_email_with_gemini_and_cases(company_data, research_data, case_examples="", user_template=None, news_content=None, user_input_mode='template', user_info=None):
     """
     Gemini를 사용하여 개인화된 이메일 생성 (실제 사례 포함 버전)
     
@@ -4075,6 +4092,7 @@ def generate_email_with_gemini_and_cases(company_data, research_data, case_examp
         user_template: 사용자 제공 문안 또는 요청사항 (옵션)
         news_content: 스크래핑된 뉴스 내용 (옵션)
         user_input_mode: 'request' (요청사항 모드) 또는 'template' (문안 모드)
+        user_info: 로그인한 사용자 정보 (name, email, company_nickname, phone)
     
     Returns:
         dict: 생성된 이메일 variations
@@ -4083,28 +4101,31 @@ def generate_email_with_gemini_and_cases(company_data, research_data, case_examp
     if user_template:
         if user_input_mode == 'request':
             logger.info(f"{company_data.get('회사명')}: 요청사항 모드 - 기본 생성 + 요청사항 반영")
-            return generate_email_with_user_request(company_data, research_data, user_template, case_examples, news_content)
+            return generate_email_with_user_request(company_data, research_data, user_template, case_examples, news_content, user_info)
         else:
             logger.info(f"{company_data.get('회사명')}: 문안 모드 - 뉴스 후킹 + 사용자 본문")
-            return generate_email_with_user_template(company_data, research_data, user_template, case_examples, news_content)
+            return generate_email_with_user_template(company_data, research_data, user_template, case_examples, news_content, user_info)
     
     # 사용자 입력이 없으면 기존 SSR 방식 (4개 생성 + 사례 포함)
     logger.info(f"{company_data.get('회사명')}: SSR 모드 - 4개 생성 + 사례 포함")
-    return generate_email_with_gemini(company_data, research_data)
+    return generate_email_with_gemini(company_data, research_data, user_info)
 
-def generate_email_with_user_request(company_data, research_data, user_request, case_examples="", news_content=None):
+def generate_email_with_user_request(company_data, research_data, user_request, case_examples="", news_content=None, user_info=None):
     """
     사용자 요청사항 기반 이메일 생성 (2단계)
     
     1단계: 기본 SSR 방식으로 4개 문안 생성 (Pain Point + 포트원 해결책 포함)
     2단계: 사용자 요청사항 반영해서 각 문안 개선
+    
+    Args:
+        user_info: 로그인한 사용자 정보 (name, email, company_nickname, phone)
     """
     try:
         company_name = company_data.get('회사명', 'Unknown')
         logger.info(f"{company_name}: 요청모드 1단계 - 기본 문안 생성 시작")
         
         # 1단계: 기본 SSR 모드로 문안 생성
-        base_result = generate_email_with_gemini(company_data, research_data)
+        base_result = generate_email_with_gemini(company_data, research_data, user_info)
         
         if not base_result.get('success'):
             logger.error(f"{company_name}: 기본 문안 생성 실패")
@@ -4857,11 +4878,14 @@ def generate_emails():
     except Exception as e:
         return jsonify({'error': f'메일 생성 오류: {str(e)}'}), 500
 
-def process_single_company(company, index, user_template=None, user_input_mode='template'):
+def process_single_company(company, index, user_template=None, user_input_mode='template', user_info=None):
     """
     단일 회사 처리 함수 (병렬 실행용) - SSR 최적화 버전
     
     뉴스 후킹 + SSR 적용 (4개 생성 → 최적 1개 추천) 또는 사용자 문안/요청사항 활용
+    
+    Args:
+        user_info: 로그인한 사용자 정보 (name, email, company_nickname, phone)
     """
     try:
         company_name = company.get('회사명', '')
@@ -4920,7 +4944,7 @@ def process_single_company(company, index, user_template=None, user_input_mode='
             
             # 2-2. Gemini API를 사용한 메일 생성 (뉴스 내용, 사례 정보, 사용자 문안/요청사항 포함)
             email_result = generate_email_with_gemini_and_cases(
-                company, research_result, case_examples, user_template=user_template, news_content=news_content, user_input_mode=user_input_mode
+                company, research_result, case_examples, user_template=user_template, news_content=news_content, user_input_mode=user_input_mode, user_info=user_info
             )
             
             # 2-3. SSR로 4개 이메일 평가 및 순위 매기기
@@ -4990,6 +5014,15 @@ def batch_process():
         user_template = data.get('user_template', None)  # 사용자 문안 또는 요청사항
         user_input_mode = data.get('user_input_mode', 'template')  # 'request' 또는 'template'
         
+        # 로그인한 사용자 정보 추출 (병렬 처리에서 사용하기 위해)
+        user_info = {
+            'name': current_user.name if current_user and current_user.is_authenticated else "오준호",
+            'email': current_user.email if current_user and current_user.is_authenticated else "ocean@portone.io",
+            'company_nickname': current_user.company_nickname if current_user and current_user.is_authenticated else "PortOne 오준호 매니저",
+            'phone': current_user.phone if current_user and current_user.is_authenticated else "010-2580-2580"
+        }
+        logger.info(f"📧 배치 처리 요청자: {user_info['name']} ({user_info['email']})")
+        
         if not companies:
             return jsonify({'error': '처리할 회사 데이터가 없습니다'}), 400
         
@@ -5013,9 +5046,9 @@ def batch_process():
         
         # ThreadPoolExecutor를 사용한 병렬 처리
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 각 회사에 대해 처리 작업 제출 (user_template, user_input_mode 전달)
+            # 각 회사에 대해 처리 작업 제출 (user_template, user_input_mode, user_info 전달)
             future_to_company = {
-                executor.submit(process_single_company, company, i, user_template, user_input_mode): (company, i)
+                executor.submit(process_single_company, company, i, user_template, user_input_mode, user_info): (company, i)
                 for i, company in enumerate(companies)
             }
             
