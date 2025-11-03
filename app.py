@@ -2905,7 +2905,7 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             logger.info(f"✅ 전달받은 사용자 정보 사용: {user_info.get('email', 'N/A')}")
         else:
             user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-            user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
+            user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else f"PortOne {user_name} 매니저"
             user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
             
             # 디버깅: 사용자 정보 로그
@@ -3549,7 +3549,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
             logger.info(f"✅ [사용자문안] 전달받은 사용자 정보 사용: {user_info.get('email', 'N/A')}")
         else:
             user_name = current_user.name if (current_user and current_user.is_authenticated) else "오준호"
-            user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else "PortOne {user_name} 매니저"
+            user_company_nickname = current_user.company_nickname if (current_user and current_user.is_authenticated) else f"PortOne {user_name} 매니저"
             user_phone = current_user.phone if (current_user and current_user.is_authenticated) else "010-2580-2580"
             
             # 디버깅: 사용자 정보 로그
