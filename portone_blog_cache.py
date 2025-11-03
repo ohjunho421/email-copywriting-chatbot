@@ -501,6 +501,16 @@ def get_service_knowledge(service_type=''):
         except:
             logger.warning("⚠️ Prism 서비스 소개서 파일 없음")
     
+    elif service_type == 'PS':
+        try:
+            with open('ps_service_info.txt', 'r', encoding='utf-8') as f:
+                service_doc = f.read()
+            knowledge += f"\n\n**📖 플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행) 서비스 소개:**\n\n"
+            knowledge += f"{service_doc[:3500]}...\n\n"  # 처음 3500자
+            logger.info("✅ 플랫폼 정산(PS) 서비스 소개서 로드 완료")
+        except:
+            logger.warning("⚠️ 플랫폼 정산(PS) 서비스 소개서 파일 없음")
+    
     # 2. 블로그 전체 요약 (해당 카테고리)
     try:
         init_db()

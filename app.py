@@ -3007,6 +3007,9 @@ def generate_email_with_gemini(company_data, research_data):
             elif 'prism' in sales_item or '프리즘' in sales_item:
                 services_to_generate = ['prism_professional', 'prism_curiosity']
                 logger.info(f"Prism(멀티 오픈마켓 정산 통합) 서비스 문안만 생성: {company_name}")
+            elif 'ps' in sales_item or '플랫폼정산' in sales_item or '파트너정산' in sales_item:
+                services_to_generate = ['ps_professional', 'ps_curiosity']
+                logger.info(f"플랫폼 정산(파트너 정산+세금계산서+지급대행) 서비스 문안만 생성: {company_name}")
             else:
                 # 알 수 없는 sales_item인 경우
                 if is_self_hosted:
@@ -3052,6 +3055,12 @@ def generate_email_with_gemini(company_data, research_data):
         if any('prism' in s for s in services_to_generate):
             prism_blog_content = get_service_knowledge(service_type='Prism')
             logger.info(f"📚 [Prism] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
+        
+        # 플랫폼 정산(PS)용 통합 지식베이스 (PS 서비스 생성 시)
+        ps_blog_content = ""
+        if any('ps' in s for s in services_to_generate):
+            ps_blog_content = get_service_knowledge(service_type='PS')
+            logger.info(f"📚 [플랫폼 정산] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
@@ -3133,6 +3142,8 @@ def generate_email_with_gemini(company_data, research_data):
                 service_focus = "One Payment Infra (OPI) 서비스에 집중한 2개의"
             elif 'prism' in services_to_generate[0]:
                 service_focus = "멀티 오픈마켓 정산 통합 솔루션 (Prism)에 집중한 2개의"
+            elif 'ps' in services_to_generate[0]:
+                service_focus = "플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행)에 집중한 2개의"
             else:
                 service_focus = "재무자동화 솔루션에 집중한 2개의"
         else:
@@ -3270,6 +3281,25 @@ def generate_email_with_gemini(company_data, research_data):
    - **Prism 핵심 가치 프로포지션 (반드시 포함)**: "각 오픈마켓의 다른 정산 형식도 자동으로 통합하고, 현금흐름/미수금을 실시간 파악하여 재무팀 업무를 **90% 이상** 줄여드릴 수 있습니다"
    - "어떻게 월말 마감을 하루 만에 끝낼 수 있는지 보여드릴까요?" 관심 유도
 
+7. **플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행) - 전문적 톤**: 
+{ps_blog_content}
+   - **필수**: 플랫폼/마켓플레이스 확장 뉴스 인용. 예: "'{company_name}의 판매자 수 2배 증가'라는 소식을 봤는데, 파트너 정산 업무도 같이 늘어나셨을 것 같습니다"
+   - **핵심 Pain Point**: 매달 한 달 걸리는 파트너 정산 작업, 수기 정산금 계산 오류, 홈택스 세금계산서 발행의 복잡함, 제한적인 지급 시간(영업일만), 개인/프리랜서 지급 불가
+   - **구체적 수치 활용**: "**한 달 걸리던 정산을 이틀로 단축** (인프런 사례)", "**100,000건 이상 세금계산서 일괄 발행**", "**365일 24시간 지급**"
+   - **블로그 정보 활용**: 인프런 도입 사례 등 실제 고객 성과 언급
+   - **경쟁사가 있다면**: "{competitor_name}도 파트너 수 증가로 정산 자동화를 도입했습니다"
+   - **플랫폼 정산 핵심 가치 프로포지션 (반드시 포함)**: "파트너 정산금 자동 계산부터 세금계산서 일괄 발행, 365일 지급까지 하나의 플랫폼에서 완전 자동화합니다. 한 달 걸리던 정산 업무를 이틀로 단축하고, 개인/법인/프리랜서 구분 없이 모두 지급 가능하며, 주말과 공휴일에도 실시간 지급됩니다"
+
+8. **플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행) - 호기심 유발형**: 
+{ps_blog_content}
+   - **필수**: 구체적 상황으로 시작하는 질문. 예: "'{company_name}의 입점 파트너 3배 증가' 소식을 봤는데, 혹시 매달 정산하느라 월말마다 야근하고 계시진 않으신가요?"
+   - **핵심 Pain Point 공감**: "파트너별로 다른 수수료율 적용하고, 세금계산서 발행하고, 하나하나 송금하는 업무... 생각보다 시간이 많이 걸리죠"
+   - **구체적 수치 활용**: "인프런은 한 달 걸리던 정산을 이틀로 줄였습니다", "홈택스는 1,000건까지만 가능하지만 포트원은 100,000건도 일괄 발행"
+   - **블로그 정보 활용**: 실제 플랫폼 기업들의 정산 고민과 해결 사례
+   - **경쟁사가 있다면**: "{competitor_name}도 정산 자동화로 재무팀 리소스를 핵심 업무에 집중하고 있는데..." 호기심 자극
+   - **플랫폼 정산 핵심 가치 프로포지션 (반드시 포함)**: "정산금 계산-세금계산서-지급까지 원클릭으로 끝낼 수 있습니다. 주말에도 지급 가능하고, 개인 파트너에게도 바로 송금할 수 있어요"
+   - "실제로 어떻게 한 달 정산을 이틀로 줄였는지 보여드릴까요?" 관심 유도
+
 **구조 및 형식:**
 - 제목: 고정 형식 사용 ("[PortOne] {company_name} {email_name}께 전달 부탁드립니다") - 본문에 제목 포함하지 말것
 - 본문: 고정 서론 → Pain Point 제기(50-70단어) → 해결책 제시(50-70단어) → 경쟁사 사례/혜택(30-50단어) → 고정 결론
@@ -3326,6 +3356,12 @@ def generate_email_with_gemini(company_data, research_data):
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "prism_curiosity": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+  }},
+  "ps_professional": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+  }},
+  "ps_curiosity": {{
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }}
 }}
@@ -3582,6 +3618,9 @@ def generate_email_with_user_template(company_data, research_data, user_template
             elif 'prism' in sales_item or '프리즘' in sales_item:
                 services_to_generate = ['prism_professional', 'prism_curiosity']
                 logger.info(f"[사용자문안] Prism(멀티 오픈마켓 정산 통합) 서비스 문안만 생성: {company_name}")
+            elif 'ps' in sales_item or '플랫폼정산' in sales_item or '파트너정산' in sales_item:
+                services_to_generate = ['ps_professional', 'ps_curiosity']
+                logger.info(f"[사용자문안] 플랫폼 정산(파트너 정산+세금계산서+지급대행) 서비스 문안만 생성: {company_name}")
             else:
                 # 알 수 없는 sales_item인 경우
                 if is_self_hosted:
@@ -5306,6 +5345,11 @@ def scrape_portone_blog_initial():
         recon_url = 'https://blog.portone.io/?filter=%EB%A7%A4%EC%B6%9C%20%EB%A7%88%EA%B0%90'
         recon_posts = scrape_portone_blog_category(recon_url, 'Recon', max_pages=1)
         all_posts.extend(recon_posts)
+        
+        # 3. PS (플랫폼 정산) - 3페이지
+        ps_url = 'https://blog.portone.io/category/news/?filter=%ED%94%8C%EB%9E%AB%ED%8F%BC%20%EC%A0%95%EC%82%B0'
+        ps_posts = scrape_portone_blog_category(ps_url, 'PS', max_pages=3)
+        all_posts.extend(ps_posts)
         
         # 키워드 자동 추출
         logger.info("🔍 블로그 글 키워드 추출 중...")
