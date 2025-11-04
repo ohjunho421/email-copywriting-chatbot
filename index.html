@@ -210,14 +210,40 @@
                 transform: translateY(-20px);
             }
         }
+        /* 로고 스타일 */
+        .logo-main {
+            height: 48px;
+            margin-bottom: 20px;
+            opacity: 0;
+            animation: logoFadeIn 0.8s ease-out forwards;
+        }
+        .logo-nav {
+            height: 24px;
+            margin-right: 12px;
+            transition: transform 0.2s ease;
+        }
+        .logo-nav:hover {
+            transform: scale(1.05);
+        }
+        @keyframes logoFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 <body>
     <!-- 상단 헤더 -->
     <nav class="navbar navbar-light bg-light border-bottom mb-3">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h5">
-                <i class="fas fa-envelope-open-text text-primary"></i> PortOne 이메일 생성기
+            <span class="navbar-brand mb-0 h5 d-flex align-items-center">
+                <img src="/static/images/PortOne_Logo_Black.png" alt="PortOne Logo" class="logo-nav">
+                <span>이메일 생성기</span>
             </span>
             <div class="d-flex align-items-center gap-2">
                 <span class="text-muted">
@@ -310,7 +336,8 @@
         <div class="row">
             <div class="col-12">
                 <div class="text-center mb-4">
-                    <h1 class="display-6"><i class="fas fa-robot text-primary"></i> PortOne 메일 문안 생성 챗봇</h1>
+                    <img src="/static/images/PortOne_Logo_Black.png" alt="PortOne Logo" class="logo-main">
+                    <h1 class="display-6"><i class="fas fa-robot text-primary"></i> 메일 문안 생성 챗봇</h1>
                     <p class="lead text-muted">회사 데이터를 업로드하면 최신 정보를 바탕으로 개인화된 영업 메일 문안을 생성해드립니다</p>
                 </div>
             </div>
@@ -401,7 +428,10 @@
                     <div class="card-body p-0">
                         <div class="chat-container" id="chatContainer">
                             <div class="message bot-message">
-                                <strong>PortOne 메일 봇</strong><br>
+                                <div class="d-flex align-items-center mb-2">
+                                    <img src="/static/images/PortOne_Logo_Black.png" alt="PortOne" style="height: 20px; margin-right: 8px;">
+                                    <strong>메일 봇</strong>
+                                </div>
                                 안녕하세요! 👋<br><br>
                                 저는 PortOne의 One Payment Infra 제품을 위한 개인화된 영업 메일 문안을 생성해드리는 챗봇입니다.<br><br>
                                 <strong>사용 방법:</strong><br>
