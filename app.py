@@ -25,15 +25,19 @@ from case_database import select_relevant_cases, get_case_details, format_case_f
 # .env 파일 로드
 load_dotenv()
 
-# 로깅 설정 - 더 상세한 로그 출력
+# 로깅 설정 - API 키 노출 방지
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,  # DEBUG → INFO로 변경 (API 키 노출 방지)
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),  # 콘솔 출력
     ]
 )
 logger = logging.getLogger(__name__)
+
+# urllib3 DEBUG 로그 비활성화 (URL에 포함된 API 키 노출 방지)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.WARNING)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'portone-email-generation-secret-key-2025')
