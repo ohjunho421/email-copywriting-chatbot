@@ -753,36 +753,81 @@ class EmailCopywritingChatbot {
         
         if (!progressBar || !progressText) return;
         
+        // 회사당 평균 처리 시간 (초) - 병렬 처리 고려
+        const avgTimePerCompany = 15;
+        const maxWorkers = 3; // 동시 처리 개수
+        
+        // 예상 총 시간 계산 (병렬 처리 고려)
+        const estimatedTotalTime = Math.ceil(total / maxWorkers) * avgTimePerCompany;
+        
+        // 시작 시간 기록
+        const startTime = Date.now();
+        this.progressStartTime = startTime;
+        
         let progress = 0;
-        const increment = 100 / (total * 2); // 천천히 증가
         
         const interval = setInterval(() => {
-            progress += increment;
-            if (progress > 95) progress = 95; // 95%에서 멈춤
+            // 경과 시간 계산
+            const elapsedTime = (Date.now() - startTime) / 1000; // 초 단위
+            const remainingTime = Math.max(0, estimatedTotalTime - elapsedTime);
             
+            // 시간 기반 진행률 계산 (90%까지)
+            const timeBasedProgress = Math.min(90, (elapsedTime / estimatedTotalTime) * 90);
+            
+            // 부드러운 증가를 위해 현재 진행률에서 목표까지 점진적으로 이동
+            const targetProgress = timeBasedProgress;
+            const diff = targetProgress - progress;
+            progress += diff * 0.1; // 10%씩 따라가기
+            
+            // 진행률 업데이트
             progressBar.style.width = `${progress}%`;
-            progressText.textContent = `${Math.round(progress)}% 완료 중...`;
             
-            if (progress >= 95) {
-                clearInterval(interval);
-                progressText.textContent = '거의 완료...';
+            // 남은 시간 표시
+            const minutes = Math.floor(remainingTime / 60);
+            const seconds = Math.floor(remainingTime % 60);
+            
+            if (progress < 90) {
+                if (remainingTime > 60) {
+                    progressText.textContent = `${Math.round(progress)}% (약 ${minutes}분 ${seconds}초 남음)`;
+                } else if (remainingTime > 0) {
+                    progressText.textContent = `${Math.round(progress)}% (약 ${seconds}초 남음)`;
+                } else {
+                    progressText.textContent = `${Math.round(progress)}% (완료 중...)`;
+                }
+            } else {
+                progressText.textContent = `${Math.round(progress)}% (거의 완료...)`;
             }
-        }, 500);
+        }, 200); // 더 부드러운 업데이트 (200ms)
         
         // 인스턴스에 저장하여 나중에 정리할 수 있도록
         this.progressInterval = interval;
     }
 
     removeProgressIndicator() {
-        const progressElement = document.getElementById('progressIndicator');
-        if (progressElement) {
-            progressElement.remove();
+        // 진행률을 100%로 완료 표시
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        
+        if (progressBar && progressText) {
+            progressBar.style.width = '100%';
+            progressText.textContent = '100% 완료! ✅';
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-success');
         }
         
+        // 타이머 정리
         if (this.progressInterval) {
             clearInterval(this.progressInterval);
             this.progressInterval = null;
         }
+        
+        // 1초 후에 progress indicator 제거 (사용자가 100% 완료를 볼 수 있도록)
+        setTimeout(() => {
+            const progressElement = document.getElementById('progressIndicator');
+            if (progressElement) {
+                progressElement.remove();
+            }
+        }, 1500);
     }
 
     analyzeCompanyProfile(company) {
