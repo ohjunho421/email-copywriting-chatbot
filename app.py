@@ -71,10 +71,53 @@ from admin import admin_bp
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
 
-# 데이터베이스 테이블 생성
+# 데이터베이스 테이블 생성 및 마이그레이션
 with app.app_context():
     db.create_all()
     logger.info("✅ 데이터베이스 초기화 완료")
+    
+    # 신규 컬럼 추가 (마이그레이션)
+    try:
+        from sqlalchemy import text
+        
+        # name_en 컬럼 추가
+        try:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS name_en VARCHAR(100)'))
+            logger.info("✅ name_en 컬럼 추가 완료")
+        except Exception as e:
+            if 'already exists' not in str(e).lower():
+                logger.warning(f"name_en 컬럼 추가 건너뛰기: {e}")
+        
+        # email_signature 컬럼 추가
+        try:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_signature TEXT'))
+            logger.info("✅ email_signature 컬럼 추가 완료")
+        except Exception as e:
+            if 'already exists' not in str(e).lower():
+                logger.warning(f"email_signature 컬럼 추가 건너뛰기: {e}")
+        
+        # gmail_app_password 컬럼 추가
+        try:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS gmail_app_password VARCHAR(200)'))
+            logger.info("✅ gmail_app_password 컬럼 추가 완료")
+        except Exception as e:
+            if 'already exists' not in str(e).lower():
+                logger.warning(f"gmail_app_password 컬럼 추가 건너뛰기: {e}")
+        
+        db.session.commit()
+        logger.info("🔄 데이터베이스 마이그레이션 완료")
+        
+        # 기존 사용자들에게 서명 자동 생성
+        users = User.query.filter(User.email_signature.is_(None)).all()
+        if users:
+            for user in users:
+                user.email_signature = user.generate_email_signature()
+            db.session.commit()
+            logger.info(f"📝 {len(users)}명의 사용자 서명 자동 생성 완료")
+            
+    except Exception as e:
+        logger.error(f"❌ 마이그레이션 오류: {str(e)}")
+        db.session.rollback()
 
 # API 키 설정 (환경변수에서 가져오기)
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY', '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')
