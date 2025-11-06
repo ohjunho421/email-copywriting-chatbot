@@ -6920,8 +6920,8 @@ def send_email():
             msg.attach(html_part)
             
             try:
-                with smtplib.SMTP('smtp.gmail.com', 587) as server:
-                    server.starttls()
+                # Railway에서는 포트 587이 차단될 수 있으므로 SSL 포트 465 사용
+                with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30) as server:
                     server.login(from_email, gmail_app_password)
                     server.send_message(msg)
                 
