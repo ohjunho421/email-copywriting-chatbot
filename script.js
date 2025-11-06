@@ -1289,13 +1289,27 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                 <div class="row">
                     ${emailVariations.map((variation, vIndex) => `
                         <div class="col-md-${emailVariations.length === 1 ? '12' : '6'} mb-3">
-                            <div class="email-template ${variation.isRecommended ? 'border-success border-3' : ''}">
+                            <div class="email-template ${variation.isRecommended ? 'border-success border-3' : ''}" style="position: relative;">
+                                ${emailAddress ? `
+                                    <div class="form-check position-absolute" style="top: 10px; left: 10px; z-index: 10;">
+                                        <input class="form-check-input" type="checkbox" 
+                                               id="email_select_${index}_${vIndex}"
+                                               data-company-name="${result.company['회사명']}"
+                                               data-email="${emailAddress}"
+                                               data-subject="${variation.subject.replace(/"/g, '&quot;')}"
+                                               data-body="${variation.body.replace(/"/g, '&quot;').replace(/\n/g, '\\n')}"
+                                               onchange="updateSelectedCount()">
+                                        <label class="form-check-label" for="email_select_${index}_${vIndex}" style="font-size: 0.85em;">
+                                            발송 선택
+                                        </label>
+                                    </div>
+                                ` : ''}
                                 ${variation.isRecommended ? `
-                                    <div class="badge bg-success mb-2">
+                                    <div class="badge bg-success mb-2" style="margin-left: ${emailAddress ? '100px' : '0'};">
                                         <i class="fas fa-star"></i> AI 추천 (최적 메일)
                                     </div>
                                 ` : ''}
-                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="d-flex justify-content-between align-items-center mb-2" style="margin-left: ${emailAddress ? '100px' : '0'};">
                                     <h6 class="mb-0">
                                         <i class="fas fa-robot text-primary"></i> ${variation.type}
                                         ${variation.product ? `<br><small class="text-muted">${variation.product}</small>` : ''}
@@ -1321,13 +1335,28 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                     <button class="btn btn-sm btn-outline-primary ms-2" onclick="copySubjectFromTextarea(${index}, ${vIndex})">
                                         <i class="fas fa-copy"></i> 제목 복사
                                     </button>
+                                    <button class="btn btn-sm btn-outline-info ms-2" onclick="toggleEditMode(${index}, ${vIndex})">
+                                        <i class="fas fa-edit"></i> 수정
+                                    </button>
                                     <br>
-                                    <em>${variation.subject}</em>
+                                    <div id="subject_display_${index}_${vIndex}">
+                                        <em>${variation.subject}</em>
+                                    </div>
+                                    <textarea id="subject_edit_${index}_${vIndex}" class="form-control mt-2" style="display: none;">${variation.subject}</textarea>
                                 </div>
                                 <div class="mb-3">
                                     <strong>본문:</strong><br>
-                                    <div style="white-space: pre-line; word-break: keep-all; line-break: strict; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px; line-height: 1.8;">
+                                    <div id="body_display_${index}_${vIndex}" style="white-space: pre-line; word-break: keep-all; line-break: strict; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px; line-height: 1.8;">
                                         ${convertMarkdownToHtml(variation.body)}
+                                    </div>
+                                    <textarea id="body_edit_${index}_${vIndex}" class="form-control mt-2" rows="10" style="display: none;">${variation.body}</textarea>
+                                    <div id="edit_buttons_${index}_${vIndex}" class="mt-2" style="display: none;">
+                                        <button class="btn btn-sm btn-success" onclick="saveEditedEmail(${index}, ${vIndex})">
+                                            <i class="fas fa-save"></i> 저장
+                                        </button>
+                                        <button class="btn btn-sm btn-secondary" onclick="cancelEditMode(${index}, ${vIndex})">
+                                            <i class="fas fa-times"></i> 취소
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="d-flex gap-2 flex-wrap">
@@ -1384,8 +1413,24 @@ ${variation.body}
             </button>
         `;
         
+        // 일괄 발송 섹션 추가
+        const batchSendSection = document.createElement('div');
+        batchSendSection.className = 'text-center mt-3 mb-4 p-4 border rounded';
+        batchSendSection.style.backgroundColor = '#f0f8ff';
+        batchSendSection.innerHTML = `
+            <h5><i class="fas fa-paper-plane text-primary"></i> 이메일 일괄 발송</h5>
+            <p class="text-muted mb-3">
+                체크박스로 원하는 이메일 문안을 선택하고 일괄 발송하세요<br>
+                <span id="selectedEmailCount" class="badge bg-secondary">0개 선택됨</span>
+            </p>
+            <button id="batchSendButton" class="btn btn-primary btn-lg" onclick="batchSendEmails()" disabled>
+                <i class="fas fa-paper-plane"></i> 일괄 발송 (문안을 선택해주세요)
+            </button>
+        `;
+        
         // 컨테이너 맨 위에 추가
-        container.insertBefore(downloadSection, container.firstChild);
+        container.insertBefore(batchSendSection, container.firstChild);
+        container.insertBefore(downloadSection, batchSendSection.nextSibling);
     }
 
     downloadCSVWithEmails() {
@@ -3906,12 +3951,14 @@ function toggleEditMode(companyIndex, variationIndex) {
     const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
     const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
     const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
+    const editButtons = document.getElementById(`edit_buttons_${companyIndex}_${variationIndex}`);
     
-    const editBtn = document.getElementById(`edit_btn_${companyIndex}_${variationIndex}`);
-    const saveBtn = document.getElementById(`save_btn_${companyIndex}_${variationIndex}`);
-    const cancelBtn = document.getElementById(`cancel_btn_${companyIndex}_${variationIndex}`);
+    if (!subjectDisplay || !subjectEdit || !bodyDisplay || !bodyEdit || !editButtons) {
+        console.error('편집 모드 요소를 찾을 수 없습니다.');
+        return;
+    }
     
-    // 현재 내용을 백업 (취소를 위해)
+    // 처음 편집 모드 진입 시 백업 저장
     if (!bodyEdit.dataset.original) {
         bodyEdit.dataset.original = bodyEdit.value;
         subjectEdit.dataset.original = subjectEdit.value;
@@ -3922,10 +3969,7 @@ function toggleEditMode(companyIndex, variationIndex) {
     subjectEdit.style.display = 'block';
     bodyDisplay.style.display = 'none';
     bodyEdit.style.display = 'block';
-    
-    editBtn.style.display = 'none';
-    saveBtn.style.display = 'inline-block';
-    cancelBtn.style.display = 'inline-block';
+    editButtons.style.display = 'block';
     
     // 포커스
     subjectEdit.focus();
@@ -3941,10 +3985,7 @@ function cancelEditMode(companyIndex, variationIndex) {
     const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
     const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
     const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
-    
-    const editBtn = document.getElementById(`edit_btn_${companyIndex}_${variationIndex}`);
-    const saveBtn = document.getElementById(`save_btn_${companyIndex}_${variationIndex}`);
-    const cancelBtn = document.getElementById(`cancel_btn_${companyIndex}_${variationIndex}`);
+    const editButtons = document.getElementById(`edit_buttons_${companyIndex}_${variationIndex}`);
     
     // 원래 내용으로 복원
     if (bodyEdit.dataset.original) {
@@ -3957,10 +3998,7 @@ function cancelEditMode(companyIndex, variationIndex) {
     subjectEdit.style.display = 'none';
     bodyDisplay.style.display = 'block';
     bodyEdit.style.display = 'none';
-    
-    editBtn.style.display = 'inline-block';
-    saveBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
+    editButtons.style.display = 'none';
     
     console.log(`편집 모드 취소: Company ${companyIndex}, Variation ${variationIndex}`);
 }
@@ -3973,10 +4011,7 @@ function saveEditedEmail(companyIndex, variationIndex) {
     const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
     const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
     const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
-    
-    const editBtn = document.getElementById(`edit_btn_${companyIndex}_${variationIndex}`);
-    const saveBtn = document.getElementById(`save_btn_${companyIndex}_${variationIndex}`);
-    const cancelBtn = document.getElementById(`cancel_btn_${companyIndex}_${variationIndex}`);
+    const editButtons = document.getElementById(`edit_buttons_${companyIndex}_${variationIndex}`);
     
     // 수정된 내용 가져오기
     const newSubject = subjectEdit.value.trim();
@@ -3997,6 +4032,13 @@ function saveEditedEmail(companyIndex, variationIndex) {
         textarea.value = `제목: ${newSubject}\n\n${newBody}`;
     }
     
+    // 체크박스 데이터도 업데이트
+    const checkbox = document.getElementById(`email_select_${companyIndex}_${variationIndex}`);
+    if (checkbox) {
+        checkbox.dataset.subject = newSubject;
+        checkbox.dataset.body = newBody.replace(/\n/g, '\\n');
+    }
+    
     // 백업 업데이트
     bodyEdit.dataset.original = newBody;
     subjectEdit.dataset.original = newSubject;
@@ -4006,10 +4048,7 @@ function saveEditedEmail(companyIndex, variationIndex) {
     subjectEdit.style.display = 'none';
     bodyDisplay.style.display = 'block';
     bodyEdit.style.display = 'none';
-    
-    editBtn.style.display = 'inline-block';
-    saveBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
+    editButtons.style.display = 'none';
     
     showToast('✅ 이메일 문안이 저장되었습니다!', 'success');
     console.log(`이메일 저장 완료: Company ${companyIndex}, Variation ${variationIndex}`);
@@ -4021,9 +4060,23 @@ function saveEditedEmail(companyIndex, variationIndex) {
 function updateSelectedCount() {
     const checkboxes = document.querySelectorAll('input[id^="email_select_"]:checked');
     const button = document.getElementById('batchSendButton');
+    const countBadge = document.getElementById('selectedEmailCount');
     
+    const count = checkboxes.length;
+    
+    // 카운트 배지 업데이트
+    if (countBadge) {
+        if (count > 0) {
+            countBadge.textContent = `${count}개 선택됨`;
+            countBadge.className = 'badge bg-success';
+        } else {
+            countBadge.textContent = '0개 선택됨';
+            countBadge.className = 'badge bg-secondary';
+        }
+    }
+    
+    // 버튼 상태 업데이트
     if (button) {
-        const count = checkboxes.length;
         if (count > 0) {
             button.innerHTML = `<i class="fas fa-paper-plane"></i> 선택한 ${count}개 문안 일괄 발송`;
             button.disabled = false;
