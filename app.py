@@ -6818,6 +6818,159 @@ def serve_script():
     """script.js 정적 파일 제공"""
     return send_from_directory('.', 'script.js')
 
+@app.route('/api/send-email', methods=['POST'])
+@login_required
+def send_email():
+    """
+    이메일 발송 API
+    로그인된 사용자의 이메일을 발신자로 사용하고,
+    사용자의 서명을 본문 끝에 자동 추가합니다.
+    """
+    try:
+        data = request.json
+        to_email = data.get('to_email')
+        to_name = data.get('to_name')
+        subject = data.get('subject')
+        body = data.get('body')
+        
+        # 필수 필드 확인
+        if not all([to_email, subject, body]):
+            return jsonify({
+                'success': False,
+                'error': '필수 필드가 누락되었습니다.'
+            }), 400
+        
+        # 현재 로그인된 사용자 정보
+        from_email = current_user.email
+        from_name = current_user.name
+        user_signature = current_user.email_signature or ''  # 서명 가져오기
+        
+        logger.info(f"📧 이메일 발송 요청: {from_email} -> {to_email}")
+        logger.info(f"   제목: {subject}")
+        logger.info(f"   받는 사람: {to_name}")
+        
+        # 본문에 서명 추가
+        if user_signature:
+            # HTML 서명을 본문 끝에 추가
+            full_body = f"{body}<br><br>{user_signature}"
+            logger.info("✍️  사용자 서명 추가됨")
+        else:
+            full_body = body
+            logger.warning("⚠️  사용자 서명이 설정되지 않았습니다")
+        
+        # Gmail SMTP 발송 - 사용자별 Gmail 앱 비밀번호 사용
+        gmail_app_password = current_user.get_gmail_app_password()
+        
+        if gmail_app_password:
+            # 실제 Gmail SMTP 발송
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = f"{from_name} <{from_email}>"
+            msg['To'] = to_email
+            
+            # HTML 본문 추가
+            html_part = MIMEText(full_body, 'html', 'utf-8')
+            msg.attach(html_part)
+            
+            try:
+                with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                    server.starttls()
+                    server.login(from_email, gmail_app_password)
+                    server.send_message(msg)
+                
+                logger.info(f"✅ 이메일 발송 성공: {to_email}")
+                
+                return jsonify({
+                    'success': True,
+                    'message': '이메일이 성공적으로 발송되었습니다.',
+                    'from': from_email,
+                    'to': to_email,
+                    'signature_included': bool(user_signature)
+                })
+                
+            except Exception as smtp_error:
+                logger.error(f"❌ SMTP 발송 실패: {str(smtp_error)}")
+                return jsonify({
+                    'success': False,
+                    'error': f'Gmail SMTP 발송 실패: {str(smtp_error)}'
+                }), 500
+        else:
+            # Gmail 앱 비밀번호가 설정되지 않았으면 시뮬레이션
+            logger.warning(f"⚠️  {from_email} 사용자의 Gmail 앱 비밀번호가 설정되지 않아 시뮬레이션 모드로 실행합니다")
+            logger.info(f"📧 [시뮬레이션] 발송: {to_email}")
+            logger.info(f"   본문 길이: {len(full_body)} 문자")
+            
+            return jsonify({
+                'success': False,
+                'error': 'Gmail 앱 비밀번호가 설정되지 않았습니다. 설정 페이지에서 Gmail 앱 비밀번호를 등록해주세요.',
+                'from': from_email,
+                'to': to_email,
+                'signature_included': bool(user_signature)
+            }), 400
+        
+    except Exception as e:
+        logger.error(f"❌ 이메일 발송 오류: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'이메일 발송 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+@app.route('/api/user/settings', methods=['GET', 'POST'])
+@login_required
+def user_settings():
+    """
+    사용자 설정 API
+    GET: 현재 설정 조회
+    POST: 설정 업데이트 (Gmail 앱 비밀번호 등)
+    """
+    if request.method == 'GET':
+        return jsonify({
+            'success': True,
+            'user': {
+                'email': current_user.email,
+                'name': current_user.name,
+                'name_en': current_user.name_en,
+                'phone': current_user.phone,
+                'has_gmail_password': bool(current_user.gmail_app_password),
+                'has_signature': bool(current_user.email_signature)
+            }
+        })
+    
+    # POST - 설정 업데이트
+    try:
+        data = request.json
+        gmail_password = data.get('gmail_app_password')
+        
+        if gmail_password:
+            # Gmail 앱 비밀번호 업데이트
+            current_user.set_gmail_app_password(gmail_password.replace(' ', ''))  # 공백 제거
+            db.session.commit()
+            logger.info(f"✅ {current_user.email} Gmail 앱 비밀번호 설정 완료")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Gmail 앱 비밀번호가 설정되었습니다. 이제 이메일을 발송할 수 있습니다!'
+            })
+        
+        return jsonify({
+            'success': False,
+            'error': '업데이트할 설정이 없습니다.'
+        }), 400
+        
+    except Exception as e:
+        logger.error(f"❌ 설정 업데이트 오류: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'설정 업데이트 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
 @app.route('/api-docs')
 def api_docs():
     """API 문서 페이지"""

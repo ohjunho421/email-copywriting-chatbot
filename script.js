@@ -3893,3 +3893,455 @@ function copyRefinedEmail() {
         showToast('❌ 복사 중 오류가 발생했습니다.', 'danger');
     });
 }
+
+// ========================================
+// 🆕 편집 모드 토글 및 일괄 발송 기능
+// ========================================
+
+/**
+ * 편집 모드 토글
+ */
+function toggleEditMode(companyIndex, variationIndex) {
+    const subjectDisplay = document.getElementById(`subject_display_${companyIndex}_${variationIndex}`);
+    const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
+    const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
+    const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
+    
+    const editBtn = document.getElementById(`edit_btn_${companyIndex}_${variationIndex}`);
+    const saveBtn = document.getElementById(`save_btn_${companyIndex}_${variationIndex}`);
+    const cancelBtn = document.getElementById(`cancel_btn_${companyIndex}_${variationIndex}`);
+    
+    // 현재 내용을 백업 (취소를 위해)
+    if (!bodyEdit.dataset.original) {
+        bodyEdit.dataset.original = bodyEdit.value;
+        subjectEdit.dataset.original = subjectEdit.value;
+    }
+    
+    // 편집 모드로 전환
+    subjectDisplay.style.display = 'none';
+    subjectEdit.style.display = 'block';
+    bodyDisplay.style.display = 'none';
+    bodyEdit.style.display = 'block';
+    
+    editBtn.style.display = 'none';
+    saveBtn.style.display = 'inline-block';
+    cancelBtn.style.display = 'inline-block';
+    
+    // 포커스
+    subjectEdit.focus();
+    
+    console.log(`편집 모드 활성화: Company ${companyIndex}, Variation ${variationIndex}`);
+}
+
+/**
+ * 편집 모드 취소
+ */
+function cancelEditMode(companyIndex, variationIndex) {
+    const subjectDisplay = document.getElementById(`subject_display_${companyIndex}_${variationIndex}`);
+    const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
+    const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
+    const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
+    
+    const editBtn = document.getElementById(`edit_btn_${companyIndex}_${variationIndex}`);
+    const saveBtn = document.getElementById(`save_btn_${companyIndex}_${variationIndex}`);
+    const cancelBtn = document.getElementById(`cancel_btn_${companyIndex}_${variationIndex}`);
+    
+    // 원래 내용으로 복원
+    if (bodyEdit.dataset.original) {
+        bodyEdit.value = bodyEdit.dataset.original;
+        subjectEdit.value = subjectEdit.dataset.original;
+    }
+    
+    // 보기 모드로 전환
+    subjectDisplay.style.display = 'block';
+    subjectEdit.style.display = 'none';
+    bodyDisplay.style.display = 'block';
+    bodyEdit.style.display = 'none';
+    
+    editBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    
+    console.log(`편집 모드 취소: Company ${companyIndex}, Variation ${variationIndex}`);
+}
+
+/**
+ * 편집된 이메일 저장
+ */
+function saveEditedEmail(companyIndex, variationIndex) {
+    const subjectDisplay = document.getElementById(`subject_display_${companyIndex}_${variationIndex}`);
+    const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
+    const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
+    const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
+    
+    const editBtn = document.getElementById(`edit_btn_${companyIndex}_${variationIndex}`);
+    const saveBtn = document.getElementById(`save_btn_${companyIndex}_${variationIndex}`);
+    const cancelBtn = document.getElementById(`cancel_btn_${companyIndex}_${variationIndex}`);
+    
+    // 수정된 내용 가져오기
+    const newSubject = subjectEdit.value.trim();
+    const newBody = bodyEdit.value.trim();
+    
+    if (!newSubject || !newBody) {
+        showToast('❌ 제목과 본문을 모두 입력해주세요.', 'danger');
+        return;
+    }
+    
+    // 표시 영역 업데이트
+    subjectDisplay.innerHTML = `<em>${newSubject}</em>`;
+    bodyDisplay.innerHTML = convertMarkdownToHtml(newBody);
+    
+    // hidden textarea도 업데이트
+    const textarea = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
+    if (textarea) {
+        textarea.value = `제목: ${newSubject}\n\n${newBody}`;
+    }
+    
+    // 백업 업데이트
+    bodyEdit.dataset.original = newBody;
+    subjectEdit.dataset.original = newSubject;
+    
+    // 보기 모드로 전환
+    subjectDisplay.style.display = 'block';
+    subjectEdit.style.display = 'none';
+    bodyDisplay.style.display = 'block';
+    bodyEdit.style.display = 'none';
+    
+    editBtn.style.display = 'inline-block';
+    saveBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    
+    showToast('✅ 이메일 문안이 저장되었습니다!', 'success');
+    console.log(`이메일 저장 완료: Company ${companyIndex}, Variation ${variationIndex}`);
+}
+
+/**
+ * 선택된 이메일 개수 표시
+ */
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('input[id^="email_select_"]:checked');
+    const button = document.getElementById('batchSendButton');
+    
+    if (button) {
+        const count = checkboxes.length;
+        if (count > 0) {
+            button.innerHTML = `<i class="fas fa-paper-plane"></i> 선택한 ${count}개 문안 일괄 발송`;
+            button.disabled = false;
+            button.classList.remove('btn-secondary');
+            button.classList.add('btn-primary');
+        } else {
+            button.innerHTML = '<i class="fas fa-paper-plane"></i> 일괄 발송 (문안을 선택해주세요)';
+            button.disabled = true;
+            button.classList.remove('btn-primary');
+            button.classList.add('btn-secondary');
+        }
+    }
+}
+
+/**
+ * 일괄 발송 전 Gmail 설정 확인
+ */
+async function checkGmailSettings() {
+    try {
+        const response = await fetch('/api/user/settings');
+        const data = await response.json();
+        return data.success && data.user.has_gmail_password;
+    } catch (error) {
+        console.error('설정 확인 오류:', error);
+        return false;
+    }
+}
+
+/**
+ * 일괄 발송
+ */
+async function batchSendEmails() {
+    const checkboxes = document.querySelectorAll('input[id^="email_select_"]:checked');
+    
+    if (checkboxes.length === 0) {
+        showToast('❌ 발송할 이메일을 선택해주세요.', 'danger');
+        return;
+    }
+    
+    // Gmail 설정 확인
+    const hasGmailPassword = await checkGmailSettings();
+    if (!hasGmailPassword) {
+        const userConfirm = confirm(
+            '⚠️ Gmail 앱 비밀번호가 설정되지 않았습니다.\n\n' +
+            '이메일을 발송하려면 Gmail 앱 비밀번호를 먼저 설정해야 합니다.\n\n' +
+            '지금 설정 페이지로 이동하시겠습니까?'
+        );
+        
+        if (userConfirm) {
+            openSettingsModal();
+        }
+        return;
+    }
+    
+    // 확인 대화상자
+    const confirmMessage = `선택한 ${checkboxes.length}개의 이메일을 발송하시겠습니까?\n\n발송 대상:\n` + 
+        Array.from(checkboxes).map((cb, idx) => 
+            `${idx + 1}. ${cb.dataset.companyName} (${cb.dataset.email})`
+        ).join('\n');
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // 발송 준비
+    const emailsToSend = [];
+    
+    checkboxes.forEach(checkbox => {
+        const companyIndex = checkbox.dataset.companyIndex;
+        const variationIndex = checkbox.dataset.variationIndex;
+        const companyName = checkbox.dataset.companyName;
+        const email = checkbox.dataset.email;
+        
+        // 현재 내용 가져오기 (수정되었을 수 있음)
+        const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
+        const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
+        
+        const subject = subjectEdit ? subjectEdit.value : '';
+        const body = bodyEdit ? bodyEdit.value : '';
+        
+        if (email && subject && body) {
+            emailsToSend.push({
+                companyName: companyName,
+                email: email,
+                subject: subject,
+                body: body,
+                companyIndex: companyIndex,
+                variationIndex: variationIndex
+            });
+        }
+    });
+    
+    if (emailsToSend.length === 0) {
+        showToast('❌ 발송 가능한 이메일이 없습니다.', 'danger');
+        return;
+    }
+    
+    // 실제 발송 처리
+    processBatchSend(emailsToSend);
+}
+
+/**
+ * 일괄 발송 처리 (로그인된 사용자가 발신자)
+ */
+async function processBatchSend(emails) {
+    const progressModal = showProgressModal(emails.length);
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (let i = 0; i < emails.length; i++) {
+        const emailData = emails[i];
+        
+        try {
+            updateProgress(i + 1, emails.length, emailData.companyName);
+            
+            // 실제 이메일 발송 API 호출
+            await sendEmailAPI(emailData);
+            
+            successCount++;
+            
+            // 체크박스 해제
+            const checkbox = document.getElementById(`email_select_${emailData.companyIndex}_${emailData.variationIndex}`);
+            if (checkbox) checkbox.checked = false;
+            
+        } catch (error) {
+            console.error(`발송 실패: ${emailData.companyName}`, error);
+            failCount++;
+        }
+    }
+    
+    // 진행상황 모달 닫기
+    closeProgressModal();
+    
+    // 결과 표시
+    const resultMessage = `발송 완료!\n\n성공: ${successCount}건\n실패: ${failCount}건`;
+    alert(resultMessage);
+    
+    // 선택 개수 업데이트
+    updateSelectedCount();
+    
+    showToast(`✅ ${successCount}개 이메일 발송 완료!`, 'success');
+}
+
+/**
+ * 이메일 발송 API 호출
+ * 로그인된 사용자의 이메일을 발신자로 사용
+ */
+async function sendEmailAPI(emailData) {
+    try {
+        const response = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                to_email: emailData.email,
+                to_name: emailData.companyName,
+                subject: emailData.subject,
+                body: emailData.body
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || '발송 실패');
+        }
+        
+        const result = await response.json();
+        console.log(`✅ 발송 성공: ${emailData.companyName} (${emailData.email})`);
+        return result;
+        
+    } catch (error) {
+        console.error(`❌ 발송 실패: ${emailData.companyName}`, error);
+        throw error;
+    }
+}
+
+/**
+ * 진행상황 모달 표시
+ */
+function showProgressModal(total) {
+    const modal = document.createElement('div');
+    modal.id = 'progressModal';
+    modal.className = 'modal fade show';
+    modal.style.display = 'block';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-paper-plane"></i> 이메일 발송 중...</h5>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="progress mb-3" style="height: 30px;">
+                        <div id="sendProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%">0%</div>
+                    </div>
+                    <p id="progressText">준비 중...</p>
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    const backdrop = document.createElement('div');
+    backdrop.id = 'progressBackdrop';
+    backdrop.className = 'modal-backdrop fade show';
+    document.body.appendChild(backdrop);
+    
+    return modal;
+}
+
+/**
+ * 진행상황 업데이트
+ */
+function updateProgress(current, total, companyName) {
+    const percent = Math.round((current / total) * 100);
+    const progressBar = document.getElementById('sendProgress');
+    const progressText = document.getElementById('progressText');
+    
+    if (progressBar) {
+        progressBar.style.width = percent + '%';
+        progressBar.textContent = percent + '%';
+    }
+    
+    if (progressText) {
+        progressText.textContent = `${current}/${total} - ${companyName}에게 발송 중...`;
+    }
+}
+
+/**
+ * 진행상황 모달 닫기
+ */
+function closeProgressModal() {
+    const modal = document.getElementById('progressModal');
+    const backdrop = document.getElementById('progressBackdrop');
+    
+    if (modal) modal.remove();
+    if (backdrop) backdrop.remove();
+}
+
+// ========================================
+// 🆕 사용자 설정 기능
+// ========================================
+
+/**
+ * 설정 모달 열기
+ */
+async function openSettingsModal() {
+    try {
+        // 현재 설정 조회
+        const response = await fetch('/api/user/settings');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Gmail 비밀번호 상태 표시
+            const statusBadge = document.getElementById('gmailStatus');
+            if (data.user.has_gmail_password) {
+                statusBadge.textContent = '설정됨 ✓';
+                statusBadge.className = 'badge bg-success ms-2';
+            } else {
+                statusBadge.textContent = '미설정';
+                statusBadge.className = 'badge bg-secondary ms-2';
+            }
+        }
+        
+        // 모달 열기
+        const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('설정 조회 오류:', error);
+        showToast('❌ 설정을 불러올 수 없습니다.', 'danger');
+    }
+}
+
+/**
+ * 설정 저장
+ */
+async function saveSettings() {
+    const gmailPassword = document.getElementById('gmailPassword').value.trim();
+    
+    if (!gmailPassword) {
+        showToast('❌ Gmail 앱 비밀번호를 입력해주세요.', 'danger');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/user/settings', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                gmail_app_password: gmailPassword
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('✅ ' + data.message, 'success');
+            
+            // 모달 닫기
+            const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+            modal.hide();
+            
+            // 입력창 초기화
+            document.getElementById('gmailPassword').value = '';
+            
+        } else {
+            showToast('❌ ' + data.error, 'danger');
+        }
+        
+    } catch (error) {
+        console.error('설정 저장 오류:', error);
+        showToast('❌ 설정 저장 중 오류가 발생했습니다.', 'danger');
+    }
+}

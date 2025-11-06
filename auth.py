@@ -23,12 +23,13 @@ def register():
         email = data.get('email', '').strip().lower()
         password = data.get('password', '').strip()
         name = data.get('name', '').strip()
+        name_en = data.get('name_en', '').strip()  # 영문 이름 (선택사항)
         company_nickname = data.get('company_nickname', '').strip()
         phone = data.get('phone', '').strip()
         
-        # 유효성 검사
+        # 유효성 검사 (필수 필드)
         if not all([email, password, name, company_nickname, phone]):
-            flash('모든 필드를 입력해주세요.', 'error')
+            flash('모든 필수 필드를 입력해주세요.', 'error')
             return redirect(url_for('auth.register'))
         
         # 이메일 중복 확인
@@ -40,10 +41,14 @@ def register():
         user = User(
             email=email,
             name=name,
+            name_en=name_en if name_en else None,
             company_nickname=company_nickname,
             phone=phone
         )
         user.set_password(password)
+        
+        # 서명 자동 생성
+        user.email_signature = user.generate_email_signature()
         
         # ocean@portone.io는 자동 승인 및 관리자 권한
         if email == 'ocean@portone.io':

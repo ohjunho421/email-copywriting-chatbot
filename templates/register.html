@@ -79,9 +79,15 @@
 
         <form method="POST" action="{{ url_for('auth.register') }}" id="registerForm">
             <div class="mb-3">
-                <label for="name" class="form-label">이름 <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="name" name="name" required>
-                <div class="info-text">이메일 인사말에 사용됩니다 (예: "PortOne {이름} 매니저입니다")</div>
+                <label for="name" class="form-label">한글 이름 <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="name" name="name" placeholder="오준호" required>
+                <div class="info-text">이메일 서명에 사용됩니다</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="name_en" class="form-label">영문 이름</label>
+                <input type="text" class="form-control" id="name_en" name="name_en" placeholder="Junho OH">
+                <div class="info-text">이메일 서명에 사용됩니다 (선택사항)</div>
             </div>
 
             <div class="mb-3">

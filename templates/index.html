@@ -228,6 +228,9 @@
                     <i class="fas fa-crown"></i> 관리자 페이지
                 </a>
                 {% endif %}
+                <button class="btn btn-sm btn-outline-info" onclick="openSettingsModal()">
+                    <i class="fas fa-cog"></i> 설정
+                </button>
                 <a href="/auth/logout" class="btn btn-sm btn-outline-secondary">
                     <i class="fas fa-sign-out-alt"></i> 로그아웃
                 </a>
@@ -446,6 +449,73 @@
                     <div class="card-body" id="templatesContainer">
                         <!-- 동적으로 생성된 템플릿들이 여기에 표시됩니다 -->
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 설정 모달 -->
+    <div class="modal fade" id="settingsModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cog"></i> 사용자 설정
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Gmail 앱 비밀번호가 필요합니다</strong><br>
+                        이메일을 발송하려면 Gmail 앱 비밀번호를 설정해주세요.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="fas fa-user"></i> 사용자 정보
+                        </label>
+                        <div class="card">
+                            <div class="card-body">
+                                <p class="mb-1"><strong>이메일:</strong> {{ user.email }}</p>
+                                <p class="mb-1"><strong>이름:</strong> {{ user.name }}</p>
+                                <p class="mb-0"><strong>전화:</strong> {{ user.phone }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="gmailPassword" class="form-label">
+                            <i class="fas fa-key"></i> Gmail 앱 비밀번호
+                            <span id="gmailStatus" class="badge bg-secondary ms-2">미설정</span>
+                        </label>
+                        <input type="text" class="form-control font-monospace" id="gmailPassword" 
+                               placeholder="abcd efgh ijkl mnop (공백 포함 OK)">
+                        <div class="form-text">
+                            Gmail 앱 비밀번호는 안전하게 암호화되어 저장됩니다.
+                            <a href="https://myaccount.google.com/security" target="_blank">
+                                <i class="fas fa-external-link-alt"></i> 앱 비밀번호 생성하기
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <strong>📌 앱 비밀번호 생성 방법:</strong>
+                        <ol class="mb-0 mt-2">
+                            <li>Google 계정 보안 페이지 접속</li>
+                            <li>2단계 인증 활성화</li>
+                            <li>"앱 비밀번호" 검색 후 생성</li>
+                            <li>위 입력창에 16자리 비밀번호 입력</li>
+                        </ol>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> 취소
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="saveSettings()">
+                        <i class="fas fa-save"></i> 저장
+                    </button>
                 </div>
             </div>
         </div>
