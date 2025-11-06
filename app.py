@@ -2999,27 +2999,86 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         
         is_self_hosted = '자체' in hosting or 'self' in hosting or '직접' in hosting
         
+        # 🆕 sales_item에서 복수 서비스 감지 (콤마, +, & 등으로 분리)
+        def parse_sales_items(sales_item_str):
+            """sales_item 문자열을 파싱하여 여러 서비스 추출"""
+            if not sales_item_str:
+                return []
+            
+            # 콤마, +, &, 공백 등으로 분리
+            import re
+            items = re.split(r'[,+&\s]+', sales_item_str.lower().strip())
+            # 빈 문자열 제거
+            items = [item.strip() for item in items if item.strip()]
+            return items
+        
+        # sales_item 파싱
+        sales_items = parse_sales_items(sales_item)
+        logger.info(f"📋 Sales items 파싱 결과: {sales_items} for {company_name}")
+        
+        # 감지된 서비스 리스트 (중복 제거)
+        detected_services = set()
+        for item in sales_items:
+            if 'opi' in item:
+                detected_services.add('opi')
+            if 'recon' in item or '재무' in item:
+                detected_services.add('recon')
+            if 'prism' in item or '프리즘' in item:
+                detected_services.add('prism')
+            if 'ps' in item or '플랫폼정산' in item or '파트너정산' in item:
+                detected_services.add('ps')
+        
+        detected_services = list(detected_services)
+        logger.info(f"🎯 감지된 서비스: {detected_services} for {company_name}")
+        
         # sales_item에 따른 서비스 결정
         services_to_generate = []
+        is_multi_service = len(detected_services) > 1
+        
         if sales_item:
-            if 'opi' in sales_item:
-                # OPI는 자체구축인 경우에만 제공 가능
+            if is_multi_service:
+                # 🆕 복수 서비스 감지: 통합 문안 생성
+                # OPI는 자체구축일 때만 포함
+                if 'opi' in detected_services and not is_self_hosted:
+                    logger.warning(f"⚠️ OPI 불가능 (호스팅: {hosting}) → 제외: {company_name}")
+                    detected_services.remove('opi')
+                
+                services_to_generate = ['multi_service_professional', 'multi_service_curiosity']
+                service_names = []
+                if 'opi' in detected_services:
+                    service_names.append('OPI')
+                if 'recon' in detected_services:
+                    service_names.append('Recon')
+                if 'prism' in detected_services:
+                    service_names.append('Prism')
+                if 'ps' in detected_services:
+                    service_names.append('PS')
+                
+                logger.info(f"🎯 복수 서비스 통합 문안 생성: {' + '.join(service_names)} for {company_name}")
+            
+            elif 'opi' in detected_services:
+                # 단일 OPI 서비스
                 if is_self_hosted:
                     services_to_generate = ['opi_professional', 'opi_curiosity']
                     logger.info(f"✅ OPI 서비스 문안 생성 (호스팅: {hosting}): {company_name}")
                 else:
                     # 자체구축이 아니면 Recon으로 대체
                     services_to_generate = ['finance_professional', 'finance_curiosity']
+                    detected_services = ['recon']
                     logger.warning(f"⚠️ OPI 불가능 (호스팅: {hosting}) → Recon(재무자동화)으로 전환: {company_name}")
-            elif 'recon' in sales_item or '재무' in sales_item:
+            
+            elif 'recon' in detected_services:
                 services_to_generate = ['finance_professional', 'finance_curiosity']
                 logger.info(f"Recon(재무자동화) 서비스 문안만 생성: {company_name}")
-            elif 'prism' in sales_item or '프리즘' in sales_item:
+            
+            elif 'prism' in detected_services:
                 services_to_generate = ['prism_professional', 'prism_curiosity']
                 logger.info(f"Prism(멀티 오픈마켓 정산 통합) 서비스 문안만 생성: {company_name}")
-            elif 'ps' in sales_item or '플랫폼정산' in sales_item or '파트너정산' in sales_item:
+            
+            elif 'ps' in detected_services:
                 services_to_generate = ['ps_professional', 'ps_curiosity']
                 logger.info(f"플랫폼 정산(파트너 정산+세금계산서+지급대행) 서비스 문안만 생성: {company_name}")
+            
             else:
                 # 알 수 없는 sales_item인 경우
                 if is_self_hosted:
@@ -3048,27 +3107,31 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         # 서비스별 통합 지식베이스 로드 (서비스 소개서 + 블로그 전체)
         from portone_blog_cache import get_service_knowledge
         
-        # OPI용 통합 지식베이스 (OPI 서비스 생성 시)
+        # 🆕 복수 서비스일 경우 detected_services 기반으로 모두 로드
+        if is_multi_service:
+            logger.info(f"📚 복수 서비스 지식베이스 로드 시작: {detected_services}")
+        
+        # OPI용 통합 지식베이스
         opi_blog_content = ""
-        if any('opi' in s for s in services_to_generate):
+        if any('opi' in s for s in services_to_generate) or (is_multi_service and 'opi' in detected_services):
             opi_blog_content = get_service_knowledge(service_type='OPI')
             logger.info(f"📚 [OPI] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
-        # Recon용 통합 지식베이스 (Recon 서비스 생성 시)
+        # Recon용 통합 지식베이스
         recon_blog_content = ""
-        if any('finance' in s for s in services_to_generate):
+        if any('finance' in s for s in services_to_generate) or (is_multi_service and 'recon' in detected_services):
             recon_blog_content = get_service_knowledge(service_type='Recon')
             logger.info(f"📚 [Recon] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
-        # Prism용 통합 지식베이스 (Prism 서비스 생성 시)
+        # Prism용 통합 지식베이스
         prism_blog_content = ""
-        if any('prism' in s for s in services_to_generate):
+        if any('prism' in s for s in services_to_generate) or (is_multi_service and 'prism' in detected_services):
             prism_blog_content = get_service_knowledge(service_type='Prism')
             logger.info(f"📚 [Prism] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
-        # 플랫폼 정산(PS)용 통합 지식베이스 (PS 서비스 생성 시)
+        # 플랫폼 정산(PS)용 통합 지식베이스
         ps_blog_content = ""
-        if any('ps' in s for s in services_to_generate):
+        if any('ps' in s for s in services_to_generate) or (is_multi_service and 'ps' in detected_services):
             ps_blog_content = get_service_knowledge(service_type='PS')
             logger.info(f"📚 [플랫폼 정산] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
@@ -3147,7 +3210,21 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 """
 
         # 생성할 서비스에 따른 프롬프트 조정
-        if len(services_to_generate) == 2:
+        if is_multi_service:
+            # 🆕 복수 서비스 통합 문안
+            service_names_kr = []
+            if 'opi' in detected_services:
+                service_names_kr.append('OPI(해외결제)')
+            if 'recon' in detected_services:
+                service_names_kr.append('Recon(재무자동화)')
+            if 'prism' in detected_services:
+                service_names_kr.append('Prism(오픈마켓 정산)')
+            if 'ps' in detected_services:
+                service_names_kr.append('PS(플랫폼 정산)')
+            
+            service_focus = f"{' + '.join(service_names_kr)} 통합 솔루션을 자연스럽게 연결하여 제안하는 2개의"
+            logger.info(f"📧 복수 서비스 문안 초점: {service_focus}")
+        elif len(services_to_generate) == 2:
             if 'opi' in services_to_generate[0]:
                 service_focus = "One Payment Infra (OPI) 서비스에 집중한 2개의"
             elif 'prism' in services_to_generate[0]:
@@ -3310,6 +3387,43 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
    - **플랫폼 정산 핵심 가치 프로포지션 (반드시 포함)**: "정산금 계산-세금계산서-지급까지 원클릭으로 끝낼 수 있습니다. 주말에도 지급 가능하고, 개인 파트너에게도 바로 송금할 수 있어요"
    - "실제로 어떻게 한 달 정산을 이틀로 줄였는지 보여드릴까요?" 관심 유도
 
+🆕 **9. 복수 서비스 통합 문안 (multi_service_professional / multi_service_curiosity):**
+
+Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
+
+**복수 서비스 통합 전략:**
+- **핵심 원칙**: 하나의 큐스토머 Pain Point에서 시작하여 복수 서비스를 자연스럽게 연결
+- **어색하게 부각된 제안을 하지 말 것**: "이것도 해드립니다, 저것도 해드립니다" 방식 금지
+- **스토리 기반 통합**: 고객의 성장 스토리 안에서 여러 서비스가 필요한 이유를 설명
+
+**통합 방식 예시:**
+
+**OPI + PS 조합 (해외 진출 + 플랫폼)**:
+- 시작: "해외 진출 뉴스를 봤습니다. 현지 결제 연동과 파트너 정산, 둘 다 부담되실 텐데..."
+- 연결: "**OPI로 현지 결제** 연동하면서, 동시에 **PS로 현지 파트너 정산까지** 자동화할 수 있습니다"
+- 가치: "글로벌 확장에 필요한 모든 재무 인프라를 한 번에 해결"
+
+**Prism + PS 조합 (커머스 + 플랫폼 정산)**:
+- 시작: "다중 오픈마켓 확장 뉴스를 봤습니다. 각 채널의 서로 다른 정산 기준과 파트너사 정산까지, 재무팀이 부담되실 것 같은데..."
+- 연결: "**Prism으로 오픈마켓 정산 통합** + **PS로 파트너 정산 자동화**로 모두 해결됩니다"
+- 가치: "월말 재무 마감을 **90% 이상 단축**하고 정확성도 확보"
+
+**OPI + Recon 조합 (해외 + 재무자동화)**:
+- 시작: "글로벌 확장과 함께 다양한 PG사 데이터 통합이 복잡해지실 텐데..."
+- 연결: "**OPI로 {pg_count} PG사 통합** + **Recon으로 다국가 재무 자동화**"
+- 가치: "국내외 모든 재무 데이터를 한 곳에서 관리"
+
+**PS + Recon 조합 (플랫폼 + 재무)**:
+- 시작: "플랫폼 확장으로 파트너 정산과 전체 재무 관리가 복잡해지셨을 텐데..."
+- 연결: "**PS로 파트너 정산 자동화** + **Recon으로 전체 재무 통합**"
+- 가치: "파트너 정산부터 ERP 연동까지 완전 자동화"
+
+**통합 문안 작성 주의사항:**
+- 각 서비스의 지식베이스를 모두 활용하되, **하나의 스토리로 연결**
+- 서비스별 가치 프로포지션은 본문에서 자연스럽게 녹여서 언급 (목록형 나열 금지)
+- Pain Point 공감 → 통합 솔루션 제안 → 결합 효과 강조 순서로 전개
+- **분량 주의**: 여러 서비스를 언급하더라도 전체 본문은 130-200단어 유지
+
 **구조 및 형식:**
 - 제목: 고정 형식 사용 ("[PortOne] {company_name} {email_name}께 전달 부탁드립니다") - 본문에 제목 포함하지 말것
 - 본문: 고정 서론 → Pain Point 제기(50-70단어) → 해결책 제시(50-70단어) → 경쟁사 사례/혜택(30-50단어) → 고정 결론
@@ -3372,6 +3486,12 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "ps_curiosity": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+  }},
+  "multi_service_professional": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+  }},
+  "multi_service_curiosity": {{
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }}
 }}
