@@ -1294,6 +1294,8 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                     <div class="form-check position-absolute" style="top: 10px; left: 10px; z-index: 10;">
                                         <input class="form-check-input" type="checkbox" 
                                                id="email_select_${index}_${vIndex}"
+                                               data-company-index="${index}"
+                                               data-variation-index="${vIndex}"
                                                data-company-name="${result.company['회사명']}"
                                                data-email="${emailAddress}"
                                                data-subject="${variation.subject.replace(/"/g, '&quot;')}"
