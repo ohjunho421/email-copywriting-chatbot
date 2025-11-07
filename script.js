@@ -1430,9 +1430,9 @@ ${variation.body}
             </button>
         `;
         
-        // 컨테이너 맨 위에 추가
-        container.insertBefore(batchSendSection, container.firstChild);
-        container.insertBefore(downloadSection, batchSendSection.nextSibling);
+        // CSV 다운로드는 맨 위에, 일괄 발송 박스는 맨 아래에 배치
+        container.insertBefore(downloadSection, container.firstChild);
+        container.appendChild(batchSendSection);
     }
 
     downloadCSVWithEmails() {
