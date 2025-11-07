@@ -5619,69 +5619,73 @@ def scrape_portone_blog_initial():
     - 글로벌 결제: 10페이지
     - 결제 트렌드/뉴스: 10페이지
     """
-    try:
-        from portone_blog_cache import save_blog_cache, extract_keywords_from_post
-        
-        logger.info("🚀 포트원 블로그 전체 데이터 스크래핑 시작 (배경지식 확보)")
-        
-        all_posts = []
-        
-        # 1. OPI (국내 결제) - 15페이지 (가장 중요)
-        opi_url = 'https://blog.portone.io/?filter=%EA%B5%AD%EB%82%B4%20%EA%B2%B0%EC%A0%9C'
-        opi_posts = scrape_portone_blog_category(opi_url, 'OPI', max_pages=15)
-        all_posts.extend(opi_posts)
-        logger.info(f"📊 OPI 블로그: {len(opi_posts)}개 수집")
-        
-        # 2. Recon (매출 마감) - 10페이지
-        recon_url = 'https://blog.portone.io/?filter=%EB%A7%A4%EC%B6%9C%20%EB%A7%88%EA%B0%90'
-        recon_posts = scrape_portone_blog_category(recon_url, 'Recon', max_pages=10)
-        all_posts.extend(recon_posts)
-        logger.info(f"📊 Recon 블로그: {len(recon_posts)}개 수집")
-        
-        # 3. PS (플랫폼 정산) - 10페이지
-        ps_url = 'https://blog.portone.io/category/news/?filter=%ED%94%8C%EB%9E%AB%ED%8F%BC%20%EC%A0%95%EC%82%B0'
-        ps_posts = scrape_portone_blog_category(ps_url, 'PS', max_pages=10)
-        all_posts.extend(ps_posts)
-        logger.info(f"📊 PS 블로그: {len(ps_posts)}개 수집")
-        
-        # 4. 글로벌 결제 - 10페이지
-        global_url = 'https://blog.portone.io/?filter=%EA%B8%80%EB%A1%9C%EB%B2%8C%20%EA%B2%B0%EC%A0%9C'
-        global_posts = scrape_portone_blog_category(global_url, 'OPI', max_pages=10)
-        all_posts.extend(global_posts)
-        logger.info(f"📊 글로벌 결제 블로그: {len(global_posts)}개 수집")
-        
-        # 5. 결제 트렌드/뉴스 - 10페이지
-        news_url = 'https://blog.portone.io/category/news/'
-        news_posts = scrape_portone_blog_category(news_url, 'OPI', max_pages=10)
-        all_posts.extend(news_posts)
-        logger.info(f"📊 결제 트렌드/뉴스: {len(news_posts)}개 수집")
-        
-        # 키워드 자동 추출
-        logger.info("🔍 블로그 글 키워드 추출 중...")
-        for post in all_posts:
-            keywords, industry_tags = extract_keywords_from_post(post)
-            post['keywords'] = keywords
-            post['industry_tags'] = industry_tags
-        
-        # DB에 저장 (기존 블로그 유지하고 새 블로그 추가)
-        if all_posts:
-            save_blog_cache(all_posts, replace_all=False)
-            logger.info(f"✅ 블로그 데이터 스크래핑 완료: {len(all_posts)}개 추가/업데이트")
+    # Flask app context 내에서 실행 (PostgreSQL 접근을 위해 필수)
+    with app.app_context():
+        try:
+            from portone_blog_cache import save_blog_cache, extract_keywords_from_post
             
-            # 전체 블로그 개수 확인
-            from portone_blog_cache import load_blog_cache
-            total_cached = load_blog_cache()
-            if total_cached:
-                logger.info(f"📚 총 배경지식: {len(total_cached)}개 블로그 포스팅 (누적)")
+            logger.info("🚀 포트원 블로그 전체 데이터 스크래핑 시작 (배경지식 확보)")
             
-            return all_posts
-        else:
-            logger.warning("⚠️ 스크래핑된 글이 없습니다")
+            all_posts = []
+            
+            # 1. OPI (국내 결제) - 15페이지 (가장 중요)
+            opi_url = 'https://blog.portone.io/?filter=%EA%B5%AD%EB%82%B4%20%EA%B2%B0%EC%A0%9C'
+            opi_posts = scrape_portone_blog_category(opi_url, 'OPI', max_pages=15)
+            all_posts.extend(opi_posts)
+            logger.info(f"📊 OPI 블로그: {len(opi_posts)}개 수집")
+            
+            # 2. Recon (매출 마감) - 10페이지
+            recon_url = 'https://blog.portone.io/?filter=%EB%A7%A4%EC%B6%9C%20%EB%A7%88%EA%B0%90'
+            recon_posts = scrape_portone_blog_category(recon_url, 'Recon', max_pages=10)
+            all_posts.extend(recon_posts)
+            logger.info(f"📊 Recon 블로그: {len(recon_posts)}개 수집")
+            
+            # 3. PS (플랫폼 정산) - 10페이지
+            ps_url = 'https://blog.portone.io/category/news/?filter=%ED%94%8C%EB%9E%AB%ED%8F%BC%20%EC%A0%95%EC%82%B0'
+            ps_posts = scrape_portone_blog_category(ps_url, 'PS', max_pages=10)
+            all_posts.extend(ps_posts)
+            logger.info(f"📊 PS 블로그: {len(ps_posts)}개 수집")
+            
+            # 4. 글로벌 결제 - 10페이지
+            global_url = 'https://blog.portone.io/?filter=%EA%B8%80%EB%A1%9C%EB%B2%8C%20%EA%B2%B0%EC%A0%9C'
+            global_posts = scrape_portone_blog_category(global_url, 'OPI', max_pages=10)
+            all_posts.extend(global_posts)
+            logger.info(f"📊 글로벌 결제 블로그: {len(global_posts)}개 수집")
+            
+            # 5. 결제 트렌드/뉴스 - 10페이지
+            news_url = 'https://blog.portone.io/category/news/'
+            news_posts = scrape_portone_blog_category(news_url, 'OPI', max_pages=10)
+            all_posts.extend(news_posts)
+            logger.info(f"📊 결제 트렌드/뉴스: {len(news_posts)}개 수집")
+            
+            # 키워드 자동 추출
+            logger.info("🔍 블로그 글 키워드 추출 중...")
+            for post in all_posts:
+                keywords, industry_tags = extract_keywords_from_post(post)
+                post['keywords'] = keywords
+                post['industry_tags'] = industry_tags
+            
+            # DB에 저장 (기존 블로그 유지하고 새 블로그 추가)
+            if all_posts:
+                save_blog_cache(all_posts, replace_all=False)
+                logger.info(f"✅ 블로그 데이터 스크래핑 완료: {len(all_posts)}개 추가/업데이트 (PostgreSQL)")
+                
+                # 전체 블로그 개수 확인
+                from portone_blog_cache import load_blog_cache
+                total_cached = load_blog_cache()
+                if total_cached:
+                    logger.info(f"📚 총 배경지식: {len(total_cached)}개 블로그 포스팅 (누적, PostgreSQL)")
+                
+                return all_posts
+            else:
+                logger.warning("⚠️ 스크래핑된 글이 없습니다")
+                return []
+            
+        except Exception as e:
+            logger.error(f"초기 데이터 스크래핑 오류: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
-        
-    except Exception as e:
-        logger.error(f"초기 데이터 스크래핑 오류: {str(e)}")
-        return []
 
 def get_blog_content_for_email():
     """
@@ -7427,26 +7431,30 @@ def scheduled_blog_update():
     스케줄러에 의해 자동으로 실행되는 블로그 업데이트 함수
     하루 2번 (오전 9시, 오후 6시) 실행됨
     """
-    try:
-        logger.info("⏰ 스케줄 블로그 업데이트 시작")
-        
-        from portone_blog_cache import get_blog_cache_age
-        
-        # 캐시 나이 확인 (12시간 이상 지났으면 업데이트)
-        cache_age = get_blog_cache_age()
-        
-        if cache_age is None or cache_age >= 12:
-            logger.info(f"📰 블로그 캐시 업데이트 필요 (나이: {cache_age}시간)")
-            blog_posts = scrape_portone_blog_initial()
+    # Flask app context 내에서 실행 (PostgreSQL 접근을 위해 필수)
+    with app.app_context():
+        try:
+            logger.info("⏰ 스케줄 블로그 업데이트 시작")
             
-            if blog_posts:
-                logger.info(f"✅ 자동 블로그 업데이트 완료: {len(blog_posts)}개 글")
+            from portone_blog_cache import get_blog_cache_age
+            
+            # 캐시 나이 확인 (12시간 이상 지났으면 업데이트)
+            cache_age = get_blog_cache_age()
+            
+            if cache_age is None or cache_age >= 12:
+                logger.info(f"📰 블로그 캐시 업데이트 필요 (나이: {cache_age}시간)")
+                blog_posts = scrape_portone_blog_initial()
+                
+                if blog_posts:
+                    logger.info(f"✅ 자동 블로그 업데이트 완료: {len(blog_posts)}개 글 (PostgreSQL)")
+                else:
+                    logger.warning("⚠️ 자동 블로그 업데이트 실패")
             else:
-                logger.warning("⚠️ 자동 블로그 업데이트 실패")
-        else:
-            logger.info(f"✅ 블로그 캐시 최신 상태 (나이: {cache_age:.1f}시간)")
-    except Exception as e:
-        logger.error(f"❌ 스케줄 블로그 업데이트 오류: {str(e)}")
+                logger.info(f"✅ 블로그 캐시 최신 상태 (나이: {cache_age:.1f}시간)")
+        except Exception as e:
+            logger.error(f"❌ 스케줄 블로그 업데이트 오류: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
 
 # 스케줄러 초기화
 scheduler = BackgroundScheduler()
