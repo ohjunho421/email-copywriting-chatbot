@@ -5647,10 +5647,17 @@ def scrape_portone_blog_initial():
             post['keywords'] = keywords
             post['industry_tags'] = industry_tags
         
-        # DB에 저장
+        # DB에 저장 (기존 블로그 유지하고 새 블로그 추가)
         if all_posts:
-            save_blog_cache(all_posts, replace_all=True)
-            logger.info(f"✅ 초기 데이터 스크래핑 완료: 총 {len(all_posts)}개 글")
+            save_blog_cache(all_posts, replace_all=False)
+            logger.info(f"✅ 블로그 데이터 스크래핑 완료: {len(all_posts)}개 추가/업데이트")
+            
+            # 전체 블로그 개수 확인
+            from portone_blog_cache import load_blog_cache
+            total_cached = load_blog_cache()
+            if total_cached:
+                logger.info(f"📚 총 배경지식: {len(total_cached)}개 블로그 포스팅 (누적)")
+            
             return all_posts
         else:
             logger.warning("⚠️ 스크래핑된 글이 없습니다")
