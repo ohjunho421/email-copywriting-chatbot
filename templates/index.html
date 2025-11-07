@@ -499,8 +499,31 @@
                         </div>
                     </div>
 
+                    <div class="mb-3">
+                        <label for="sendgridApiKey" class="form-label">
+                            <i class="fas fa-paper-plane"></i> SendGrid API 키 (Railway 환경용)
+                            <span id="sendgridStatus" class="badge bg-secondary ms-2">미설정</span>
+                        </label>
+                        <input type="text" class="form-control font-monospace" id="sendgridApiKey" 
+                               placeholder="SG.xxxxxxxxxxxxxxxxxxxxxxxx">
+                        <div class="form-text">
+                            Railway 환경에서는 SMTP 포트가 차단되므로 SendGrid API를 사용합니다.
+                            <a href="https://signup.sendgrid.com/" target="_blank">
+                                <i class="fas fa-external-link-alt"></i> SendGrid 무료 가입
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>💡 이메일 발송 방식:</strong>
+                        <ul class="mb-0 mt-2">
+                            <li><strong>Railway (배포 환경):</strong> SendGrid API 사용 (HTTP 방식)</li>
+                            <li><strong>로컬 개발:</strong> Gmail SMTP 사용 (포트 465/587)</li>
+                        </ul>
+                    </div>
+
                     <div class="alert alert-warning">
-                        <strong>📌 앱 비밀번호 생성 방법:</strong>
+                        <strong>📌 Gmail 앱 비밀번호 생성 방법:</strong>
                         <ol class="mb-0 mt-2">
                             <li>Google 계정 보안 페이지 접속</li>
                             <li>2단계 인증 활성화</li>

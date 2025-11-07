@@ -28,6 +28,9 @@ class User(UserMixin, db.Model):
     # Gmail 앱 비밀번호 (암호화 저장)
     gmail_app_password = db.Column(db.String(200), nullable=True)
     
+    # SendGrid API 키 (Railway 환경 이메일 발송용)
+    sendgrid_api_key = db.Column(db.String(200), nullable=True)
+    
     # 승인 시스템
     is_approved = db.Column(db.Boolean, default=False, nullable=False)
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
@@ -57,6 +60,15 @@ class User(UserMixin, db.Model):
     def get_gmail_app_password(self):
         """Gmail 앱 비밀번호 조회"""
         return self.gmail_app_password
+    
+    def set_sendgrid_api_key(self, api_key):
+        """SendGrid API 키 저장 (평문)"""
+        # Railway 환경에서 이메일 발송을 위한 SendGrid API 키
+        self.sendgrid_api_key = api_key
+    
+    def get_sendgrid_api_key(self):
+        """SendGrid API 키 조회"""
+        return self.sendgrid_api_key
     
     def get_email_count(self):
         """생성한 이메일 문안 개수"""

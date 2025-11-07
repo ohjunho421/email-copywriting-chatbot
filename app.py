@@ -104,6 +104,14 @@ with app.app_context():
             if 'already exists' not in str(e).lower():
                 logger.warning(f"gmail_app_password 컬럼 추가 건너뛰기: {e}")
         
+        # sendgrid_api_key 컬럼 추가
+        try:
+            db.session.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS sendgrid_api_key VARCHAR(200)'))
+            logger.info("✅ sendgrid_api_key 컬럼 추가 완료")
+        except Exception as e:
+            if 'already exists' not in str(e).lower():
+                logger.warning(f"sendgrid_api_key 컬럼 추가 건너뛰기: {e}")
+        
         db.session.commit()
         logger.info("🔄 데이터베이스 마이그레이션 완료")
         
@@ -6902,7 +6910,7 @@ def send_email():
             logger.warning("⚠️  사용자 서명이 설정되지 않았습니다")
         
         # SendGrid API를 사용한 이메일 발송 (Railway 환경 호환)
-        sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
+        sendgrid_api_key = current_user.get_sendgrid_api_key()
         
         if sendgrid_api_key:
             # SendGrid API 사용 (Railway에서 SMTP 포트가 차단되므로 HTTP API 사용)
@@ -7065,6 +7073,7 @@ def user_settings():
                 'name_en': current_user.name_en,
                 'phone': current_user.phone,
                 'has_gmail_password': bool(current_user.gmail_app_password),
+                'has_sendgrid_api_key': bool(current_user.sendgrid_api_key),
                 'has_signature': bool(current_user.email_signature)
             }
         })
@@ -7073,16 +7082,30 @@ def user_settings():
     try:
         data = request.json
         gmail_password = data.get('gmail_app_password')
+        sendgrid_key = data.get('sendgrid_api_key')
+        
+        updated = False
+        messages = []
         
         if gmail_password:
             # Gmail 앱 비밀번호 업데이트
             current_user.set_gmail_app_password(gmail_password.replace(' ', ''))  # 공백 제거
-            db.session.commit()
+            updated = True
+            messages.append('Gmail 앱 비밀번호가 설정되었습니다.')
             logger.info(f"✅ {current_user.email} Gmail 앱 비밀번호 설정 완료")
-            
+        
+        if sendgrid_key:
+            # SendGrid API 키 업데이트
+            current_user.set_sendgrid_api_key(sendgrid_key.strip())
+            updated = True
+            messages.append('SendGrid API 키가 설정되었습니다.')
+            logger.info(f"✅ {current_user.email} SendGrid API 키 설정 완료")
+        
+        if updated:
+            db.session.commit()
             return jsonify({
                 'success': True,
-                'message': 'Gmail 앱 비밀번호가 설정되었습니다. 이제 이메일을 발송할 수 있습니다!'
+                'message': ' '.join(messages)
             })
         
         return jsonify({

@@ -4337,13 +4337,23 @@ async function openSettingsModal() {
         
         if (data.success) {
             // Gmail 비밀번호 상태 표시
-            const statusBadge = document.getElementById('gmailStatus');
+            const gmailStatusBadge = document.getElementById('gmailStatus');
             if (data.user.has_gmail_password) {
-                statusBadge.textContent = '설정됨 ✓';
-                statusBadge.className = 'badge bg-success ms-2';
+                gmailStatusBadge.textContent = '설정됨 ✓';
+                gmailStatusBadge.className = 'badge bg-success ms-2';
             } else {
-                statusBadge.textContent = '미설정';
-                statusBadge.className = 'badge bg-secondary ms-2';
+                gmailStatusBadge.textContent = '미설정';
+                gmailStatusBadge.className = 'badge bg-secondary ms-2';
+            }
+            
+            // SendGrid API 키 상태 표시
+            const sendgridStatusBadge = document.getElementById('sendgridStatus');
+            if (data.user.has_sendgrid_api_key) {
+                sendgridStatusBadge.textContent = '설정됨 ✓';
+                sendgridStatusBadge.className = 'badge bg-success ms-2';
+            } else {
+                sendgridStatusBadge.textContent = '미설정';
+                sendgridStatusBadge.className = 'badge bg-secondary ms-2';
             }
         }
         
@@ -4358,25 +4368,72 @@ async function openSettingsModal() {
 }
 
 /**
+ * 설정 새로고침 (저장 후 호출)
+ */
+async function loadUserSettings() {
+    // openSettingsModal과 동일한 로직이지만 모달은 열지 않음
+    try {
+        const response = await fetch('/api/user/settings');
+        const data = await response.json();
+        
+        if (data.success) {
+            // Gmail 비밀번호 상태 표시
+            const gmailStatusBadge = document.getElementById('gmailStatus');
+            if (gmailStatusBadge) {
+                if (data.user.has_gmail_password) {
+                    gmailStatusBadge.textContent = '설정됨 ✓';
+                    gmailStatusBadge.className = 'badge bg-success ms-2';
+                } else {
+                    gmailStatusBadge.textContent = '미설정';
+                    gmailStatusBadge.className = 'badge bg-secondary ms-2';
+                }
+            }
+            
+            // SendGrid API 키 상태 표시
+            const sendgridStatusBadge = document.getElementById('sendgridStatus');
+            if (sendgridStatusBadge) {
+                if (data.user.has_sendgrid_api_key) {
+                    sendgridStatusBadge.textContent = '설정됨 ✓';
+                    sendgridStatusBadge.className = 'badge bg-success ms-2';
+                } else {
+                    sendgridStatusBadge.textContent = '미설정';
+                    sendgridStatusBadge.className = 'badge bg-secondary ms-2';
+                }
+            }
+        }
+    } catch (error) {
+        console.error('설정 새로고침 오류:', error);
+    }
+}
+
+/**
  * 설정 저장
  */
 async function saveSettings() {
     const gmailPassword = document.getElementById('gmailPassword').value.trim();
+    const sendgridApiKey = document.getElementById('sendgridApiKey').value.trim();
     
-    if (!gmailPassword) {
-        showToast('❌ Gmail 앱 비밀번호를 입력해주세요.', 'danger');
+    // 둘 중 하나는 입력되어야 함
+    if (!gmailPassword && !sendgridApiKey) {
+        showToast('❌ Gmail 앱 비밀번호 또는 SendGrid API 키를 입력해주세요.', 'danger');
         return;
     }
     
     try {
+        const payload = {};
+        if (gmailPassword) {
+            payload.gmail_app_password = gmailPassword;
+        }
+        if (sendgridApiKey) {
+            payload.sendgrid_api_key = sendgridApiKey;
+        }
+        
         const response = await fetch('/api/user/settings', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                gmail_app_password: gmailPassword
-            })
+            body: JSON.stringify(payload)
         });
         
         const data = await response.json();
@@ -4390,6 +4447,10 @@ async function saveSettings() {
             
             // 입력창 초기화
             document.getElementById('gmailPassword').value = '';
+            document.getElementById('sendgridApiKey').value = '';
+            
+            // 설정 상태 새로고침
+            loadUserSettings();
             
         } else {
             showToast('❌ ' + data.error, 'danger');
