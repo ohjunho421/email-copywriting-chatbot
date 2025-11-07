@@ -2203,6 +2203,34 @@ class EmailCopywriter:
         # 개인화 요소 추출
         personalization_elements = self._extract_personalization_elements(company_data, research_data)
         
+        # 블로그 콘텐츠 가져오기 (RAG 방식)
+        from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email
+        
+        blog_content_opi = ""
+        blog_content_recon = ""
+        
+        # OPI 관련 블로그
+        if sales_point in ['opi', ''] or 'opi' in sales_point:
+            opi_blogs = get_relevant_blog_posts_by_industry(
+                {'description': research_data.get('company_info', '')},
+                max_posts=2,
+                service_type='OPI'
+            )
+            if opi_blogs:
+                blog_content_opi = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
+                logger.info(f"📰 [OPI] {company_name}: 관련 블로그 {len(opi_blogs)}개 조회")
+        
+        # Recon 관련 블로그
+        if sales_point in ['recon', ''] or 'recon' in sales_point:
+            recon_blogs = get_relevant_blog_posts_by_industry(
+                {'description': research_data.get('company_info', '')},
+                max_posts=2,
+                service_type='Recon'
+            )
+            if recon_blogs:
+                blog_content_recon = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
+                logger.info(f"📰 [Recon] {company_name}: 관련 블로그 {len(recon_blogs)}개 조회")
+        
         # 세일즈포인트에 따라 생성할 이메일 유형 결정
         email_definitions = {
             "opi_professional": {
@@ -2254,6 +2282,10 @@ class EmailCopywriter:
 
 **개인화 요소:**
 {personalization_elements}
+
+{blog_content_opi}
+
+{blog_content_recon}
 
 **검증된 성과 좋은 한국어 이메일 템플릿 참고용 (스타일과 톤 참고):**
 
