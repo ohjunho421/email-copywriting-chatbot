@@ -470,6 +470,35 @@ def get_service_knowledge(service_type=''):
     """
     knowledge = ""
     
+    # 0. 블로그 캐시 확인 및 필요 시 스크래핑
+    cached_posts = load_blog_cache()
+    if not cached_posts:
+        logger.info("📰 블로그 캐시 없음 - 자동 스크래핑 시작 (get_service_knowledge)")
+        try:
+            # app.py의 scrape_portone_blog_initial 함수 import 및 실행
+            import sys
+            import importlib
+            
+            # app 모듈이 이미 로드되어 있으면 사용
+            if 'app' in sys.modules:
+                app_module = sys.modules['app']
+            else:
+                # 없으면 import (하지만 순환 참조 방지)
+                logger.warning("⚠️ app 모듈 미로드 - 블로그 스크래핑 건너뜀")
+                app_module = None
+            
+            if app_module and hasattr(app_module, 'scrape_portone_blog_initial'):
+                blog_posts = app_module.scrape_portone_blog_initial()
+                if blog_posts:
+                    logger.info(f"✅ 블로그 스크래핑 완료: {len(blog_posts)}개")
+                    cached_posts = blog_posts
+                else:
+                    logger.warning("⚠️ 블로그 스크래핑 결과 없음")
+            else:
+                logger.warning("⚠️ scrape_portone_blog_initial 함수 없음")
+        except Exception as blog_error:
+            logger.error(f"❌ 블로그 스크래핑 오류 (get_service_knowledge): {str(blog_error)}")
+    
     # 1. 서비스 소개서 로드
     if service_type == 'OPI':
         try:
