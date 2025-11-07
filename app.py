@@ -6902,9 +6902,16 @@ def send_email():
         
         # 본문에 서명 추가
         if user_signature:
+            # 서명의 상대 경로 이미지를 절대 URL로 변경
+            base_url = request.url_root.rstrip('/')  # http://example.com
+            absolute_signature = user_signature.replace(
+                'src="/static/',
+                f'src="{base_url}/static/'
+            )
+            
             # HTML 서명을 본문 끝에 추가
-            full_body = f"{body}<br><br>{user_signature}"
-            logger.info("✍️  사용자 서명 추가됨")
+            full_body = f"{body}<br><br>{absolute_signature}"
+            logger.info("✍️  사용자 서명 추가됨 (이미지 절대 URL 적용)")
         else:
             full_body = body
             logger.warning("⚠️  사용자 서명이 설정되지 않았습니다")
