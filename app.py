@@ -63,7 +63,7 @@ login_manager.login_message = '로그인이 필요한 페이지입니다.'
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 # Blueprint 등록
 from auth import auth_bp
@@ -6953,11 +6953,25 @@ def send_email():
                         'signature_included': bool(user_signature),
                         'method': 'SendGrid API'
                     })
+                elif response.status_code == 401:
+                    # API 키 인증 실패
+                    logger.error(f"❌ SendGrid API 인증 실패 (401): {response.text}")
+                    return jsonify({
+                        'success': False,
+                        'error': '❌ SendGrid API 키가 유효하지 않습니다.\n\n설정 페이지에서 올바른 API 키를 다시 입력해주세요.\n\n💡 SendGrid 대시보드에서 API 키를 확인하거나 새로 생성하세요.\n(Settings → API Keys)'
+                    }), 401
+                elif response.status_code == 403:
+                    # API 키 권한 부족
+                    logger.error(f"❌ SendGrid API 권한 부족 (403): {response.text}")
+                    return jsonify({
+                        'success': False,
+                        'error': '❌ SendGrid API 키 권한이 부족합니다.\n\nAPI 키를 "Full Access" 권한으로 다시 생성해주세요.'
+                    }), 403
                 else:
                     logger.error(f"❌ SendGrid API 오류: {response.status_code} - {response.text}")
                     return jsonify({
                         'success': False,
-                        'error': f'SendGrid API 오류: {response.status_code} - {response.text}'
+                        'error': f'SendGrid API 오류 ({response.status_code}): {response.text}'
                     }), 500
                     
             except Exception as e:
