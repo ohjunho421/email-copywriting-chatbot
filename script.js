@@ -1417,14 +1417,19 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                     <div id="body_display_${index}_${vIndex}" style="white-space: pre-line; word-break: keep-all; line-break: strict; font-size: 0.9em; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 10px; border-radius: 5px; line-height: 1.8;">
                                         ${convertMarkdownToHtml(variation.body)}
                                     </div>
-                                    <textarea id="body_edit_${index}_${vIndex}" class="form-control mt-2" rows="10" style="display: none;">${variation.body}</textarea>
-                                    <div id="edit_help_${index}_${vIndex}" class="alert alert-info mt-2" style="display: none; font-size: 0.85em;">
-                                        <strong><i class="fas fa-info-circle"></i> 간단한 수정 방법:</strong><br>
+                                    <div id="body_edit_${index}_${vIndex}" 
+                                         contenteditable="true"
+                                         class="form-control mt-2" 
+                                         style="display: none; min-height: 200px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; line-height: 1.8;"
+                                         data-placeholder="이메일 본문을 입력하세요...">
+                                    </div>
+                                    <div id="edit_help_${index}_${vIndex}" class="alert alert-success mt-2" style="display: none; font-size: 0.85em;">
+                                        <strong><i class="fas fa-magic"></i> 일반 문서처럼 편집하세요!</strong><br>
                                         <small>
-                                            • <strong>볼드체</strong>: **텍스트** (별 2개로 감싸기)<br>
-                                            • <em>기울임체</em>: *텍스트* (별 1개로 감싸기)<br>
-                                            • 줄바꿈: Enter 키로 자연스럽게 줄바꿈<br>
-                                            • HTML 태그는 사용하지 마세요!
+                                            • 그냥 입력하시면 됩니다 (특수문자 불필요!)<br>
+                                            • Enter로 줄바꿈<br>
+                                            • 기존 볼드체는 자동 유지됩니다<br>
+                                            • 복사/붙여넣기 가능
                                         </small>
                                     </div>
                                     <div id="edit_buttons_${index}_${vIndex}" class="mt-2" style="display: none;">
@@ -4040,21 +4045,14 @@ function toggleEditMode(companyIndex, variationIndex) {
         return;
     }
     
-    // 처음 편집 모드 진입 시 HTML을 텍스트로 변환
+    // 처음 편집 모드 진입 시 HTML 백업 및 복사
     if (!bodyEdit.dataset.originalHtml) {
         // HTML 버전 백업
         bodyEdit.dataset.originalHtml = bodyDisplay.innerHTML;
         subjectEdit.dataset.originalText = subjectEdit.value;
         
-        // HTML을 사용자 친화적 텍스트로 변환하여 표시
-        const friendlyText = convertHtmlToFriendlyText(bodyDisplay.innerHTML);
-        bodyEdit.value = friendlyText;
-        
-        // 사용 안내 추가
-        const helpText = document.getElementById(`edit_help_${companyIndex}_${variationIndex}`);
-        if (helpText) {
-            helpText.style.display = 'block';
-        }
+        // contenteditable div에 HTML 그대로 복사 (특수문자 불필요!)
+        bodyEdit.innerHTML = bodyDisplay.innerHTML;
     }
     
     // 편집 모드로 전환
@@ -4070,8 +4068,8 @@ function toggleEditMode(companyIndex, variationIndex) {
         helpText.style.display = 'block';
     }
     
-    // 포커스
-    subjectEdit.focus();
+    // 포커스 (contenteditable은 끝에 커서 위치)
+    bodyEdit.focus();
     
     console.log(`편집 모드 활성화: Company ${companyIndex}, Variation ${variationIndex}`);
 }
@@ -4087,11 +4085,9 @@ function cancelEditMode(companyIndex, variationIndex) {
     const editButtons = document.getElementById(`edit_buttons_${companyIndex}_${variationIndex}`);
     const helpText = document.getElementById(`edit_help_${companyIndex}_${variationIndex}`);
     
-    // 원래 내용으로 복원
+    // 원래 내용으로 복원 (contenteditable)
     if (bodyEdit.dataset.originalHtml) {
-        // HTML 버전으로 복원
-        const friendlyText = convertHtmlToFriendlyText(bodyEdit.dataset.originalHtml);
-        bodyEdit.value = friendlyText;
+        bodyEdit.innerHTML = bodyEdit.dataset.originalHtml;
         subjectEdit.value = subjectEdit.dataset.originalText;
     }
     
@@ -4121,17 +4117,17 @@ function saveEditedEmail(companyIndex, variationIndex) {
     const editButtons = document.getElementById(`edit_buttons_${companyIndex}_${variationIndex}`);
     const helpText = document.getElementById(`edit_help_${companyIndex}_${variationIndex}`);
     
-    // 수정된 내용 가져오기 (사용자 친화적 텍스트)
+    // 수정된 내용 가져오기 (contenteditable에서 HTML 그대로)
     const newSubject = subjectEdit.value.trim();
-    const newBodyText = bodyEdit.value.trim();
+    const newBodyHtml = bodyEdit.innerHTML.trim();
     
-    if (!newSubject || !newBodyText) {
+    if (!newSubject || !newBodyHtml) {
         showToast('❌ 제목과 본문을 모두 입력해주세요.', 'danger');
         return;
     }
     
-    // 사용자 친화적 텍스트를 HTML로 변환
-    const newBodyHtml = convertFriendlyTextToHtml(newBodyText);
+    // HTML에서 텍스트 버전 추출 (저장용)
+    const newBodyText = convertHtmlToFriendlyText(newBodyHtml);
     
     // 표시 영역 업데이트
     subjectDisplay.innerHTML = `<em>${newSubject}</em>`;
