@@ -4439,9 +4439,7 @@ async function saveSettings() {
         const data = await response.json();
         
         if (data.success) {
-            showToast('✅ ' + data.message, 'success');
-            
-            // 모달 닫기
+            // 모달 닫기 (토스트보다 먼저)
             const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
             modal.hide();
             
@@ -4451,6 +4449,11 @@ async function saveSettings() {
             
             // 설정 상태 새로고침
             loadUserSettings();
+            
+            // 모달이 완전히 닫힌 후 토스트 표시 (300ms 지연)
+            setTimeout(() => {
+                showToast('✅ ' + data.message, 'success');
+            }, 300);
             
         } else {
             showToast('❌ ' + data.error, 'danger');
