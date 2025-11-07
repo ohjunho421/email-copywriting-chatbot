@@ -2233,27 +2233,27 @@ class EmailCopywriter:
             except Exception as blog_error:
                 logger.error(f"❌ 블로그 스크래핑 오류: {str(blog_error)}")
         
-        # OPI 관련 블로그
+        # OPI 관련 블로그 (배경지식 활용)
         if cached_posts and (sales_point in ['opi', ''] or 'opi' in sales_point):
             opi_blogs = get_relevant_blog_posts_by_industry(
                 {'description': research_data.get('company_info', '')},
-                max_posts=2,
+                max_posts=5,  # 더 풍부한 배경지식 활용
                 service_type='OPI'
             )
             if opi_blogs:
                 blog_content_opi = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
-                logger.info(f"📰 [OPI] {company_name}: 관련 블로그 {len(opi_blogs)}개 조회")
+                logger.info(f"📰 [OPI] {company_name}: 관련 블로그 {len(opi_blogs)}개 조회 (배경지식 활용)")
         
-        # Recon 관련 블로그
+        # Recon 관련 블로그 (배경지식 활용)
         if cached_posts and (sales_point in ['recon', ''] or 'recon' in sales_point):
             recon_blogs = get_relevant_blog_posts_by_industry(
                 {'description': research_data.get('company_info', '')},
-                max_posts=2,
+                max_posts=5,  # 더 풍부한 배경지식 활용
                 service_type='Recon'
             )
             if recon_blogs:
                 blog_content_recon = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
-                logger.info(f"📰 [Recon] {company_name}: 관련 블로그 {len(recon_blogs)}개 조회")
+                logger.info(f"📰 [Recon] {company_name}: 관련 블로그 {len(recon_blogs)}개 조회 (배경지식 활용)")
         
         # 세일즈포인트에 따라 생성할 이메일 유형 결정
         email_definitions = {
@@ -5596,31 +5596,49 @@ def scrape_portone_blog_category(category_url, category_name, max_pages=5):
 
 def scrape_portone_blog_initial():
     """
-    포트원 블로그 초기 데이터 스크래핑
-    - OPI (국내 결제): 5페이지
-    - Recon (매출 마감): 1페이지
+    포트원 블로그 전체 데이터 스크래핑 (배경지식 확보)
+    - OPI (국내 결제): 15페이지 (주요 카테고리)
+    - Recon (매출 마감): 10페이지
+    - PS (플랫폼 정산): 10페이지
+    - 글로벌 결제: 10페이지
+    - 결제 트렌드/뉴스: 10페이지
     """
     try:
         from portone_blog_cache import save_blog_cache, extract_keywords_from_post
         
-        logger.info("🚀 포트원 블로그 초기 데이터 스크래핑 시작")
+        logger.info("🚀 포트원 블로그 전체 데이터 스크래핑 시작 (배경지식 확보)")
         
         all_posts = []
         
-        # 1. OPI (국내 결제) - 5페이지
+        # 1. OPI (국내 결제) - 15페이지 (가장 중요)
         opi_url = 'https://blog.portone.io/?filter=%EA%B5%AD%EB%82%B4%20%EA%B2%B0%EC%A0%9C'
-        opi_posts = scrape_portone_blog_category(opi_url, 'OPI', max_pages=5)
+        opi_posts = scrape_portone_blog_category(opi_url, 'OPI', max_pages=15)
         all_posts.extend(opi_posts)
+        logger.info(f"📊 OPI 블로그: {len(opi_posts)}개 수집")
         
-        # 2. Recon (매출 마감) - 1페이지
+        # 2. Recon (매출 마감) - 10페이지
         recon_url = 'https://blog.portone.io/?filter=%EB%A7%A4%EC%B6%9C%20%EB%A7%88%EA%B0%90'
-        recon_posts = scrape_portone_blog_category(recon_url, 'Recon', max_pages=1)
+        recon_posts = scrape_portone_blog_category(recon_url, 'Recon', max_pages=10)
         all_posts.extend(recon_posts)
+        logger.info(f"📊 Recon 블로그: {len(recon_posts)}개 수집")
         
-        # 3. PS (플랫폼 정산) - 3페이지
+        # 3. PS (플랫폼 정산) - 10페이지
         ps_url = 'https://blog.portone.io/category/news/?filter=%ED%94%8C%EB%9E%AB%ED%8F%BC%20%EC%A0%95%EC%82%B0'
-        ps_posts = scrape_portone_blog_category(ps_url, 'PS', max_pages=3)
+        ps_posts = scrape_portone_blog_category(ps_url, 'PS', max_pages=10)
         all_posts.extend(ps_posts)
+        logger.info(f"📊 PS 블로그: {len(ps_posts)}개 수집")
+        
+        # 4. 글로벌 결제 - 10페이지
+        global_url = 'https://blog.portone.io/?filter=%EA%B8%80%EB%A1%9C%EB%B2%8C%20%EA%B2%B0%EC%A0%9C'
+        global_posts = scrape_portone_blog_category(global_url, 'OPI', max_pages=10)
+        all_posts.extend(global_posts)
+        logger.info(f"📊 글로벌 결제 블로그: {len(global_posts)}개 수집")
+        
+        # 5. 결제 트렌드/뉴스 - 10페이지
+        news_url = 'https://blog.portone.io/category/news/'
+        news_posts = scrape_portone_blog_category(news_url, 'OPI', max_pages=10)
+        all_posts.extend(news_posts)
+        logger.info(f"📊 결제 트렌드/뉴스: {len(news_posts)}개 수집")
         
         # 키워드 자동 추출
         logger.info("🔍 블로그 글 키워드 추출 중...")
