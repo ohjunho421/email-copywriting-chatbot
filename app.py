@@ -6961,12 +6961,33 @@ def send_email():
                         'error': '❌ SendGrid API 키가 유효하지 않습니다.\n\n설정 페이지에서 올바른 API 키를 다시 입력해주세요.\n\n💡 SendGrid 대시보드에서 API 키를 확인하거나 새로 생성하세요.\n(Settings → API Keys)'
                     }), 401
                 elif response.status_code == 403:
-                    # API 키 권한 부족
-                    logger.error(f"❌ SendGrid API 권한 부족 (403): {response.text}")
-                    return jsonify({
-                        'success': False,
-                        'error': '❌ SendGrid API 키 권한이 부족합니다.\n\nAPI 키를 "Full Access" 권한으로 다시 생성해주세요.'
-                    }), 403
+                    # 발신자 인증 또는 API 키 권한 문제
+                    logger.error(f"❌ SendGrid API 403 오류: {response.text}")
+                    error_text = response.text.lower()
+                    
+                    if 'verified sender identity' in error_text or 'sender identity' in error_text:
+                        # 발신자 인증 문제
+                        return jsonify({
+                            'success': False,
+                            'error': f'''❌ 발신자 이메일 인증이 필요합니다!
+
+SendGrid에서 "{from_email}" 주소를 인증해주세요.
+
+📝 인증 방법:
+1. https://app.sendgrid.com/ 로그인
+2. Settings → Sender Authentication
+3. "Verify a Single Sender" 클릭
+4. 발신자 정보 입력 (From Email: {from_email})
+5. 인증 이메일 확인 후 Verify 버튼 클릭
+
+✅ 인증 완료 후 다시 시도해주세요!'''
+                        }), 403
+                    else:
+                        # 기타 권한 문제
+                        return jsonify({
+                            'success': False,
+                            'error': '❌ SendGrid API 키 권한이 부족합니다.\n\nAPI 키를 "Full Access" 권한으로 다시 생성해주세요.'
+                        }), 403
                 else:
                     logger.error(f"❌ SendGrid API 오류: {response.status_code} - {response.text}")
                     return jsonify({
