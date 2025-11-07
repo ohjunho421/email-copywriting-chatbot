@@ -4419,6 +4419,24 @@ async function saveSettings() {
         return;
     }
     
+    // SendGrid API 키 형식 검증
+    if (sendgridApiKey) {
+        if (sendgridApiKey.startsWith('SK.')) {
+            showToast('❌ Twilio API 키(SK.로 시작)는 사용할 수 없습니다. SendGrid API 키(SG.로 시작)를 입력해주세요.', 'danger');
+            return;
+        }
+        
+        if (!sendgridApiKey.startsWith('SG.')) {
+            showToast('⚠️ SendGrid API 키는 반드시 "SG."로 시작해야 합니다. API 키를 다시 확인해주세요.', 'warning');
+            return;
+        }
+        
+        if (sendgridApiKey.length < 20) {
+            showToast('⚠️ SendGrid API 키가 너무 짧습니다. 올바른 형식인지 확인해주세요.', 'warning');
+            return;
+        }
+    }
+    
     try {
         const payload = {};
         if (gmailPassword) {

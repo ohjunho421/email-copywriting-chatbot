@@ -505,13 +505,28 @@
                             <span id="sendgridStatus" class="badge bg-secondary ms-2">미설정</span>
                         </label>
                         <input type="text" class="form-control font-monospace" id="sendgridApiKey" 
-                               placeholder="SG.xxxxxxxxxxxxxxxxxxxxxxxx">
+                               placeholder="SG.로 시작하는 API 키 (예: SG.abc123...)">
                         <div class="form-text">
-                            Railway 환경에서는 SMTP 포트가 차단되므로 SendGrid API를 사용합니다.
+                            <strong>⚠️ 중요:</strong> 반드시 <code>SG.</code>로 시작하는 SendGrid API 키를 입력하세요. 
                             <a href="https://signup.sendgrid.com/" target="_blank">
                                 <i class="fas fa-external-link-alt"></i> SendGrid 무료 가입
                             </a>
                         </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <strong>📌 SendGrid API 키 생성 방법:</strong>
+                        <ol class="mb-0 mt-2 small">
+                            <li><a href="https://app.sendgrid.com/settings/api_keys" target="_blank">SendGrid API Keys 페이지</a> 접속</li>
+                            <li>"Create API Key" 클릭</li>
+                            <li><strong>API Key Name:</strong> "PortOne Email Bot" 등 원하는 이름 입력</li>
+                            <li><strong>중요:</strong> "Full Access" 또는 "Restricted Access"에서 <strong>Mail Send 권한 ON</strong></li>
+                            <li>생성된 API 키 복사 (반드시 <code>SG.</code>로 시작)</li>
+                            <li><strong>⚠️ 발신자 인증 필수:</strong> <a href="https://app.sendgrid.com/settings/sender_auth" target="_blank">Single Sender Verification</a>에서 이메일 인증 완료</li>
+                        </ol>
+                        <small class="text-danger d-block mt-2">
+                            <i class="fas fa-exclamation-circle"></i> Twilio API 키 (<code>SK.</code>로 시작)는 사용할 수 없습니다!
+                        </small>
                     </div>
 
                     <div class="alert alert-info">
