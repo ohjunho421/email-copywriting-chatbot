@@ -1,223 +1,200 @@
 """
-포트원 블로그 콘텐츠 데이터베이스 시스템
+포트원 블로그 콘텐츠 데이터베이스 시스템 (PostgreSQL)
+SQLite 대신 PostgreSQL을 사용하여 Railway에서 영구 저장
 """
 
-import sqlite3
 from datetime import datetime
 import logging
 import json
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
-DB_FILE = 'portone_blog.db'
+# Flask app context가 필요하므로 import는 함수 내부에서
+def get_db():
+    """Flask app의 db 객체 가져오기"""
+    from models import db
+    return db
+
+def get_blog_post_model():
+    """BlogPost 모델 가져오기"""
+    from models import BlogPost
+    return BlogPost
+
+def get_metadata_model():
+    """BlogCacheMetadata 모델 가져오기"""
+    from models import BlogCacheMetadata
+    return BlogCacheMetadata
 
 def init_db():
-    """데이터베이스 초기화 및 테이블 생성"""
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        # 블로그 포스트 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS blog_posts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                link TEXT UNIQUE,
-                summary TEXT,
-                content TEXT,
-                category TEXT,
-                keywords TEXT,
-                industry_tags TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # 캐시 메타데이터 테이블
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS cache_metadata (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                last_updated TIMESTAMP,
-                posts_count INTEGER
-            )
-        ''')
-        
-        # 인덱스 생성
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_created_at 
-            ON blog_posts(created_at DESC)
-        ''')
-        
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_category 
-            ON blog_posts(category)
-        ''')
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info("✅ 블로그 데이터베이스 초기화 완료")
-        return True
-    except Exception as e:
-        logger.error(f"데이터베이스 초기화 오류: {str(e)}")
-        return False
+    """데이터베이스 초기화 (SQLAlchemy가 자동으로 처리)"""
+    # Flask app context에서 db.create_all()이 호출되므로
+    # 여기서는 특별한 작업 불필요
+    logger.info("✅ 블로그 데이터베이스 초기화 완료 (PostgreSQL)")
+    return True
 
 def save_blog_cache(blog_posts, replace_all=True):
-    """블로그 포스트를 데이터베이스에 저장"""
+    """
+    블로그 포스트를 PostgreSQL 데이터베이스에 저장
+    
+    Args:
+        blog_posts: 블로그 포스트 리스트 (dict)
+        replace_all: True면 기존 포스트 전체 삭제 후 저장, False면 추가/업데이트만
+    
+    Returns:
+        bool: 성공 여부
+    """
     try:
-        init_db()
-        
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
+        db = get_db()
+        BlogPost = get_blog_post_model()
+        BlogCacheMetadata = get_metadata_model()
         
         # replace_all이 True면 기존 포스트 삭제
         if replace_all:
-            cursor.execute('DELETE FROM blog_posts')
+            db.session.query(BlogPost).delete()
+            logger.info("🗑️ 기존 블로그 포스트 전체 삭제")
         
-        # 새 포스트 삽입 (중복은 무시)
+        # 새 포스트 삽입 또는 업데이트
         inserted_count = 0
+        updated_count = 0
+        
         for post in blog_posts:
-            try:
-                cursor.execute('''
-                    INSERT INTO blog_posts (title, link, summary, content, category, keywords, industry_tags, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    post.get('title', ''),
-                    post.get('link', ''),
-                    post.get('summary', ''),
-                    post.get('content', ''),
-                    post.get('category', ''),
-                    post.get('keywords', ''),
-                    post.get('industry_tags', ''),
-                    datetime.now(),
-                    datetime.now()
-                ))
+            link = post.get('link', '')
+            if not link:
+                continue
+            
+            # 기존 포스트 확인 (link로 중복 체크)
+            existing_post = db.session.query(BlogPost).filter_by(link=link).first()
+            
+            if existing_post:
+                # 업데이트
+                existing_post.title = post.get('title', '')
+                existing_post.summary = post.get('summary', '')
+                existing_post.content = post.get('content', '')
+                existing_post.category = post.get('category', '')
+                existing_post.keywords = post.get('keywords', '')
+                existing_post.industry_tags = post.get('industry_tags', '')
+                existing_post.updated_at = datetime.utcnow()
+                updated_count += 1
+            else:
+                # 새 포스트 삽입
+                new_post = BlogPost(
+                    title=post.get('title', ''),
+                    link=link,
+                    summary=post.get('summary', ''),
+                    content=post.get('content', ''),
+                    category=post.get('category', ''),
+                    keywords=post.get('keywords', ''),
+                    industry_tags=post.get('industry_tags', ''),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                db.session.add(new_post)
                 inserted_count += 1
-            except sqlite3.IntegrityError:
-                # 중복 링크는 업데이트
-                cursor.execute('''
-                    UPDATE blog_posts 
-                    SET title=?, summary=?, content=?, category=?, keywords=?, industry_tags=?, updated_at=?
-                    WHERE link=?
-                ''', (
-                    post.get('title', ''),
-                    post.get('summary', ''),
-                    post.get('content', ''),
-                    post.get('category', ''),
-                    post.get('keywords', ''),
-                    post.get('industry_tags', ''),
-                    datetime.now(),
-                    post.get('link', '')
-                ))
-                inserted_count += 1
+        
+        # 커밋
+        db.session.commit()
+        
+        # 전체 개수 확인
+        total_count = db.session.query(BlogPost).count()
         
         # 메타데이터 업데이트
-        cursor.execute('SELECT COUNT(*) FROM blog_posts')
-        total_count = cursor.fetchone()[0]
+        metadata = db.session.query(BlogCacheMetadata).first()
+        if metadata:
+            metadata.last_updated = datetime.utcnow()
+            metadata.posts_count = total_count
+        else:
+            metadata = BlogCacheMetadata(
+                last_updated=datetime.utcnow(),
+                posts_count=total_count
+            )
+            db.session.add(metadata)
         
-        cursor.execute('''
-            INSERT OR REPLACE INTO cache_metadata (id, last_updated, posts_count)
-            VALUES (1, ?, ?)
-        ''', (datetime.now(), total_count))
+        db.session.commit()
         
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"✅ 블로그 DB 저장 완료: {inserted_count}개 글 처리, 총 {total_count}개")
+        logger.info(f"✅ 블로그 DB 저장 완료: 신규 {inserted_count}개, 업데이트 {updated_count}개, 총 {total_count}개 (PostgreSQL)")
         return True
+        
     except Exception as e:
         logger.error(f"블로그 DB 저장 오류: {str(e)}")
+        try:
+            db.session.rollback()
+        except:
+            pass
         return False
 
 def load_blog_cache():
-    """데이터베이스에서 블로그 포스트 로드"""
+    """
+    PostgreSQL 데이터베이스에서 블로그 포스트 로드
+    
+    Returns:
+        list: 블로그 포스트 리스트 (dict)
+    """
     try:
-        init_db()
+        db = get_db()
+        BlogPost = get_blog_post_model()
         
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
+        # 최신 글부터 조회
+        posts_query = db.session.query(BlogPost).order_by(BlogPost.created_at.desc()).all()
         
-        cursor.execute('''
-            SELECT title, link, summary, content, category, keywords, industry_tags, created_at
-            FROM blog_posts
-            ORDER BY created_at DESC
-        ''')
-        
-        rows = cursor.fetchall()
-        conn.close()
-        
-        if not rows:
-            logger.info("📝 블로그 DB에 데이터 없음")
+        if not posts_query:
+            logger.info("📝 블로그 DB에 데이터 없음 (PostgreSQL)")
             return None
         
+        # dict 형태로 변환
         posts = []
-        for row in rows:
+        for post in posts_query:
             posts.append({
-                'title': row[0],
-                'link': row[1],
-                'summary': row[2],
-                'content': row[3],
-                'category': row[4],
-                'keywords': row[5],
-                'industry_tags': row[6],
-                'created_at': row[7]
+                'title': post.title,
+                'link': post.link,
+                'summary': post.summary,
+                'content': post.content,
+                'category': post.category,
+                'keywords': post.keywords,
+                'industry_tags': post.industry_tags,
+                'created_at': post.created_at.isoformat() if post.created_at else None
             })
         
-        logger.info(f"📚 블로그 DB 로드 완료: {len(posts)}개 글")
+        logger.info(f"📚 블로그 DB 로드 완료: {len(posts)}개 글 (PostgreSQL)")
         return posts
+        
     except Exception as e:
         logger.error(f"블로그 DB 로드 오류: {str(e)}")
         return None
 
 def get_blog_cache_age():
-    """데이터베이스의 업데이트 시간 확인"""
+    """
+    데이터베이스의 업데이트 시간 확인
+    
+    Returns:
+        float: 캐시 나이 (시간 단위) 또는 None
+    """
     try:
-        init_db()
+        db = get_db()
+        BlogCacheMetadata = get_metadata_model()
         
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
+        metadata = db.session.query(BlogCacheMetadata).first()
         
-        cursor.execute('SELECT last_updated FROM cache_metadata WHERE id = 1')
-        row = cursor.fetchone()
-        conn.close()
-        
-        if not row or not row[0]:
+        if not metadata or not metadata.last_updated:
             return None
         
-        # SQLite datetime을 Python datetime으로 변환
-        if isinstance(row[0], str):
-            updated_time = datetime.fromisoformat(row[0].replace(' ', 'T'))
-        else:
-            updated_time = row[0]
-        
-        age_hours = (datetime.now() - updated_time).total_seconds() / 3600
+        age_hours = (datetime.utcnow() - metadata.last_updated).total_seconds() / 3600
         return age_hours
+        
     except Exception as e:
         logger.error(f"캐시 시간 확인 오류: {str(e)}")
         return None
 
-def format_blog_content_for_email(blog_posts):
-    """블로그 포스트를 이메일용 텍스트로 포맷팅"""
-    if not blog_posts:
-        return ""
-    
-    content = "\n\n**📰 포트원 최신 블로그 콘텐츠 (참고용):**\n"
-    content += "아래 최신 콘텐츠를 참고하여 메일 작성 시 자연스럽게 활용할 수 있습니다.\n\n"
-    
-    for i, post in enumerate(blog_posts[:5], 1):  # 최대 5개
-        content += f"{i}. **{post['title']}**\n"
-        if post.get('summary'):
-            content += f"   {post['summary'][:150]}...\n"
-        if post.get('link'):
-            content += f"   링크: {post['link']}\n"
-        content += "\n"
-    
-    content += "💡 위 콘텐츠를 활용하여 최신 트렌드나 포트원의 새로운 기능을 자연스럽게 언급할 수 있습니다.\n"
-    
-    return content
-
 def extract_keywords_from_post(post):
-    """블로그 글에서 키워드 추출 (Gemini 활용)"""
+    """
+    블로그 글에서 키워드 추출
+    
+    Args:
+        post: 블로그 포스트 dict
+    
+    Returns:
+        tuple: (keywords, industry_tags)
+    """
     try:
         content = post.get('content', '')
         title = post.get('title', '')
@@ -225,11 +202,7 @@ def extract_keywords_from_post(post):
         if not content or len(content) < 50:
             return '', ''
         
-        # 간단한 키워드 추출 (나중에 Gemini로 강화 가능)
-        # 현재는 카테고리 기반으로 단순 태그 생성
-        category = post.get('category', '')
-        
-        # 기본 키워드
+        # 키워드 초기화
         keywords = []
         industry_tags = []
         
@@ -269,153 +242,112 @@ def extract_keywords_from_post(post):
             keywords.append('정기결제')
         
         return ','.join(keywords), ','.join(industry_tags)
+        
     except Exception as e:
         logger.error(f"키워드 추출 오류: {str(e)}")
         return '', ''
 
 def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=None):
     """
-    회사 정보를 기반으로 관련 블로그 글 조회
+    회사 정보를 기반으로 관련 블로그 글 조회 (PostgreSQL)
     
     Args:
-        company_info: 회사 정보 딕셔너리 (industry, category, description 등)
+        company_info: 회사 정보 딕셔너리
         max_posts: 최대 반환 글 수
-        service_type: 서비스 타입 ('OPI' 또는 'Recon', None이면 모두 조회)
+        service_type: 서비스 타입 ('OPI', 'Recon', 'Prism', 'PS' 등)
     
     Returns:
         list: 관련 블로그 글 리스트
     """
     try:
-        init_db()
+        db = get_db()
+        BlogPost = get_blog_post_model()
         
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        
-        # 회사 업종/카테고리 추출
+        # 회사 정보에서 검색 키워드 추출
         industry = company_info.get('industry', '')
         category = company_info.get('category', '')
         description = company_info.get('description', '')
         
-        # 검색 키워드 구성
         search_terms = []
         if industry:
             search_terms.append(industry)
         if category:
             search_terms.append(category)
         
-        # 설명에서 주요 키워드 추출
+        # 설명에서 키워드 추출
         if description:
             desc_lower = description.lower()
-            if '게임' in desc_lower or 'game' in desc_lower:
-                search_terms.append('게임')
-            if '이커머스' in desc_lower or '쇼핑몰' in desc_lower:
-                search_terms.append('이커머스')
-            if '여행' in desc_lower or 'travel' in desc_lower:
-                search_terms.append('여행')
-            if '교육' in desc_lower or 'education' in desc_lower:
-                search_terms.append('교육')
-            if '금융' in desc_lower or 'fintech' in desc_lower:
-                search_terms.append('금융')
+            for keyword in ['게임', 'game', '이커머스', '쇼핑몰', '여행', 'travel', '교육', 'education', '금융', 'fintech']:
+                if keyword in desc_lower:
+                    search_terms.append(keyword)
         
-        # 서비스 타입 조건 추가
-        service_condition = ''
-        params = []
+        # 쿼리 시작
+        query = db.session.query(BlogPost)
         
+        # 서비스 타입 필터링
         if service_type:
-            service_condition = 'category = ?'
-            params.append(service_type)
+            query = query.filter(BlogPost.category == service_type)
         
-        if not search_terms:
-            # 검색어가 없으면 최신 글 반환 (서비스 타입 필터링)
-            if service_condition:
-                query = f'''
-                    SELECT title, link, summary, content, category, keywords, industry_tags
-                    FROM blog_posts
-                    WHERE {service_condition}
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                '''
-                params.append(max_posts)
-            else:
-                query = '''
-                    SELECT title, link, summary, content, category, keywords, industry_tags
-                    FROM blog_posts
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                '''
-                params = [max_posts]
-            
-            cursor.execute(query, params)
-        else:
-            # 업종 태그 또는 키워드 매칭 + 서비스 타입 필터링
-            search_pattern = '%' + '%'.join(search_terms) + '%'
-            
-            if service_condition:
-                query = f'''
-                    SELECT title, link, summary, content, category, keywords, industry_tags
-                    FROM blog_posts
-                    WHERE {service_condition}
-                      AND (industry_tags LIKE ? OR keywords LIKE ? OR title LIKE ? OR content LIKE ?)
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                '''
-                params.extend([search_pattern, search_pattern, search_pattern, search_pattern, max_posts])
-            else:
-                query = '''
-                    SELECT title, link, summary, content, category, keywords, industry_tags
-                    FROM blog_posts
-                    WHERE industry_tags LIKE ? OR keywords LIKE ? OR title LIKE ? OR content LIKE ?
-                    ORDER BY created_at DESC
-                    LIMIT ?
-                '''
-                params = [search_pattern, search_pattern, search_pattern, search_pattern, max_posts]
-            
-            cursor.execute(query, params)
+        # 검색어로 필터링
+        if search_terms:
+            from sqlalchemy import or_
+            search_pattern = f"%{'%'.join(search_terms)}%"
+            query = query.filter(
+                or_(
+                    BlogPost.industry_tags.like(search_pattern),
+                    BlogPost.keywords.like(search_pattern),
+                    BlogPost.title.like(search_pattern),
+                    BlogPost.content.like(search_pattern)
+                )
+            )
         
-        rows = cursor.fetchall()
-        conn.close()
+        # 최신순 정렬 및 개수 제한
+        posts_query = query.order_by(BlogPost.created_at.desc()).limit(max_posts).all()
         
         service_label = f"[{service_type}] " if service_type else ""
         
-        if not rows:
+        if not posts_query:
             if search_terms:
                 logger.info(f"🔍 {service_label}'{', '.join(search_terms)}' 관련 블로그 글 없음")
             else:
                 logger.info(f"🔍 {service_label}블로그 글 없음")
             return []
         
+        # dict 형태로 변환
         posts = []
-        for row in rows:
+        for post in posts_query:
             posts.append({
-                'title': row[0],
-                'link': row[1],
-                'summary': row[2],
-                'content': row[3],
-                'category': row[4],
-                'keywords': row[5],
-                'industry_tags': row[6]
+                'title': post.title,
+                'link': post.link,
+                'summary': post.summary,
+                'content': post.content,
+                'category': post.category,
+                'keywords': post.keywords,
+                'industry_tags': post.industry_tags
             })
         
         if search_terms:
-            logger.info(f"✅ {service_label}'{', '.join(search_terms)}' 관련 블로그 글 {len(posts)}개 조회")
+            logger.info(f"✅ {service_label}'{', '.join(search_terms)}' 관련 블로그 글 {len(posts)}개 조회 (PostgreSQL)")
         else:
-            logger.info(f"✅ {service_label}블로그 글 {len(posts)}개 조회")
+            logger.info(f"✅ {service_label}블로그 글 {len(posts)}개 조회 (PostgreSQL)")
+        
         return posts
+        
     except Exception as e:
         logger.error(f"업종별 블로그 조회 오류: {str(e)}")
         return []
 
 def format_relevant_blog_for_email(blog_posts, company_name='', service_type=''):
     """
-    업종별 관련 블로그 글을 RAG 방식으로 포맷팅 (직접 언급 제거)
+    업종별 관련 블로그 글을 RAG 방식으로 포맷팅
     
     Args:
         blog_posts: 블로그 글 리스트
-        company_name: 회사명 (개인화용)
-        service_type: 서비스 타입 ('OPI' 또는 'Recon')
+        company_name: 회사명
+        service_type: 서비스 타입
     
     Returns:
-        str: 포맷팅된 텍스트 (RAG용 컨텍스트)
+        str: 포맷팅된 텍스트
     """
     if not blog_posts:
         return ''
@@ -427,23 +359,18 @@ def format_relevant_blog_for_email(blog_posts, company_name='', service_type='')
     content += "- 블로그 글을 직접 언급하지 마세요 (\"최근 포트원 블로그에서...\" ❌)\n"
     content += "- 정보만 자연스럽게 활용하여 근거 있는 주장을 펼치세요\n"
     content += "- 수치, 트렌드, 사례 등을 자신의 말로 녹여서 사용하세요\n\n"
-    
     content += "---\n\n"
     
     for i, post in enumerate(blog_posts[:3], 1):
         content += f"**참고자료 {i}:**\n"
-        
-        # 제목은 표시하되, 이메일에 직접 쓰지 말라고 명시
         content += f"주제: {post['title']}\n\n"
         
-        # 핵심 내용 추출 (요약 + 본문 일부)
         summary = post.get('summary', '')
         full_content = post.get('content', '')
         
         if summary:
             content += f"핵심 내용:\n{summary}\n\n"
         
-        # 본문에서 추가 정보 추출 (수치, 통계, 사례 등)
         if full_content and len(full_content) > len(summary):
             additional = full_content[len(summary):min(len(summary)+300, len(full_content))]
             content += f"추가 정보:\n{additional}...\n\n"
@@ -463,101 +390,71 @@ def get_service_knowledge(service_type=''):
     서비스 소개서와 블로그 전체 정보를 통합하여 RAG 지식베이스 생성
     
     Args:
-        service_type: 'OPI', 'Recon', 또는 'Prism'
+        service_type: 'OPI', 'Recon', 'Prism', 'PS'
     
     Returns:
         str: 통합된 지식베이스 텍스트
     """
     knowledge = ""
     
-    # 블로그 스크래핑은 app.py의 generate_email_with_gemini에서 처리됨
-    # 여기서는 이미 스크래핑된 데이터를 로드만 함
-    
     # 1. 서비스 소개서 로드
-    if service_type == 'OPI':
-        try:
-            with open('opi_service_info.txt', 'r', encoding='utf-8') as f:
-                service_doc = f.read()
-            knowledge += f"\n\n**📖 One Payment Infra (OPI) 서비스 소개:**\n\n"
-            knowledge += f"{service_doc[:3000]}...\n\n"  # 처음 3000자
-            logger.info("✅ OPI 서비스 소개서 로드 완료")
-        except:
-            logger.warning("⚠️ OPI 서비스 소개서 파일 없음")
+    service_files = {
+        'OPI': 'opi_service_info.txt',
+        'Recon': 'recon_service_info.txt',
+        'Prism': 'prism_service_info.txt',
+        'PS': 'ps_service_info.txt'
+    }
     
-    elif service_type == 'Recon':
-        try:
-            with open('recon_service_info.txt', 'r', encoding='utf-8') as f:
-                service_doc = f.read()
-            knowledge += f"\n\n**📖 재무자동화 솔루션 (Recon) 서비스 소개:**\n\n"
-            knowledge += f"{service_doc[:2000]}...\n\n"  # 처음 2000자
-            logger.info("✅ Recon 서비스 소개서 로드 완료")
-        except:
-            logger.warning("⚠️ Recon 서비스 소개서 파일 없음")
+    service_names = {
+        'OPI': 'One Payment Infra (OPI)',
+        'Recon': '재무자동화 솔루션 (Recon)',
+        'Prism': '멀티 오픈마켓 정산 통합 솔루션 (Prism)',
+        'PS': '플랫폼 정산 자동화'
+    }
     
-    elif service_type == 'Prism':
+    if service_type in service_files:
         try:
-            with open('prism_service_info.txt', 'r', encoding='utf-8') as f:
+            with open(service_files[service_type], 'r', encoding='utf-8') as f:
                 service_doc = f.read()
-            knowledge += f"\n\n**📖 멀티 오픈마켓 정산 통합 솔루션 (Prism) 서비스 소개:**\n\n"
-            knowledge += f"{service_doc[:3000]}...\n\n"  # 처음 3000자
-            logger.info("✅ Prism 서비스 소개서 로드 완료")
+            knowledge += f"\n\n**📖 {service_names[service_type]} 서비스 소개:**\n\n"
+            knowledge += f"{service_doc[:3000]}...\n\n"
+            logger.info(f"✅ {service_type} 서비스 소개서 로드 완료")
         except:
-            logger.warning("⚠️ Prism 서비스 소개서 파일 없음")
+            logger.warning(f"⚠️ {service_type} 서비스 소개서 파일 없음")
     
-    elif service_type == 'PS':
-        try:
-            with open('ps_service_info.txt', 'r', encoding='utf-8') as f:
-                service_doc = f.read()
-            knowledge += f"\n\n**📖 플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행) 서비스 소개:**\n\n"
-            knowledge += f"{service_doc[:3500]}...\n\n"  # 처음 3500자
-            logger.info("✅ 플랫폼 정산(PS) 서비스 소개서 로드 완료")
-        except:
-            logger.warning("⚠️ 플랫폼 정산(PS) 서비스 소개서 파일 없음")
-    
-    # 2. 블로그 전체 요약 (해당 카테고리)
+    # 2. 블로그 전체 요약 (PostgreSQL에서 조회)
     try:
-        init_db()
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
+        db = get_db()
+        BlogPost = get_blog_post_model()
         
-        cursor.execute('''
-            SELECT title, summary, keywords
-            FROM blog_posts
-            WHERE category = ?
-            ORDER BY created_at DESC
-        ''', (service_type,))
+        posts_query = db.session.query(BlogPost).filter_by(category=service_type).order_by(BlogPost.created_at.desc()).all()
         
-        rows = cursor.fetchall()
-        conn.close()
-        
-        if rows:
-            knowledge += f"\n\n**📚 {service_type} 관련 블로그 인사이트 ({len(rows)}개 글):**\n\n"
-            knowledge += f"다음은 포트원 공식 블로그에서 {service_type} 관련 {len(rows)}개 글의 핵심 내용입니다.\n"
+        if posts_query:
+            knowledge += f"\n\n**📚 {service_type} 관련 블로그 인사이트 ({len(posts_query)}개 글):**\n\n"
+            knowledge += f"다음은 포트원 공식 블로그에서 {service_type} 관련 {len(posts_query)}개 글의 핵심 내용입니다.\n"
             knowledge += "이 정보들을 바탕으로 업계 트렌드, Pain Point, 사례 등을 자연스럽게 언급하세요.\n\n"
             
             # 주요 키워드 추출
             all_keywords = []
-            for row in rows:
-                keywords = row[2].split(',') if row[2] else []
-                all_keywords.extend(keywords)
+            for post in posts_query:
+                if post.keywords:
+                    keywords = post.keywords.split(',')
+                    all_keywords.extend(keywords)
             
-            # 키워드 빈도 계산
-            from collections import Counter
-            keyword_freq = Counter(all_keywords)
-            top_keywords = [k for k, v in keyword_freq.most_common(10)]
-            
-            knowledge += f"**주요 키워드**: {', '.join(top_keywords)}\n\n"
+            if all_keywords:
+                keyword_freq = Counter(all_keywords)
+                top_keywords = [k for k, v in keyword_freq.most_common(10)]
+                knowledge += f"**주요 키워드**: {', '.join(top_keywords)}\n\n"
             
             # 대표 글 5개 요약
             knowledge += f"**대표 인사이트:**\n\n"
-            for i, row in enumerate(rows[:5], 1):
-                title, summary = row[0], row[1]
-                knowledge += f"{i}. {title}\n"
-                if summary:
-                    knowledge += f"   → {summary[:150]}...\n\n"
+            for i, post in enumerate(posts_query[:5], 1):
+                knowledge += f"{i}. {post.title}\n"
+                if post.summary:
+                    knowledge += f"   → {post.summary[:150]}...\n\n"
             
-            logger.info(f"✅ {service_type} 블로그 {len(rows)}개 요약 완료")
-        
+            logger.info(f"✅ {service_type} 블로그 {len(posts_query)}개 요약 완료 (PostgreSQL)")
+            
     except Exception as e:
         logger.error(f"블로그 요약 오류: {str(e)}")
     

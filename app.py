@@ -52,7 +52,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 CORS(app)
 
 # 데이터베이스 초기화
-from models import db, User, EmailGeneration
+from models import db, User, EmailGeneration, BlogPost, BlogCacheMetadata
 db.init_app(app)
 
 # Flask-Login 설정

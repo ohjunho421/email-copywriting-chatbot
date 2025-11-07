@@ -2,6 +2,8 @@
 데이터베이스 모델
 - User: 사용자 정보 및 인증
 - EmailGeneration: 이메일 문안 생성 기록
+- BlogPost: 포트원 블로그 포스트 캐시 (PostgreSQL 영구 저장)
+- BlogCacheMetadata: 블로그 캐시 메타데이터
 """
 
 from flask_sqlalchemy import SQLAlchemy
@@ -122,3 +124,50 @@ class EmailGeneration(db.Model):
     
     def __repr__(self):
         return f'<EmailGeneration {self.company_name} - {self.email_type}>'
+
+
+class BlogPost(db.Model):
+    """포트원 블로그 포스트 캐시 (PostgreSQL 영구 저장)"""
+    __tablename__ = 'blog_posts'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.Text, nullable=False)
+    link = db.Column(db.String(500), unique=True, nullable=False, index=True)
+    summary = db.Column(db.Text, nullable=True)
+    content = db.Column(db.Text, nullable=True)
+    category = db.Column(db.String(50), nullable=True, index=True)
+    keywords = db.Column(db.Text, nullable=True)  # JSON 문자열
+    industry_tags = db.Column(db.Text, nullable=True)  # JSON 문자열
+    
+    # 메타데이터
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<BlogPost {self.title}>'
+    
+    def to_dict(self):
+        """딕셔너리로 변환"""
+        return {
+            'title': self.title,
+            'link': self.link,
+            'summary': self.summary,
+            'content': self.content,
+            'category': self.category,
+            'keywords': self.keywords,
+            'industry_tags': self.industry_tags,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class BlogCacheMetadata(db.Model):
+    """블로그 캐시 메타데이터"""
+    __tablename__ = 'blog_cache_metadata'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+    posts_count = db.Column(db.Integer, default=0)
+    
+    def __repr__(self):
+        return f'<BlogCacheMetadata posts={self.posts_count} updated={self.last_updated}>'
