@@ -86,8 +86,8 @@ class User(UserMixin, db.Model):
             full_name = self.name
         
         signature = f'''<br><br>
-<img src="/static/images/PortOne_Logo_Black.png" alt="PortOne Logo" style="height: 40px; margin-bottom: 10px;"><br>
---<br>
+<img src="/static/images/PortOne_Logo_Black.png" alt="PortOne Logo" style="height: 40px; margin-bottom: 5px;"><br>
+<div style="border-bottom: 1px solid #e0e0e0; width: 200px; margin: 5px 0 10px 0;"></div>
 {full_name}<br>
 Sales team | SDR<br>
 E <a href="mailto:{self.email}">{self.email}</a> | M {self.phone}<br>
