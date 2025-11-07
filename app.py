@@ -6919,28 +6919,57 @@ def send_email():
             html_part = MIMEText(full_body, 'html', 'utf-8')
             msg.attach(html_part)
             
-            try:
-                # Railway에서는 포트 587이 차단될 수 있으므로 SSL 포트 465 사용
-                with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30) as server:
-                    server.login(from_email, gmail_app_password)
-                    server.send_message(msg)
-                
-                logger.info(f"✅ 이메일 발송 성공: {to_email}")
-                
-                return jsonify({
-                    'success': True,
-                    'message': '이메일이 성공적으로 발송되었습니다.',
-                    'from': from_email,
-                    'to': to_email,
-                    'signature_included': bool(user_signature)
-                })
-                
-            except Exception as smtp_error:
-                logger.error(f"❌ SMTP 발송 실패: {str(smtp_error)}")
-                return jsonify({
-                    'success': False,
-                    'error': f'Gmail SMTP 발송 실패: {str(smtp_error)}'
-                }), 500
+            # Railway 환경에서 여러 SMTP 방법 시도
+            smtp_methods = [
+                # 방법 1: SMTP_SSL (포트 465)
+                {'name': 'SMTP_SSL 465', 'method': 'ssl', 'port': 465},
+                # 방법 2: SMTP with STARTTLS (포트 587)
+                {'name': 'SMTP STARTTLS 587', 'method': 'starttls', 'port': 587},
+                # 방법 3: SMTP with STARTTLS (포트 25)
+                {'name': 'SMTP STARTTLS 25', 'method': 'starttls', 'port': 25},
+            ]
+            
+            last_error = None
+            for method_config in smtp_methods:
+                try:
+                    logger.info(f"🔄 {method_config['name']} 시도 중...")
+                    
+                    if method_config['method'] == 'ssl':
+                        # SSL 방식 (포트 465)
+                        with smtplib.SMTP_SSL('smtp.gmail.com', method_config['port'], timeout=60) as server:
+                            server.login(from_email, gmail_app_password)
+                            server.send_message(msg)
+                    else:
+                        # STARTTLS 방식 (포트 587 또는 25)
+                        with smtplib.SMTP('smtp.gmail.com', method_config['port'], timeout=60) as server:
+                            server.ehlo()
+                            server.starttls()
+                            server.ehlo()
+                            server.login(from_email, gmail_app_password)
+                            server.send_message(msg)
+                    
+                    logger.info(f"✅ 이메일 발송 성공 ({method_config['name']}): {to_email}")
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': f'이메일이 성공적으로 발송되었습니다 ({method_config["name"]}).',
+                        'from': from_email,
+                        'to': to_email,
+                        'signature_included': bool(user_signature),
+                        'smtp_method': method_config['name']
+                    })
+                    
+                except Exception as e:
+                    last_error = str(e)
+                    logger.warning(f"⚠️  {method_config['name']} 실패: {str(e)}")
+                    continue
+            
+            # 모든 방법 실패
+            logger.error(f"❌ 모든 SMTP 방법 실패. 마지막 오류: {last_error}")
+            return jsonify({
+                'success': False,
+                'error': f'Gmail SMTP 발송 실패 (모든 포트 시도 실패): {last_error}\n\n💡 Railway 환경에서는 SMTP 포트가 차단될 수 있습니다. SendGrid 같은 이메일 서비스 사용을 권장합니다.'
+            }), 500
         else:
             # Gmail 앱 비밀번호가 설정되지 않았으면 시뮬레이션
             logger.warning(f"⚠️  {from_email} 사용자의 Gmail 앱 비밀번호가 설정되지 않아 시뮬레이션 모드로 실행합니다")
