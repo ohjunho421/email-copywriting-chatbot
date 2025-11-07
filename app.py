@@ -131,23 +131,15 @@ with app.app_context():
             db.session.commit()
             logger.info(f"✨ {len(all_users)}명의 사용자 서명 포맷 업데이트 완료")
         
-        # 블로그 캐시 초기화 (Railway 환경에서 자동 스크래핑)
+        # 블로그 캐시 상태만 확인 (스크래핑은 첫 요청 시 자동 실행)
         from portone_blog_cache import load_blog_cache, get_blog_cache_age
         cached_posts = load_blog_cache()
         cache_age = get_blog_cache_age()
         
-        if not cached_posts or cache_age is None or cache_age >= 24:
-            logger.info("📰 블로그 캐시 없음 또는 오래됨 - 자동 스크래핑 시작")
-            try:
-                blog_posts = scrape_portone_blog_initial()
-                if blog_posts:
-                    logger.info(f"✅ 블로그 초기 데이터 스크래핑 완료: {len(blog_posts)}개")
-                else:
-                    logger.warning("⚠️ 블로그 스크래핑 결과 없음")
-            except Exception as blog_error:
-                logger.error(f"❌ 블로그 스크래핑 오류: {str(blog_error)}")
-        else:
+        if cached_posts:
             logger.info(f"✅ 블로그 캐시 로드 완료: {len(cached_posts)}개 (나이: {cache_age:.1f}시간)")
+        else:
+            logger.info("📰 블로그 캐시 없음 - 첫 이메일 생성 시 자동 스크래핑됩니다")
             
     except Exception as e:
         logger.error(f"❌ 마이그레이션 오류: {str(e)}")
@@ -2222,13 +2214,27 @@ class EmailCopywriter:
         personalization_elements = self._extract_personalization_elements(company_data, research_data)
         
         # 블로그 콘텐츠 가져오기 (RAG 방식)
-        from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email
+        from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email, load_blog_cache
         
         blog_content_opi = ""
         blog_content_recon = ""
         
+        # 블로그 캐시 확인 및 필요 시 스크래핑
+        cached_posts = load_blog_cache()
+        if not cached_posts:
+            logger.info("📰 블로그 캐시 없음 - 자동 스크래핑 시작")
+            try:
+                blog_posts = scrape_portone_blog_initial()
+                if blog_posts:
+                    logger.info(f"✅ 블로그 스크래핑 완료: {len(blog_posts)}개")
+                    cached_posts = blog_posts
+                else:
+                    logger.warning("⚠️ 블로그 스크래핑 결과 없음")
+            except Exception as blog_error:
+                logger.error(f"❌ 블로그 스크래핑 오류: {str(blog_error)}")
+        
         # OPI 관련 블로그
-        if sales_point in ['opi', ''] or 'opi' in sales_point:
+        if cached_posts and (sales_point in ['opi', ''] or 'opi' in sales_point):
             opi_blogs = get_relevant_blog_posts_by_industry(
                 {'description': research_data.get('company_info', '')},
                 max_posts=2,
@@ -2239,7 +2245,7 @@ class EmailCopywriter:
                 logger.info(f"📰 [OPI] {company_name}: 관련 블로그 {len(opi_blogs)}개 조회")
         
         # Recon 관련 블로그
-        if sales_point in ['recon', ''] or 'recon' in sales_point:
+        if cached_posts and (sales_point in ['recon', ''] or 'recon' in sales_point):
             recon_blogs = get_relevant_blog_posts_by_industry(
                 {'description': research_data.get('company_info', '')},
                 max_posts=2,
