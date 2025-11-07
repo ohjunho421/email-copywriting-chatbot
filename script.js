@@ -7,6 +7,72 @@ function convertMarkdownToHtml(text) {
     return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 }
 
+/**
+ * HTML을 사용자 친화적 텍스트로 변환
+ * - HTML 태그를 보기 쉬운 마크다운 형식으로 변환
+ * - 줄바꿈, 볼드체 등을 텍스트로 표현
+ */
+function convertHtmlToFriendlyText(html) {
+    if (!html) return html;
+    
+    let text = html;
+    
+    // <br>, <br/>, <br /> → 실제 줄바꿈
+    text = text.replace(/<br\s*\/?>/gi, '\n');
+    
+    // <p>...</p> → 단락 줄바꿈
+    text = text.replace(/<\/p>/gi, '\n\n');
+    text = text.replace(/<p[^>]*>/gi, '');
+    
+    // <strong>, <b> → **텍스트** (마크다운 스타일)
+    text = text.replace(/<strong>([^<]+)<\/strong>/gi, '**$1**');
+    text = text.replace(/<b>([^<]+)<\/b>/gi, '**$1**');
+    
+    // <em>, <i> → *텍스트* (마크다운 스타일)  
+    text = text.replace(/<em>([^<]+)<\/em>/gi, '*$1*');
+    text = text.replace(/<i>([^<]+)<\/i>/gi, '*$1*');
+    
+    // HTML 엔티티 디코딩
+    text = text.replace(/&nbsp;/g, ' ');
+    text = text.replace(/&quot;/g, '"');
+    text = text.replace(/&lt;/g, '<');
+    text = text.replace(/&gt;/g, '>');
+    text = text.replace(/&amp;/g, '&');
+    
+    // 나머지 HTML 태그 제거
+    text = text.replace(/<[^>]+>/g, '');
+    
+    // 연속된 줄바꿈 정리 (3개 이상 → 2개)
+    text = text.replace(/\n{3,}/g, '\n\n');
+    
+    // 앞뒤 공백 제거
+    text = text.trim();
+    
+    return text;
+}
+
+/**
+ * 사용자 친화적 텍스트를 HTML로 변환
+ * - **텍스트** → <strong>텍스트</strong>
+ * - 줄바꿈 → <br>
+ */
+function convertFriendlyTextToHtml(text) {
+    if (!text) return text;
+    
+    let html = text;
+    
+    // 마크다운 볼드 → HTML strong
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // 마크다운 이탤릭 → HTML em (단, ** 안에 있지 않은 경우만)
+    html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '<em>$1</em>');
+    
+    // 줄바꿈 → <br>
+    html = html.replace(/\n/g, '<br>');
+    
+    return html;
+}
+
 class EmailCopywritingChatbot {
     constructor() {
         this.uploadedData = [];
@@ -1352,6 +1418,15 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                         ${convertMarkdownToHtml(variation.body)}
                                     </div>
                                     <textarea id="body_edit_${index}_${vIndex}" class="form-control mt-2" rows="10" style="display: none;">${variation.body}</textarea>
+                                    <div id="edit_help_${index}_${vIndex}" class="alert alert-info mt-2" style="display: none; font-size: 0.85em;">
+                                        <strong><i class="fas fa-info-circle"></i> 간단한 수정 방법:</strong><br>
+                                        <small>
+                                            • <strong>볼드체</strong>: **텍스트** (별 2개로 감싸기)<br>
+                                            • <em>기울임체</em>: *텍스트* (별 1개로 감싸기)<br>
+                                            • 줄바꿈: Enter 키로 자연스럽게 줄바꿈<br>
+                                            • HTML 태그는 사용하지 마세요!
+                                        </small>
+                                    </div>
                                     <div id="edit_buttons_${index}_${vIndex}" class="mt-2" style="display: none;">
                                         <button class="btn btn-sm btn-success" onclick="saveEditedEmail(${index}, ${vIndex})">
                                             <i class="fas fa-save"></i> 저장
@@ -3965,10 +4040,21 @@ function toggleEditMode(companyIndex, variationIndex) {
         return;
     }
     
-    // 처음 편집 모드 진입 시 백업 저장
-    if (!bodyEdit.dataset.original) {
-        bodyEdit.dataset.original = bodyEdit.value;
-        subjectEdit.dataset.original = subjectEdit.value;
+    // 처음 편집 모드 진입 시 HTML을 텍스트로 변환
+    if (!bodyEdit.dataset.originalHtml) {
+        // HTML 버전 백업
+        bodyEdit.dataset.originalHtml = bodyDisplay.innerHTML;
+        subjectEdit.dataset.originalText = subjectEdit.value;
+        
+        // HTML을 사용자 친화적 텍스트로 변환하여 표시
+        const friendlyText = convertHtmlToFriendlyText(bodyDisplay.innerHTML);
+        bodyEdit.value = friendlyText;
+        
+        // 사용 안내 추가
+        const helpText = document.getElementById(`edit_help_${companyIndex}_${variationIndex}`);
+        if (helpText) {
+            helpText.style.display = 'block';
+        }
     }
     
     // 편집 모드로 전환
@@ -3977,6 +4063,12 @@ function toggleEditMode(companyIndex, variationIndex) {
     bodyDisplay.style.display = 'none';
     bodyEdit.style.display = 'block';
     editButtons.style.display = 'block';
+    
+    // 사용 안내 표시
+    const helpText = document.getElementById(`edit_help_${companyIndex}_${variationIndex}`);
+    if (helpText) {
+        helpText.style.display = 'block';
+    }
     
     // 포커스
     subjectEdit.focus();
@@ -3993,11 +4085,14 @@ function cancelEditMode(companyIndex, variationIndex) {
     const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
     const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
     const editButtons = document.getElementById(`edit_buttons_${companyIndex}_${variationIndex}`);
+    const helpText = document.getElementById(`edit_help_${companyIndex}_${variationIndex}`);
     
     // 원래 내용으로 복원
-    if (bodyEdit.dataset.original) {
-        bodyEdit.value = bodyEdit.dataset.original;
-        subjectEdit.value = subjectEdit.dataset.original;
+    if (bodyEdit.dataset.originalHtml) {
+        // HTML 버전으로 복원
+        const friendlyText = convertHtmlToFriendlyText(bodyEdit.dataset.originalHtml);
+        bodyEdit.value = friendlyText;
+        subjectEdit.value = subjectEdit.dataset.originalText;
     }
     
     // 보기 모드로 전환
@@ -4006,6 +4101,11 @@ function cancelEditMode(companyIndex, variationIndex) {
     bodyDisplay.style.display = 'block';
     bodyEdit.style.display = 'none';
     editButtons.style.display = 'none';
+    
+    // 사용 안내 숨기기
+    if (helpText) {
+        helpText.style.display = 'none';
+    }
     
     console.log(`편집 모드 취소: Company ${companyIndex}, Variation ${variationIndex}`);
 }
@@ -4019,36 +4119,40 @@ function saveEditedEmail(companyIndex, variationIndex) {
     const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
     const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
     const editButtons = document.getElementById(`edit_buttons_${companyIndex}_${variationIndex}`);
+    const helpText = document.getElementById(`edit_help_${companyIndex}_${variationIndex}`);
     
-    // 수정된 내용 가져오기
+    // 수정된 내용 가져오기 (사용자 친화적 텍스트)
     const newSubject = subjectEdit.value.trim();
-    const newBody = bodyEdit.value.trim();
+    const newBodyText = bodyEdit.value.trim();
     
-    if (!newSubject || !newBody) {
+    if (!newSubject || !newBodyText) {
         showToast('❌ 제목과 본문을 모두 입력해주세요.', 'danger');
         return;
     }
     
+    // 사용자 친화적 텍스트를 HTML로 변환
+    const newBodyHtml = convertFriendlyTextToHtml(newBodyText);
+    
     // 표시 영역 업데이트
     subjectDisplay.innerHTML = `<em>${newSubject}</em>`;
-    bodyDisplay.innerHTML = convertMarkdownToHtml(newBody);
+    bodyDisplay.innerHTML = newBodyHtml;
     
-    // hidden textarea도 업데이트
+    // hidden textarea도 업데이트 (텍스트 버전 저장)
     const textarea = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
     if (textarea) {
-        textarea.value = `제목: ${newSubject}\n\n${newBody}`;
+        textarea.value = `제목: ${newSubject}\n\n${newBodyText}`;
     }
     
-    // 체크박스 데이터도 업데이트
+    // 체크박스 데이터도 업데이트 (HTML 버전 저장)
     const checkbox = document.getElementById(`email_select_${companyIndex}_${variationIndex}`);
     if (checkbox) {
         checkbox.dataset.subject = newSubject;
-        checkbox.dataset.body = newBody.replace(/\n/g, '\\n');
+        checkbox.dataset.body = newBodyHtml.replace(/\n/g, '\\n');
     }
     
-    // 백업 업데이트
-    bodyEdit.dataset.original = newBody;
-    subjectEdit.dataset.original = newSubject;
+    // 백업 업데이트 (HTML 버전)
+    bodyEdit.dataset.originalHtml = newBodyHtml;
+    subjectEdit.dataset.originalText = newSubject;
     
     // 보기 모드로 전환
     subjectDisplay.style.display = 'block';
@@ -4056,6 +4160,11 @@ function saveEditedEmail(companyIndex, variationIndex) {
     bodyDisplay.style.display = 'block';
     bodyEdit.style.display = 'none';
     editButtons.style.display = 'none';
+    
+    // 사용 안내 숨기기
+    if (helpText) {
+        helpText.style.display = 'none';
+    }
     
     showToast('✅ 이메일 문안이 저장되었습니다!', 'success');
     console.log(`이메일 저장 완료: Company ${companyIndex}, Variation ${variationIndex}`);
