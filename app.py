@@ -3219,6 +3219,22 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
                 services_to_generate = ['finance_professional', 'finance_curiosity']
                 logger.info(f"sales_item 없음 + 호스팅='{hosting}' (자체구축 아님) → Recon만 생성: {company_name}")
         
+        # 블로그 캐시 확인 및 필요 시 스크래핑 (서비스 지식베이스 로드 전에 실행)
+        from portone_blog_cache import load_blog_cache
+        cached_posts = load_blog_cache()
+        if not cached_posts:
+            logger.info("📰 블로그 캐시 없음 - 자동 스크래핑 시작 (generate_email_with_gemini)")
+            try:
+                blog_posts = scrape_portone_blog_initial()
+                if blog_posts:
+                    logger.info(f"✅ 블로그 스크래핑 완료: {len(blog_posts)}개")
+                else:
+                    logger.warning("⚠️ 블로그 스크래핑 결과 없음")
+            except Exception as blog_error:
+                logger.error(f"❌ 블로그 스크래핑 오류: {str(blog_error)}")
+        else:
+            logger.info(f"✅ 블로그 캐시 사용: {len(cached_posts)}개")
+        
         # 서비스별 통합 지식베이스 로드 (서비스 소개서 + 블로그 전체)
         from portone_blog_cache import get_service_knowledge
         
