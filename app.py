@@ -130,6 +130,24 @@ with app.app_context():
                 user.email_signature = user.generate_email_signature()
             db.session.commit()
             logger.info(f"✨ {len(all_users)}명의 사용자 서명 포맷 업데이트 완료")
+        
+        # 블로그 캐시 초기화 (Railway 환경에서 자동 스크래핑)
+        from portone_blog_cache import load_blog_cache, get_blog_cache_age
+        cached_posts = load_blog_cache()
+        cache_age = get_blog_cache_age()
+        
+        if not cached_posts or cache_age is None or cache_age >= 24:
+            logger.info("📰 블로그 캐시 없음 또는 오래됨 - 자동 스크래핑 시작")
+            try:
+                blog_posts = scrape_portone_blog_initial()
+                if blog_posts:
+                    logger.info(f"✅ 블로그 초기 데이터 스크래핑 완료: {len(blog_posts)}개")
+                else:
+                    logger.warning("⚠️ 블로그 스크래핑 결과 없음")
+            except Exception as blog_error:
+                logger.error(f"❌ 블로그 스크래핑 오류: {str(blog_error)}")
+        else:
+            logger.info(f"✅ 블로그 캐시 로드 완료: {len(cached_posts)}개 (나이: {cache_age:.1f}시간)")
             
     except Exception as e:
         logger.error(f"❌ 마이그레이션 오류: {str(e)}")
