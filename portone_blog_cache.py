@@ -7,22 +7,29 @@ from datetime import datetime
 import logging
 import json
 from collections import Counter
+from flask import has_app_context
 
 logger = logging.getLogger(__name__)
 
-# Flask app context가 필요하므로 import는 함수 내부에서
+# 모듈 레벨에서 import (app context 체크 포함)
 def get_db():
-    """Flask app의 db 객체 가져오기"""
+    """Flask app의 db 객체 가져오기 (app context 필수)"""
+    if not has_app_context():
+        raise RuntimeError("This function requires Flask app context. Call within 'with app.app_context():'")
     from models import db
     return db
 
 def get_blog_post_model():
-    """BlogPost 모델 가져오기"""
+    """BlogPost 모델 가져오기 (app context 필수)"""
+    if not has_app_context():
+        raise RuntimeError("This function requires Flask app context. Call within 'with app.app_context():'")
     from models import BlogPost
     return BlogPost
 
 def get_metadata_model():
-    """BlogCacheMetadata 모델 가져오기"""
+    """BlogCacheMetadata 모델 가져오기 (app context 필수)"""
+    if not has_app_context():
+        raise RuntimeError("This function requires Flask app context. Call within 'with app.app_context():'")
     from models import BlogCacheMetadata
     return BlogCacheMetadata
 

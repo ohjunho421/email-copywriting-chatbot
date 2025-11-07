@@ -5141,121 +5141,123 @@ def process_single_company(company, index, user_template=None, user_input_mode='
     Args:
         user_info: 로그인한 사용자 정보 (name, email, company_nickname, phone)
     """
-    try:
-        company_name = company.get('회사명', '')
-        
-        # CSV에서 "관련뉴스" 열 확인
-        news_url = company.get('관련뉴스', '')
-        news_content = None
-        
-        # 뉴스 URL이 있으면 스크래핑
-        if news_url and news_url.strip():
-            logger.info(f"{company_name}: 관련뉴스 발견 - {news_url}")
-            news_content = scrape_news_article(news_url.strip())
-            if news_content:
-                logger.info(f"{company_name}: 뉴스 스크래핑 성공 - {news_content.get('title', '')}")
+    # ThreadPoolExecutor에서 실행되므로 app context 필요!
+    with app.app_context():
+        try:
+            company_name = company.get('회사명', '')
+            
+            # CSV에서 "관련뉴스" 열 확인
+            news_url = company.get('관련뉴스', '')
+            news_content = None
+            
+            # 뉴스 URL이 있으면 스크래핑
+            if news_url and news_url.strip():
+                logger.info(f"{company_name}: 관련뉴스 발견 - {news_url}")
+                news_content = scrape_news_article(news_url.strip())
+                if news_content:
+                    logger.info(f"{company_name}: 뉴스 스크래핑 성공 - {news_content.get('title', '')}")
+                else:
+                    logger.warning(f"{company_name}: 뉴스 스크래핑 실패")
+            
+            # 1. 회사 정보 조사 (CSV 추가 정보 활용)
+            additional_info = {
+                '사업자번호': company.get('사업자번호', ''),
+                '업종': company.get('업종', ''),
+                '세일즈포인트': company.get('세일즈포인트', ''),
+                '규모': company.get('규모', ''),
+                '대표자명': company.get('대표자명', ''),
+                '이메일': company.get('이메일', '')
+            }
+            
+            research_result = researcher.research_company(
+                company_name, 
+                company.get('홈페이지링크', ''),
+                additional_info
+            )
+            
+            # 2. 메일 문안 생성 (Gemini 사용)
+            if research_result['success']:
+                # 뉴스 내용을 research_result에 추가
+                if news_content:
+                    news_title = news_content.get('title', '')
+                    news_text = news_content.get('content', '')
+                    logger.info(f"{company_name}: 관련뉴스 내용을 research에 추가")
+                    research_result['company_info'] += f"\n\n## 📰 관련 뉴스 기사 (CSV 제공)\n**제목:** {news_title}\n**내용:** {news_text[:1000]}"
+                
+                # 2-1. 관련 사례 선택 (제안서 기반 실제 사례)
+                relevant_case_keys = select_relevant_cases(
+                    company, 
+                    research_result.get('company_info', ''),
+                    max_cases=2
+                )
+                
+                logger.info(f"{company_name} - 선택된 사례: {relevant_case_keys}")
+                
+                # 사례 정보 포맷팅
+                case_examples = ""
+                for case_key in relevant_case_keys:
+                    case_examples += format_case_for_email(case_key)
+                
+                # 2-2. Gemini API를 사용한 메일 생성 (뉴스 내용, 사례 정보, 사용자 문안/요청사항 포함)
+                email_result = generate_email_with_gemini_and_cases(
+                    company, research_result, case_examples, user_template=user_template, news_content=news_content, user_input_mode=user_input_mode, user_info=user_info
+                )
+                
+                # 2-3. SSR로 4개 이메일 평가 및 순위 매기기
+                if email_result.get('success') and email_result.get('variations'):
+                    try:
+                        # 4개 이메일을 SSR로 평가
+                        all_emails = []
+                        for key, variation in email_result['variations'].items():
+                            all_emails.append({
+                                'type': key,
+                                'product': variation.get('product', 'PortOne'),
+                                'subject': variation.get('subject', ''),
+                                'body': variation.get('body', ''),
+                                'cta': variation.get('cta', ''),
+                                'tone': variation.get('tone', '')
+                            })
+                        
+                        # SSR 순위 매기기
+                        ranked_emails = rank_emails(all_emails, company)
+                        
+                        logger.info(f"{company.get('회사명')} SSR 점수: " + 
+                                  ", ".join([f"{e['type']}: {e.get('ssr_score', 0):.2f}" 
+                                           for e in ranked_emails]))
+                        
+                        # 최고 점수 이메일
+                        top_email = ranked_emails[0]
+                        
+                        # 결과에 SSR 정보 추가
+                        email_result['recommended_email'] = top_email
+                        email_result['all_ranked_emails'] = ranked_emails
+                        email_result['ssr_enabled'] = True
+                        
+                    except Exception as ssr_error:
+                        logger.warning(f"SSR 평가 실패: {ssr_error}, 기본 순서 사용")
+                        email_result['ssr_enabled'] = False
+                
+                return {
+                    'company': company,
+                    'research': research_result,
+                    'emails': email_result,
+                    'selected_cases': relevant_case_keys,
+                    'index': index
+                }
             else:
-                logger.warning(f"{company_name}: 뉴스 스크래핑 실패")
-        
-        # 1. 회사 정보 조사 (CSV 추가 정보 활용)
-        additional_info = {
-            '사업자번호': company.get('사업자번호', ''),
-            '업종': company.get('업종', ''),
-            '세일즈포인트': company.get('세일즈포인트', ''),
-            '규모': company.get('규모', ''),
-            '대표자명': company.get('대표자명', ''),
-            '이메일': company.get('이메일', '')
-        }
-        
-        research_result = researcher.research_company(
-            company_name, 
-            company.get('홈페이지링크', ''),
-            additional_info
-        )
-        
-        # 2. 메일 문안 생성 (Gemini 사용)
-        if research_result['success']:
-            # 뉴스 내용을 research_result에 추가
-            if news_content:
-                news_title = news_content.get('title', '')
-                news_text = news_content.get('content', '')
-                logger.info(f"{company_name}: 관련뉴스 내용을 research에 추가")
-                research_result['company_info'] += f"\n\n## 📰 관련 뉴스 기사 (CSV 제공)\n**제목:** {news_title}\n**내용:** {news_text[:1000]}"
-            
-            # 2-1. 관련 사례 선택 (제안서 기반 실제 사례)
-            relevant_case_keys = select_relevant_cases(
-                company, 
-                research_result.get('company_info', ''),
-                max_cases=2
-            )
-            
-            logger.info(f"{company_name} - 선택된 사례: {relevant_case_keys}")
-            
-            # 사례 정보 포맷팅
-            case_examples = ""
-            for case_key in relevant_case_keys:
-                case_examples += format_case_for_email(case_key)
-            
-            # 2-2. Gemini API를 사용한 메일 생성 (뉴스 내용, 사례 정보, 사용자 문안/요청사항 포함)
-            email_result = generate_email_with_gemini_and_cases(
-                company, research_result, case_examples, user_template=user_template, news_content=news_content, user_input_mode=user_input_mode, user_info=user_info
-            )
-            
-            # 2-3. SSR로 4개 이메일 평가 및 순위 매기기
-            if email_result.get('success') and email_result.get('variations'):
-                try:
-                    # 4개 이메일을 SSR로 평가
-                    all_emails = []
-                    for key, variation in email_result['variations'].items():
-                        all_emails.append({
-                            'type': key,
-                            'product': variation.get('product', 'PortOne'),
-                            'subject': variation.get('subject', ''),
-                            'body': variation.get('body', ''),
-                            'cta': variation.get('cta', ''),
-                            'tone': variation.get('tone', '')
-                        })
-                    
-                    # SSR 순위 매기기
-                    ranked_emails = rank_emails(all_emails, company)
-                    
-                    logger.info(f"{company.get('회사명')} SSR 점수: " + 
-                              ", ".join([f"{e['type']}: {e.get('ssr_score', 0):.2f}" 
-                                       for e in ranked_emails]))
-                    
-                    # 최고 점수 이메일
-                    top_email = ranked_emails[0]
-                    
-                    # 결과에 SSR 정보 추가
-                    email_result['recommended_email'] = top_email
-                    email_result['all_ranked_emails'] = ranked_emails
-                    email_result['ssr_enabled'] = True
-                    
-                except Exception as ssr_error:
-                    logger.warning(f"SSR 평가 실패: {ssr_error}, 기본 순서 사용")
-                    email_result['ssr_enabled'] = False
-            
+                return {
+                    'company': company,
+                    'error': research_result.get('error', '조사 실패'),
+                    'index': index
+                }
+                
+        except Exception as e:
+            logger.error(f"회사 처리 오류 ({company.get('회사명')}): {str(e)}")
             return {
                 'company': company,
-                'research': research_result,
-                'emails': email_result,
-                'selected_cases': relevant_case_keys,
+                'error': f'처리 오류: {str(e)}',
                 'index': index
             }
-        else:
-            return {
-                'company': company,
-                'error': research_result.get('error', '조사 실패'),
-                'index': index
-            }
-            
-    except Exception as e:
-        logger.error(f"회사 처리 오류 ({company.get('회사명')}): {str(e)}")
-        return {
-            'company': company,
-            'error': f'처리 오류: {str(e)}',
-            'index': index
-        }
 
 @app.route('/api/batch-process', methods=['POST'])
 @login_required
