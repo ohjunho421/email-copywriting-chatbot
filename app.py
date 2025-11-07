@@ -115,13 +115,21 @@ with app.app_context():
         db.session.commit()
         logger.info("🔄 데이터베이스 마이그레이션 완료")
         
-        # 기존 사용자들에게 서명 자동 생성
-        users = User.query.filter(User.email_signature.is_(None)).all()
-        if users:
-            for user in users:
+        # 기존 사용자들에게 서명 자동 생성 (새로운 사용자)
+        users_without_signature = User.query.filter(User.email_signature.is_(None)).all()
+        if users_without_signature:
+            for user in users_without_signature:
                 user.email_signature = user.generate_email_signature()
             db.session.commit()
-            logger.info(f"📝 {len(users)}명의 사용자 서명 자동 생성 완료")
+            logger.info(f"📝 {len(users_without_signature)}명의 신규 사용자 서명 생성 완료")
+        
+        # 모든 사용자의 서명을 새로운 포맷으로 업데이트 (레이아웃 개선)
+        all_users = User.query.all()
+        if all_users:
+            for user in all_users:
+                user.email_signature = user.generate_email_signature()
+            db.session.commit()
+            logger.info(f"✨ {len(all_users)}명의 사용자 서명 포맷 업데이트 완료")
             
     except Exception as e:
         logger.error(f"❌ 마이그레이션 오류: {str(e)}")
@@ -6909,8 +6917,8 @@ def send_email():
                 f'src="{base_url}/static/'
             )
             
-            # HTML 서명을 본문 끝에 추가
-            full_body = f"{body}<br><br>{absolute_signature}"
+            # HTML 서명을 본문 끝에 추가 (서명에 이미 <br><br> 포함)
+            full_body = f"{body}{absolute_signature}"
             logger.info("✍️  사용자 서명 추가됨 (이미지 절대 URL 적용)")
         else:
             full_body = body
