@@ -4461,3 +4461,9 @@ async function saveSettings() {
         showToast('❌ 설정 저장 중 오류가 발생했습니다.', 'danger');
     }
 }
+
+// ========================================
+// 전역 함수 노출 (HTML onclick에서 호출 가능하도록)
+// ========================================
+window.openSettingsModal = openSettingsModal;
+window.saveSettings = saveSettings;
