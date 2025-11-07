@@ -1425,9 +1425,14 @@ ${variation.body}
                 체크박스로 원하는 이메일 문안을 선택하고 일괄 발송하세요<br>
                 <span id="selectedEmailCount" class="badge bg-secondary">0개 선택됨</span>
             </p>
-            <button id="batchSendButton" class="btn btn-primary btn-lg" onclick="batchSendEmails()" disabled>
-                <i class="fas fa-paper-plane"></i> 일괄 발송 (문안을 선택해주세요)
-            </button>
+            <div class="d-flex justify-content-center gap-2">
+                <button class="btn btn-success btn-lg" onclick="selectAllRecommendedEmails()">
+                    <i class="fas fa-star"></i> AI 추천 문안 일괄 선택
+                </button>
+                <button id="batchSendButton" class="btn btn-primary btn-lg" onclick="batchSendEmails()" disabled>
+                    <i class="fas fa-paper-plane"></i> 일괄 발송 (문안을 선택해주세요)
+                </button>
+            </div>
         `;
         
         // CSV 다운로드는 맨 위에, 일괄 발송 박스는 맨 아래에 배치
@@ -4054,6 +4059,54 @@ function saveEditedEmail(companyIndex, variationIndex) {
     
     showToast('✅ 이메일 문안이 저장되었습니다!', 'success');
     console.log(`이메일 저장 완료: Company ${companyIndex}, Variation ${variationIndex}`);
+}
+
+/**
+ * AI 추천 문안 일괄 선택
+ */
+function selectAllRecommendedEmails() {
+    // 모든 체크박스 찾기
+    const allCheckboxes = document.querySelectorAll('input[id^="email_select_"]');
+    
+    // 먼저 모든 체크박스 해제
+    allCheckboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // AI 추천 문안만 선택 (isRecommended 뱃지가 있는 이메일 카드의 체크박스)
+    let recommendedCount = 0;
+    allCheckboxes.forEach(checkbox => {
+        // 체크박스의 부모 요소에서 AI 추천 뱃지 찾기
+        const emailCard = checkbox.closest('.email-template');
+        if (emailCard) {
+            const recommendedBadge = emailCard.querySelector('.badge.bg-success');
+            // "AI 추천" 텍스트가 있는 뱃지인지 확인
+            if (recommendedBadge && recommendedBadge.textContent.includes('AI 추천')) {
+                checkbox.checked = true;
+                recommendedCount++;
+            }
+        }
+    });
+    
+    // 선택 개수 업데이트
+    updateSelectedCount();
+    
+    // 사용자에게 피드백
+    if (recommendedCount > 0) {
+        const countBadge = document.getElementById('selectedEmailCount');
+        if (countBadge) {
+            countBadge.textContent = `${recommendedCount}개 AI 추천 문안 선택됨 ⭐`;
+            countBadge.className = 'badge bg-warning';
+            
+            // 2초 후 원래 스타일로 돌아가기
+            setTimeout(() => {
+                countBadge.className = 'badge bg-success';
+                countBadge.textContent = `${recommendedCount}개 선택됨`;
+            }, 2000);
+        }
+    } else {
+        alert('⚠️ AI 추천 문안이 없습니다.\n\nSSR(Semantic Similarity Rating) 기능이 활성화된 회사에서만 AI 추천 문안이 제공됩니다.');
+    }
 }
 
 /**
