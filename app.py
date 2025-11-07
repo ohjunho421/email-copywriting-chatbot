@@ -6901,11 +6901,69 @@ def send_email():
             full_body = body
             logger.warning("⚠️  사용자 서명이 설정되지 않았습니다")
         
-        # Gmail SMTP 발송 - 사용자별 Gmail 앱 비밀번호 사용
+        # SendGrid API를 사용한 이메일 발송 (Railway 환경 호환)
+        sendgrid_api_key = os.getenv('SENDGRID_API_KEY')
+        
+        if sendgrid_api_key:
+            # SendGrid API 사용 (Railway에서 SMTP 포트가 차단되므로 HTTP API 사용)
+            try:
+                import requests
+                
+                logger.info(f"📧 SendGrid API로 이메일 발송 중...")
+                
+                # SendGrid API 요청
+                response = requests.post(
+                    'https://api.sendgrid.com/v3/mail/send',
+                    headers={
+                        'Authorization': f'Bearer {sendgrid_api_key}',
+                        'Content-Type': 'application/json'
+                    },
+                    json={
+                        'personalizations': [{
+                            'to': [{'email': to_email, 'name': to_name}]
+                        }],
+                        'from': {
+                            'email': from_email,
+                            'name': from_name
+                        },
+                        'subject': subject,
+                        'content': [{
+                            'type': 'text/html',
+                            'value': full_body
+                        }]
+                    },
+                    timeout=30
+                )
+                
+                if response.status_code == 202:
+                    logger.info(f"✅ SendGrid API 발송 성공: {to_email}")
+                    return jsonify({
+                        'success': True,
+                        'message': '이메일이 성공적으로 발송되었습니다 (SendGrid API).',
+                        'from': from_email,
+                        'to': to_email,
+                        'signature_included': bool(user_signature),
+                        'method': 'SendGrid API'
+                    })
+                else:
+                    logger.error(f"❌ SendGrid API 오류: {response.status_code} - {response.text}")
+                    return jsonify({
+                        'success': False,
+                        'error': f'SendGrid API 오류: {response.status_code} - {response.text}'
+                    }), 500
+                    
+            except Exception as e:
+                logger.error(f"❌ SendGrid API 발송 실패: {str(e)}")
+                return jsonify({
+                    'success': False,
+                    'error': f'SendGrid API 발송 실패: {str(e)}'
+                }), 500
+        
+        # Gmail 앱 비밀번호로 SMTP 시도 (로컬 환경용)
         gmail_app_password = current_user.get_gmail_app_password()
         
         if gmail_app_password:
-            # 실제 Gmail SMTP 발송
+            # 실제 Gmail SMTP 발송 (로컬 개발 환경용)
             import smtplib
             from email.mime.text import MIMEText
             from email.mime.multipart import MIMEMultipart
@@ -6925,8 +6983,6 @@ def send_email():
                 {'name': 'SMTP_SSL 465', 'method': 'ssl', 'port': 465},
                 # 방법 2: SMTP with STARTTLS (포트 587)
                 {'name': 'SMTP STARTTLS 587', 'method': 'starttls', 'port': 587},
-                # 방법 3: SMTP with STARTTLS (포트 25)
-                {'name': 'SMTP STARTTLS 25', 'method': 'starttls', 'port': 25},
             ]
             
             last_error = None
@@ -6936,12 +6992,12 @@ def send_email():
                     
                     if method_config['method'] == 'ssl':
                         # SSL 방식 (포트 465)
-                        with smtplib.SMTP_SSL('smtp.gmail.com', method_config['port'], timeout=60) as server:
+                        with smtplib.SMTP_SSL('smtp.gmail.com', method_config['port'], timeout=30) as server:
                             server.login(from_email, gmail_app_password)
                             server.send_message(msg)
                     else:
-                        # STARTTLS 방식 (포트 587 또는 25)
-                        with smtplib.SMTP('smtp.gmail.com', method_config['port'], timeout=60) as server:
+                        # STARTTLS 방식 (포트 587)
+                        with smtplib.SMTP('smtp.gmail.com', method_config['port'], timeout=30) as server:
                             server.ehlo()
                             server.starttls()
                             server.ehlo()
@@ -6968,7 +7024,7 @@ def send_email():
             logger.error(f"❌ 모든 SMTP 방법 실패. 마지막 오류: {last_error}")
             return jsonify({
                 'success': False,
-                'error': f'Gmail SMTP 발송 실패 (모든 포트 시도 실패): {last_error}\n\n💡 Railway 환경에서는 SMTP 포트가 차단될 수 있습니다. SendGrid 같은 이메일 서비스 사용을 권장합니다.'
+                'error': f'이메일 발송 실패: SMTP 포트 차단됨.\n\n💡 Railway 환경에서는 SendGrid API를 사용해주세요.\n관리자에게 SENDGRID_API_KEY 환경변수 설정을 요청하세요.'
             }), 500
         else:
             # Gmail 앱 비밀번호가 설정되지 않았으면 시뮬레이션
