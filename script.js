@@ -4374,33 +4374,20 @@ async function batchSendEmails() {
         const companyName = checkbox.dataset.companyName;
         const email = checkbox.dataset.email;
         
-        // 현재 내용 가져오기 (수정되었을 수 있음)
-        const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
-        const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
+        // 현재 저장된 내용 가져오기 (saveEditedEmail에서 업데이트된 데이터)
+        // checkbox.dataset에 저장된 최신 내용 사용
+        let subject = checkbox.dataset.subject || '';
+        let body = checkbox.dataset.body ? checkbox.dataset.body.replace(/\\n/g, '\n') : '';
         
-        // subject는 textarea, body는 contenteditable div
-        const subject = subjectEdit ? subjectEdit.value : '';
-        const body = bodyEdit ? bodyEdit.textContent.trim() : '';
-        
-        // 만약 편집 모드가 아니라면 원본 데이터에서 가져오기
-        if (!body && window.emailChatbot && window.emailChatbot.generatedEmails) {
-            const company = window.emailChatbot.generatedEmails[companyIndex];
-            if (company && company.variations && company.variations[variationIndex]) {
-                const variation = company.variations[variationIndex];
-                const fallbackSubject = subject || variation.subject;
-                const fallbackBody = variation.body;
-                
-                if (email && fallbackSubject && fallbackBody) {
-                    emailsToSend.push({
-                        companyName: companyName,
-                        email: email,
-                        subject: fallbackSubject,
-                        body: fallbackBody,
-                        companyIndex: companyIndex,
-                        variationIndex: variationIndex
-                    });
+        // dataset이 비어있으면 원본 데이터에서 가져오기
+        if (!subject || !body) {
+            if (window.emailChatbot && window.emailChatbot.generatedEmails) {
+                const company = window.emailChatbot.generatedEmails[companyIndex];
+                if (company && company.variations && company.variations[variationIndex]) {
+                    const variation = company.variations[variationIndex];
+                    subject = subject || variation.subject;
+                    body = body || variation.body;
                 }
-                return; // 이미 처리했으므로 아래 코드 스킵
             }
         }
         
