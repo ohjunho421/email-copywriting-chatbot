@@ -1750,7 +1750,8 @@ ${variation.body}
                         }
                     }
                     
-                    bodyDisplay.innerHTML = displayBody;
+                    // 마크다운을 HTML로 변환하여 표시
+                    bodyDisplay.innerHTML = convertMarkdownToHtml(displayBody);
                     
                     // 개선됨 표시 추가
                     parentTemplate.style.borderLeft = '4px solid #28a745';
