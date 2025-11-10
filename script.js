@@ -2949,6 +2949,50 @@ function showCopySuccess(message) {
     });
 }
 
+// 범용 토스트 메시지 표시 함수
+function showToast(message, type = 'success') {
+    // 타입별 색상 및 아이콘 설정
+    const typeConfig = {
+        'success': { bg: 'bg-success', icon: 'fa-check-circle' },
+        'danger': { bg: 'bg-danger', icon: 'fa-exclamation-circle' },
+        'error': { bg: 'bg-danger', icon: 'fa-exclamation-circle' },
+        'info': { bg: 'bg-info', icon: 'fa-info-circle' },
+        'warning': { bg: 'bg-warning', icon: 'fa-exclamation-triangle' }
+    };
+    
+    const config = typeConfig[type] || typeConfig['success'];
+    
+    // 토스트 메시지 생성
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white ${config.bg} border-0`;
+    toast.style.position = 'fixed';
+    toast.style.top = '20px';
+    toast.style.right = '20px';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="fas ${config.icon} me-2"></i>${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Bootstrap 토스트 초기화 및 표시
+    const bsToast = new bootstrap.Toast(toast, {
+        autohide: true,
+        delay: 3000
+    });
+    bsToast.show();
+    
+    // 토스트가 숨겨진 후 DOM에서 제거
+    toast.addEventListener('hidden.bs.toast', () => {
+        document.body.removeChild(toast);
+    });
+}
+
 // 조사 내용 전체 보기/접기 토글 함수
 function toggleResearchContent(button) {
     const contentDiv = button.previousElementSibling;
