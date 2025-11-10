@@ -2453,7 +2453,27 @@ ${variation.body}
     }
 
     showLoading(show) {
-        document.getElementById('loadingIndicator').style.display = show ? 'block' : 'none';
+        const indicator = document.getElementById('loadingIndicator');
+        if (!indicator) return;
+        
+        if (typeof show === 'string') {
+            // 메시지 문자열이 전달된 경우
+            indicator.style.display = 'block';
+            const messageElement = indicator.querySelector('.loading-message');
+            if (messageElement) {
+                messageElement.textContent = show;
+            }
+        } else {
+            // boolean이 전달된 경우
+            indicator.style.display = show ? 'block' : 'none';
+        }
+    }
+
+    hideLoading() {
+        const indicator = document.getElementById('loadingIndicator');
+        if (indicator) {
+            indicator.style.display = 'none';
+        }
     }
 
     delay(ms) {
@@ -4358,8 +4378,31 @@ async function batchSendEmails() {
         const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
         const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
         
+        // subject는 textarea, body는 contenteditable div
         const subject = subjectEdit ? subjectEdit.value : '';
-        const body = bodyEdit ? bodyEdit.value : '';
+        const body = bodyEdit ? bodyEdit.textContent.trim() : '';
+        
+        // 만약 편집 모드가 아니라면 원본 데이터에서 가져오기
+        if (!body && window.emailChatbot && window.emailChatbot.generatedEmails) {
+            const company = window.emailChatbot.generatedEmails[companyIndex];
+            if (company && company.variations && company.variations[variationIndex]) {
+                const variation = company.variations[variationIndex];
+                const fallbackSubject = subject || variation.subject;
+                const fallbackBody = variation.body;
+                
+                if (email && fallbackSubject && fallbackBody) {
+                    emailsToSend.push({
+                        companyName: companyName,
+                        email: email,
+                        subject: fallbackSubject,
+                        body: fallbackBody,
+                        companyIndex: companyIndex,
+                        variationIndex: variationIndex
+                    });
+                }
+                return; // 이미 처리했으므로 아래 코드 스킵
+            }
+        }
         
         if (email && subject && body) {
             emailsToSend.push({
