@@ -2541,12 +2541,19 @@ function copySubjectToClipboard(subject) {
 
 // 텍스트 복사 함수 (개선된 버전) - 본문만 복사 (서식 포함)
 function copyTextToClipboard(subject, body) {
+    // body가 마크다운 형식이면 HTML로 변환
+    let bodyHtml = body;
+    if (typeof body === 'string' && !body.trim().startsWith('<')) {
+        // 마크다운 형식인 경우 HTML로 변환
+        bodyHtml = convertMarkdownToHtml(body);
+    }
+    
     // 최신 Clipboard API 사용 (HTML 형식 복사 지원)
     if (navigator.clipboard && window.ClipboardItem) {
         try {
             // HTML과 Plain Text 모두 제공
-            const htmlBlob = new Blob([body], { type: 'text/html' });
-            const plainText = body
+            const htmlBlob = new Blob([bodyHtml], { type: 'text/html' });
+            const plainText = bodyHtml
                 .replace(/<br\s*\/?>/gi, '\n')
                 .replace(/<\/p>/gi, '\n\n')
                 .replace(/<p[^>]*>/gi, '')
@@ -2567,7 +2574,7 @@ function copyTextToClipboard(subject, body) {
                 showCopySuccess('📋 본문이 서식과 함께 클립보드에 복사되었습니다!');
             }).catch(err => {
                 console.error('ClipboardItem 복사 실패:', err);
-                fallbackCopyWithContentEditable(body);
+                fallbackCopyWithContentEditable(bodyHtml);
             });
             return;
         } catch (err) {
@@ -2576,7 +2583,7 @@ function copyTextToClipboard(subject, body) {
     }
     
     // 폴백: contentEditable 방식
-    fallbackCopyWithContentEditable(body);
+    fallbackCopyWithContentEditable(bodyHtml);
 }
 
 // contentEditable을 사용한 폴백 복사
