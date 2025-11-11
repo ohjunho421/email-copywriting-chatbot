@@ -4417,7 +4417,8 @@ def generate_email_with_user_request(company_data, research_data, user_request, 
                     original_subject=original_subject,
                     original_body=original_body,
                     user_request=user_request,
-                    company_data=company_data
+                    company_data=company_data,
+                    user_info=user_info
                 )
                 
                 if refined_email:
@@ -4459,7 +4460,7 @@ def generate_email_with_user_request(company_data, research_data, user_request, 
             'timestamp': datetime.now().isoformat()
         }
 
-def refine_email_with_user_request(original_subject, original_body, user_request, company_data):
+def refine_email_with_user_request(original_subject, original_body, user_request, company_data, user_info=None):
     """
     생성된 이메일을 사용자 요청사항에 맞춰 개선
     
@@ -4468,6 +4469,12 @@ def refine_email_with_user_request(original_subject, original_body, user_request
     """
     try:
         company_name = company_data.get('회사명', 'Unknown')
+        
+        # 사용자 정보 추출
+        if user_info:
+            user_name = user_info.get('name', '오준호')
+        else:
+            user_name = '오준호'
         
         # 요청사항 개선 프롬프트
         context = f"""
