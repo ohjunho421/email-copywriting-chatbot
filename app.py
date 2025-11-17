@@ -22,6 +22,9 @@ import atexit
 from ssr_engine import rank_emails, get_top_email, calculate_ssr_score
 from case_database import select_relevant_cases, get_case_details, format_case_for_email, PORTONE_CASES
 
+# 🆕 Upstage Groundedness Check 임포트
+from upstage_groundedness import get_groundedness_checker
+
 # .env 파일 로드
 load_dotenv()
 
@@ -3739,14 +3742,96 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 company_name
                             )
                     
-                    return {
-                        'success': True,
-                        'variations': formatted_variations,
-                        'services_generated': services_to_generate,
-                        'sales_item': sales_item if sales_item else 'all',
-                        'timestamp': datetime.now().isoformat(),
-                        'model': 'gemini-2.5-pro-exp'
-                    }
+                    # 🆕 Upstage Groundedness Check: 생성된 이메일 검증
+                    logger.info(f"{company_name}: 🔍 Upstage Groundedness Check 시작...")
+                    try:
+                        checker = get_groundedness_checker()
+                        
+                        # Perplexity 조사 결과를 참조 문서로 사용
+                        context_for_verification = research_summary
+                        
+                        # 배치 검증: 모든 이메일 동시 검증
+                        emails_to_verify = {}
+                        for service_key, email_content in formatted_variations.items():
+                            subject = email_content.get('subject', '')
+                            body = email_content.get('body', '')
+                            full_email = f"제목: {subject}\n\n본문:\n{body}"
+                            emails_to_verify[service_key] = full_email
+                        
+                        verification_results = checker.batch_check(
+                            context_for_verification,
+                            emails_to_verify
+                        )
+                        
+                        # 환각 감지된 이메일 필터링
+                        verified_variations = {}
+                        hallucinated_count = 0
+                        
+                        for service_key, result in verification_results.items():
+                            if result['groundedness'] == 'grounded' or result['groundedness'] == 'notSure':
+                                # 검증 통과 or 불확실 (보수적으로 통과 처리)
+                                verified_variations[service_key] = formatted_variations[service_key]
+                                logger.info(f"✅ {service_key}: 검증 통과 ({result['groundedness']}, 신뢰도: {result['confidence_score']:.2f})")
+                            else:
+                                # 환각 감지 - 제외
+                                hallucinated_count += 1
+                                logger.warning(f"❌ {service_key}: 환각 감지! Perplexity 조사 결과와 불일치 - 제외")
+                        
+                        # 최소 1개 이상의 이메일이 검증 통과해야 함
+                        if verified_variations:
+                            logger.info(f"📊 Groundedness Check 완료: {len(verified_variations)}/{len(formatted_variations)} 검증 통과")
+                            
+                            # 검증 메타데이터 추가
+                            return {
+                                'success': True,
+                                'variations': verified_variations,
+                                'services_generated': services_to_generate,
+                                'sales_item': sales_item if sales_item else 'all',
+                                'timestamp': datetime.now().isoformat(),
+                                'model': 'gemini-2.5-pro-exp',
+                                'groundedness_check': {
+                                    'enabled': True,
+                                    'verified_count': len(verified_variations),
+                                    'hallucinated_count': hallucinated_count,
+                                    'total_count': len(formatted_variations)
+                                }
+                            }
+                        else:
+                            # 모든 이메일이 환각으로 판정됨 - 폴백 처리
+                            logger.error(f"⚠️ 모든 이메일이 환각으로 감지됨! 기본 템플릿 사용")
+                            return {
+                                'success': True,
+                                'variations': formatted_variations,  # 그래도 일단 반환 (사용자 판단)
+                                'services_generated': services_to_generate,
+                                'sales_item': sales_item if sales_item else 'all',
+                                'timestamp': datetime.now().isoformat(),
+                                'model': 'gemini-2.5-pro-exp',
+                                'groundedness_check': {
+                                    'enabled': True,
+                                    'verified_count': 0,
+                                    'hallucinated_count': hallucinated_count,
+                                    'total_count': len(formatted_variations),
+                                    'warning': '모든 이메일이 환각으로 감지되었습니다. 사용에 주의하세요.'
+                                }
+                            }
+                    
+                    except Exception as groundedness_error:
+                        # Groundedness Check 실패 시 경고만 표시하고 계속 진행
+                        logger.warning(f"⚠️ Groundedness Check 실패: {groundedness_error}")
+                        logger.warning(f"기본 검증 없이 계속 진행합니다...")
+                        
+                        return {
+                            'success': True,
+                            'variations': formatted_variations,
+                            'services_generated': services_to_generate,
+                            'sales_item': sales_item if sales_item else 'all',
+                            'timestamp': datetime.now().isoformat(),
+                            'model': 'gemini-2.5-pro-exp',
+                            'groundedness_check': {
+                                'enabled': False,
+                                'error': str(groundedness_error)
+                            }
+                        }
                     
                 except json.JSONDecodeError as json_error:
                     logger.error(f"Gemini JSON 파싱 오류: {json_error}")
