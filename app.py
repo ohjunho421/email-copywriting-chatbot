@@ -3763,9 +3763,10 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                             emails_to_verify
                         )
                         
-                        # 환각 감지된 이메일 필터링
+                        # 환각 감지된 이메일 필터링 + 재생성
                         verified_variations = {}
                         hallucinated_count = 0
+                        hallucinated_services = []  # 환각 감지된 서비스 리스트
                         
                         for service_key, result in verification_results.items():
                             if result['groundedness'] == 'grounded' or result['groundedness'] == 'notSure':
@@ -3773,13 +3774,108 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 verified_variations[service_key] = formatted_variations[service_key]
                                 logger.info(f"✅ {service_key}: 검증 통과 ({result['groundedness']}, 신뢰도: {result['confidence_score']:.2f})")
                             else:
-                                # 환각 감지 - 제외
+                                # 환각 감지 - 재생성 대상으로 추가
                                 hallucinated_count += 1
-                                logger.warning(f"❌ {service_key}: 환각 감지! Perplexity 조사 결과와 불일치 - 제외")
+                                hallucinated_services.append(service_key)
+                                logger.warning(f"❌ {service_key}: 환각 감지! Perplexity 조사 결과와 불일치 - 재생성 예정")
+                        
+                        # 🔄 환각 감지된 이메일 재생성 시도 (최대 2회)
+                        MAX_RETRY = 2
+                        regeneration_log = []
+                        
+                        if hallucinated_services and len(hallucinated_services) <= 2:  # 재생성은 2개까지만
+                            logger.info(f"🔄 환각 감지된 {len(hallucinated_services)}개 이메일 재생성 시작...")
+                            
+                            for retry_attempt in range(MAX_RETRY):
+                                logger.info(f"  재시도 {retry_attempt + 1}/{MAX_RETRY}...")
+                                
+                                # 재생성할 서비스만 선택
+                                retry_services = hallucinated_services.copy()
+                                
+                                # 더 엄격한 프롬프트로 재생성
+                                strict_prompt_addition = f"""
+                                
+**⚠️ 환각 방지 최우선 지침 (재생성) ⚠️**
+이전 생성에서 참조 문서에 없는 정보를 사용하여 환각이 감지되었습니다.
+다음 규칙을 엄격히 준수하세요:
+
+1. **참조 문서(Perplexity 조사 결과)에 명시된 정보만 사용**
+2. **추측하거나 일반적인 정보로 채우지 마세요**
+3. **구체적 수치나 사실은 참조 문서에 있을 때만 언급**
+4. **확실하지 않으면 일반적인 Pain Point 중심으로만 작성**
+
+재생성 대상: {', '.join(retry_services)}
+"""
+                                
+                                # 재생성 요청
+                                retry_prompt = context + strict_prompt_addition
+                                
+                                try:
+                                    retry_response = model.generate_content(
+                                        retry_prompt,
+                                        generation_config={
+                                            "temperature": 0.3,  # 더 보수적으로
+                                            "top_p": 0.85,
+                                            "top_k": 30,
+                                            "max_output_tokens": 8000,
+                                            "response_mime_type": "application/json"
+                                        }
+                                    )
+                                    
+                                    retry_variations_raw = json.loads(retry_response.text)
+                                    
+                                    # 재생성된 이메일 포맷팅
+                                    retry_formatted = {}
+                                    for service_key in retry_services:
+                                        if service_key in retry_variations_raw.get('variations', {}):
+                                            retry_formatted[service_key] = retry_variations_raw['variations'][service_key]
+                                    
+                                    # 재생성된 이메일 검증
+                                    retry_emails_to_verify = {}
+                                    for service_key, email_content in retry_formatted.items():
+                                        subject = email_content.get('subject', '')
+                                        body = email_content.get('body', '')
+                                        full_email = f"제목: {subject}\n\n본문:\n{body}"
+                                        retry_emails_to_verify[service_key] = full_email
+                                    
+                                    retry_verification = checker.batch_check(
+                                        context_for_verification,
+                                        retry_emails_to_verify
+                                    )
+                                    
+                                    # 재생성 결과 확인
+                                    newly_verified = 0
+                                    for service_key, result in retry_verification.items():
+                                        if result['groundedness'] == 'grounded' or result['groundedness'] == 'notSure':
+                                            verified_variations[service_key] = retry_formatted[service_key]
+                                            hallucinated_services.remove(service_key)
+                                            newly_verified += 1
+                                            logger.info(f"✅ {service_key}: 재생성 성공! 검증 통과")
+                                            regeneration_log.append(f"{service_key}: 재생성 성공 (시도 {retry_attempt + 1})")
+                                        else:
+                                            logger.warning(f"❌ {service_key}: 재생성했지만 여전히 환각 감지")
+                                            regeneration_log.append(f"{service_key}: 재생성 실패 (시도 {retry_attempt + 1})")
+                                    
+                                    if newly_verified > 0:
+                                        logger.info(f"🎉 재시도 {retry_attempt + 1}에서 {newly_verified}개 복구 성공!")
+                                    
+                                    # 모든 환각이 해결되었으면 중단
+                                    if not hallucinated_services:
+                                        logger.info(f"✅ 모든 환각 문제 해결! 재시도 중단")
+                                        break
+                                        
+                                except Exception as retry_error:
+                                    logger.error(f"재생성 오류 (시도 {retry_attempt + 1}): {str(retry_error)}")
+                                    regeneration_log.append(f"재생성 오류 (시도 {retry_attempt + 1}): {str(retry_error)}")
+                        
+                        # 최종 환각 개수 업데이트
+                        final_hallucinated_count = len(hallucinated_services)
                         
                         # 최소 1개 이상의 이메일이 검증 통과해야 함
                         if verified_variations:
                             logger.info(f"📊 Groundedness Check 완료: {len(verified_variations)}/{len(formatted_variations)} 검증 통과")
+                            if regeneration_log:
+                                logger.info(f"🔄 재생성 로그: {', '.join(regeneration_log)}")
                             
                             # 검증 메타데이터 추가
                             return {
@@ -3792,8 +3888,10 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 'groundedness_check': {
                                     'enabled': True,
                                     'verified_count': len(verified_variations),
-                                    'hallucinated_count': hallucinated_count,
-                                    'total_count': len(formatted_variations)
+                                    'hallucinated_count': final_hallucinated_count,
+                                    'total_count': len(formatted_variations),
+                                    'regeneration_attempted': len(regeneration_log) > 0,
+                                    'regeneration_log': regeneration_log
                                 }
                             }
                         else:
