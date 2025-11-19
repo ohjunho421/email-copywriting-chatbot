@@ -4049,20 +4049,40 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
 재생성 대상: {', '.join(retry_services)}
 """
                                 
-                                # 재생성 요청
+                                # 재생성 요청 (REST API 직접 호출)
                                 retry_prompt = context + strict_prompt_addition
                                 
                                 try:
-                                    retry_response = model.generate_content(
-                                        retry_prompt,
-                                        generation_config={
-                                            "temperature": 0.3,  # 더 보수적으로
-                                            "top_p": 0.85,
-                                            "top_k": 30,
-                                            "max_output_tokens": 8000,
-                                            "response_mime_type": "application/json"
-                                        }
+                                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
+                                    
+                                    retry_response_raw = requests.post(
+                                        api_url,
+                                        json={
+                                            "contents": [{
+                                                "parts": [{"text": retry_prompt}]
+                                            }],
+                                            "generationConfig": {
+                                                "temperature": 0.3,
+                                                "topP": 0.85,
+                                                "topK": 30,
+                                                "maxOutputTokens": 8000
+                                            }
+                                        },
+                                        timeout=180
                                     )
+                                    
+                                    if retry_response_raw.status_code != 200:
+                                        raise Exception(f"API 오류: {retry_response_raw.text}")
+                                    
+                                    retry_result = retry_response_raw.json()
+                                    retry_response_text = retry_result['candidates'][0]['content']['parts'][0]['text']
+                                    
+                                    # ResponseWrapper로 변환
+                                    class RetryResponseWrapper:
+                                        def __init__(self, text):
+                                            self.text = text
+                                    
+                                    retry_response = RetryResponseWrapper(retry_response_text)
                                     
                                     retry_variations_raw = json.loads(retry_response.text)
                                     
@@ -4136,18 +4156,32 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
 JSON 형식으로 출력하세요.
 """
                                     
-                                    conservative_response = model.generate_content(
-                                        conservative_prompt,
-                                        generation_config={
-                                            "temperature": 0.2,  # 매우 보수적
-                                            "top_p": 0.7,
-                                            "top_k": 20,
-                                            "max_output_tokens": 8000,
-                                            "response_mime_type": "application/json"
-                                        }
+                                    # REST API 직접 호출
+                                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
+                                    
+                                    conservative_response_raw = requests.post(
+                                        api_url,
+                                        json={
+                                            "contents": [{
+                                                "parts": [{"text": conservative_prompt}]
+                                            }],
+                                            "generationConfig": {
+                                                "temperature": 0.2,
+                                                "topP": 0.7,
+                                                "topK": 20,
+                                                "maxOutputTokens": 8000
+                                            }
+                                        },
+                                        timeout=180
                                     )
                                     
-                                    conservative_variations = json.loads(conservative_response.text)
+                                    if conservative_response_raw.status_code != 200:
+                                        raise Exception(f"API 오류: {conservative_response_raw.text}")
+                                    
+                                    conservative_result = conservative_response_raw.json()
+                                    conservative_response_text = conservative_result['candidates'][0]['content']['parts'][0]['text']
+                                    
+                                    conservative_variations = json.loads(conservative_response_text)
                                     
                                     # 보수적 버전을 검증 없이 추가 (이미 충분히 보수적으로 생성됨)
                                     for service_key in hallucinated_services.copy():
