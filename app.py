@@ -3854,21 +3854,18 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                 'note': 'AWS Bedrock 모델 접근 불가로 인한 폴백 데이터'
             }
         
-        # Gemini API 호출 (타임아웃 및 재시도 로직 추가)
+        # Gemini API 호출 (재시도 로직 추가)
         try:
             model = genai.GenerativeModel('gemini-3-pro-preview')
             
-            # 타임아웃 120초로 설정 + 최대 3회 재시도
+            # 최대 3회 재시도
             max_retries = 3
             retry_count = 0
             response = None
             
             while retry_count < max_retries:
                 try:
-                    response = model.generate_content(
-                        prompt,
-                        request_options={'timeout': 120}  # 120초 타임아웃
-                    )
+                    response = model.generate_content(prompt)
                     break  # 성공하면 루프 탈출
                 except Exception as retry_error:
                     retry_count += 1
@@ -3877,7 +3874,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                         if retry_count < max_retries:
                             logger.warning(f"⏱️ Gemini API 타임아웃 ({retry_count}/{max_retries}) - 재시도 중...")
                             import time
-                            time.sleep(2 * retry_count)  # 지수 백오프
+                            time.sleep(3 * retry_count)  # 지수 백오프 (3초, 6초, 9초)
                             continue
                     # 다른 에러거나 마지막 재시도면 예외 발생
                     raise
