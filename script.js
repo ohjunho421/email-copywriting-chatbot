@@ -1146,8 +1146,18 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
     }
 
     displayAIGeneratedTemplates(results) {
+        console.log('=== displayAIGeneratedTemplates 시작 ===');
+        console.log('받은 results:', results);
+        console.log('results 길이:', results?.length);
+        
         const container = document.getElementById('templatesContainer');
         container.innerHTML = '';
+        
+        if (!results || results.length === 0) {
+            console.error('❌ results가 비어있음!');
+            container.innerHTML = '<div class="alert alert-danger">이메일 생성 결과가 없습니다.</div>';
+            return;
+        }
         
         // 결과를 인스턴스 변수에 저장하여 CSV 다운로드에서 사용
         this.generatedResults = results;
@@ -1156,8 +1166,13 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
         this.autoSaveSession(results);
         
         results.forEach((result, index) => {
+            console.log(`회사 ${index + 1} 처리 중:`, result.company?.['회사명']);
+            console.log('result.emails:', result.emails);
+            console.log('result.emails.variations:', result.emails?.variations);
+            
             if (result.error) {
                 // 오류가 있는 경우
+                console.error(`회사 ${index + 1} 오류:`, result.error);
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'company-templates mb-4';
                 errorDiv.innerHTML = `
