@@ -4016,16 +4016,24 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 verified_variations[service_key] = formatted_variations[service_key]
                                 logger.info(f"✅ {service_key}: 검증 통과 ({result['groundedness']}, 신뢰도: {result['confidence_score']:.2f})")
                             else:
-                                # 환각 감지 - 재생성 대상으로 추가
+                                # 환각 감지 - 경고 플래그 추가하고 일단 보여주기
                                 hallucinated_count += 1
                                 hallucinated_services.append(service_key)
-                                logger.warning(f"❌ {service_key}: 환각 감지! Perplexity 조사 결과와 불일치 - 재생성 예정")
+                                
+                                # 원본 이메일에 환각 경고 플래그 추가
+                                hallucination_email = formatted_variations[service_key].copy()
+                                hallucination_email['hallucination_warning'] = True
+                                hallucination_email['warning_message'] = '⚠️ 이 문안은 사실 확인이 필요할 수 있습니다. Perplexity 조사 결과와 일부 불일치가 감지되었습니다.'
+                                verified_variations[service_key] = hallucination_email
+                                
+                                logger.warning(f"❌ {service_key}: 환각 감지! 경고 표시와 함께 보여줌")
                         
-                        # 🔄 환각 감지된 이메일 재생성 시도 (최대 3회로 증가)
-                        MAX_RETRY = 3  # 2회 → 3회로 증가
+                        # 🔄 환각 감지된 이메일 재생성 시도 (비활성화 - 사용자가 직접 확인)
+                        # 사용자가 원본을 보고 직접 판단할 수 있도록 재생성 로직 비활성화
+                        MAX_RETRY = 0  # 재생성 비활성화
                         regeneration_log = []
                         
-                        if hallucinated_services and len(hallucinated_services) <= 4:  # 재생성은 4개까지 확대
+                        if False and hallucinated_services and len(hallucinated_services) <= 4:  # 재생성 비활성화
                             logger.info(f"🔄 환각 감지된 {len(hallucinated_services)}개 이메일 재생성 시작...")
                             
                             for retry_attempt in range(MAX_RETRY):

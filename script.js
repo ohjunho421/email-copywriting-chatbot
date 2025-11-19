@@ -1398,6 +1398,12 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                         </label>
                                     </div>
                                 ` : ''}
+                                ${variation.hallucination_warning ? `
+                                    <div class="alert alert-warning mb-3" style="margin-left: ${emailAddress ? '100px' : '0'}; border-left: 4px solid #ffc107;">
+                                        <i class="fas fa-exclamation-triangle"></i> <strong>환각 가능성 경고</strong><br>
+                                        <small>${variation.warning_message || '⚠️ 이 문안은 사실 확인이 필요할 수 있습니다. Perplexity 조사 결과와 일부 불일치가 감지되었습니다.'}</small>
+                                    </div>
+                                ` : ''}
                                 ${variation.isRecommended ? `
                                     <div class="badge bg-success mb-2" style="margin-left: ${emailAddress ? '100px' : '0'};">
                                         <i class="fas fa-star"></i> AI 추천 (최적 메일)
