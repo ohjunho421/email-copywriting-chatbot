@@ -370,7 +370,8 @@ def format_relevant_blog_for_email(blog_posts, company_name='', service_type='')
     
     for i, post in enumerate(blog_posts[:3], 1):
         content += f"**참고자료 {i}:**\n"
-        content += f"주제: {post['title']}\n\n"
+        content += f"주제: {post['title']}\n"
+        content += f"링크: {post.get('link', '')}\n\n"
         
         summary = post.get('summary', '')
         full_content = post.get('content', '')
