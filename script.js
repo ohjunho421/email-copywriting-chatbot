@@ -1,10 +1,21 @@
 // 메일 문안 생성 챗봇 JavaScript
 
-// 마크다운 볼드를 HTML로 변환하는 헬퍼 함수
+// 마크다운 볼드를 HTML로 변환하고 URL을 클릭 가능한 링크로 변환하는 헬퍼 함수
 function convertMarkdownToHtml(text) {
     if (!text) return text;
-    // **텍스트**를 <strong>텍스트</strong>로 변환
-    return text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // 1. **텍스트**를 <strong>텍스트</strong>로 변환
+    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // 2. URL을 클릭 가능한 링크로 변환 (http:// 또는 https://로 시작하는 URL)
+    // 이미 <a> 태그로 감싸진 URL은 제외
+    text = text.replace(/(?<!href=["'])https?:\/\/[^\s<>"]+/g, function(url) {
+        // URL 끝에 있는 구두점 제거 (마침표, 쉼표 등)
+        let cleanUrl = url.replace(/[.,;!?]+$/, '');
+        return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer">${cleanUrl}</a>`;
+    });
+    
+    return text;
 }
 
 /**
