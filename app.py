@@ -153,9 +153,13 @@ with app.app_context():
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY', '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')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-# Gemini API 설정
+# Gemini API 설정 (타임아웃 180초)
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+    genai.configure(
+        api_key=GEMINI_API_KEY,
+        client_options={'api_endpoint': 'generativelanguage.googleapis.com'},
+        transport='rest'  # REST 전송 사용
+    )
 
 # AWS Bedrock 설정 (현재 사용 안 함)
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
@@ -3854,30 +3858,58 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                 'note': 'AWS Bedrock 모델 접근 불가로 인한 폴백 데이터'
             }
         
-        # Gemini API 호출 (재시도 로직 추가)
+        # Gemini API 호출 (타임아웃 180초 + 재시도 로직)
         try:
-            model = genai.GenerativeModel('gemini-3-pro-preview')
+            import requests
+            import time
             
             # 최대 3회 재시도
             max_retries = 3
             retry_count = 0
-            response = None
+            response_text = None
             
             while retry_count < max_retries:
                 try:
-                    response = model.generate_content(prompt)
-                    break  # 성공하면 루프 탈출
+                    # REST API 직접 호출 (타임아웃 180초)
+                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
+                    
+                    response = requests.post(
+                        api_url,
+                        json={
+                            "contents": [{
+                                "parts": [{"text": prompt}]
+                            }]
+                        },
+                        timeout=180  # 180초 타임아웃
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if 'candidates' in result and len(result['candidates']) > 0:
+                            response_text = result['candidates'][0]['content']['parts'][0]['text']
+                            break  # 성공하면 루프 탈출
+                        else:
+                            raise Exception("Gemini API 응답에 candidates가 없습니다")
+                    else:
+                        raise Exception(f"Gemini API 오류: {response.status_code} - {response.text}")
+                        
                 except Exception as retry_error:
                     retry_count += 1
                     error_str = str(retry_error)
-                    if '504' in error_str or 'Deadline' in error_str or 'timeout' in error_str.lower():
+                    if '504' in error_str or 'Deadline' in error_str or 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
                         if retry_count < max_retries:
                             logger.warning(f"⏱️ Gemini API 타임아웃 ({retry_count}/{max_retries}) - 재시도 중...")
-                            import time
-                            time.sleep(3 * retry_count)  # 지수 백오프 (3초, 6초, 9초)
+                            time.sleep(5 * retry_count)  # 지수 백오프 (5초, 10초, 15초)
                             continue
                     # 다른 에러거나 마지막 재시도면 예외 발생
                     raise
+            
+            # response_text를 response.text로 변환 (기존 코드 호환성)
+            class ResponseWrapper:
+                def __init__(self, text):
+                    self.text = text
+            
+            response = ResponseWrapper(response_text)
             
             if response.text:
                 # JSON 응답 파싱 시도
