@@ -2723,7 +2723,7 @@ https://www.portone.io
         """
         
         payload = {
-            "model": "gemini-2.5-pro",
+            "model": "gemini-3-pro-preview",
             "max_tokens": 1000,
             "temperature": 0.5,
             "messages": [
@@ -3666,7 +3666,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
         
         # Gemini API 호출
         try:
-            model = genai.GenerativeModel('gemini-2.5-pro')
+            model = genai.GenerativeModel('gemini-3-pro-preview')
             response = model.generate_content(prompt)
             
             if response.text:
@@ -3884,7 +3884,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 'services_generated': services_to_generate,
                                 'sales_item': sales_item if sales_item else 'all',
                                 'timestamp': datetime.now().isoformat(),
-                                'model': 'gemini-2.5-pro-exp',
+                                'model': 'gemini-3-pro-preview',
                                 'groundedness_check': {
                                     'enabled': True,
                                     'verified_count': len(verified_variations),
@@ -3903,7 +3903,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 'services_generated': services_to_generate,
                                 'sales_item': sales_item if sales_item else 'all',
                                 'timestamp': datetime.now().isoformat(),
-                                'model': 'gemini-2.5-pro-exp',
+                                'model': 'gemini-3-pro-preview',
                                 'groundedness_check': {
                                     'enabled': True,
                                     'verified_count': 0,
@@ -3924,7 +3924,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                             'services_generated': services_to_generate,
                             'sales_item': sales_item if sales_item else 'all',
                             'timestamp': datetime.now().isoformat(),
-                            'model': 'gemini-2.5-pro-exp',
+                            'model': 'gemini-3-pro-preview',
                             'groundedness_check': {
                                 'enabled': False,
                                 'error': str(groundedness_error)
@@ -4213,7 +4213,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
             }
         
         try:
-            model = genai.GenerativeModel('gemini-2.5-pro')
+            model = genai.GenerativeModel('gemini-3-pro-preview')
             response = model.generate_content(context)
             
             if response.text:
@@ -4283,7 +4283,7 @@ def generate_email_with_user_template(company_data, research_data, user_template
                     'services_generated': services_to_generate,
                     'sales_item': sales_item if sales_item else 'all',
                     'timestamp': datetime.now().isoformat(),
-                    'model': 'gemini-2.5-pro-exp',
+                    'model': 'gemini-3-pro-preview',
                     'mode': 'user_template'
                 }
                 
@@ -4429,7 +4429,7 @@ E. **"내부 검토가 더 필요합니다"**
 """
 
         # Gemini API 호출
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-3-pro-preview')
         response = model.generate_content(prompt)
         
         if not response or not response.text:
@@ -4462,7 +4462,7 @@ E. **"내부 검토가 더 필요합니다"**
             'success': True,
             'email': email_data,
             'timestamp': datetime.now().isoformat(),
-            'model': 'gemini-2.0-flash-exp'
+            'model': 'gemini-3-pro-preview'
         }
         
     except Exception as e:
@@ -4631,7 +4631,7 @@ def generate_email_with_user_request(company_data, research_data, user_request, 
             'services_generated': base_result.get('services_generated', []),
             'sales_item': base_result.get('sales_item', 'all'),
             'timestamp': datetime.now().isoformat(),
-            'model': 'gemini-2.0-flash-exp',
+            'model': 'gemini-3-pro-preview',
             'mode': 'user_request'
         }
         
@@ -4808,7 +4808,7 @@ PortOne {user_name} 매니저입니다.</p>
             }
         }
         
-        gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={GEMINI_API_KEY}"
+        gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
         
         response = requests.post(
             gemini_api_url,
@@ -5259,7 +5259,7 @@ PortOne {{user_name}} 매니저입니다.</p>
         
         # Gemini API 호출
         genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel('gemini-2.5-pro')
+        model = genai.GenerativeModel('gemini-3-pro-preview')
         
         response = model.generate_content(
             prompt,
@@ -6116,7 +6116,7 @@ def classify_user_intent(user_message):
 }}
 """
 
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-3-pro-preview')
         response = model.generate_content(prompt)
         
         if not response or not response.text:
@@ -6450,7 +6450,7 @@ def answer_general_question(question):
 답변만 작성하세요 (설명이나 추가 정보 없이):
 """
         
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-3-pro-preview')
         response = model.generate_content(prompt)
         
         if response and response.text:
@@ -7096,7 +7096,7 @@ def generate_email_from_news_analysis(article_content, company_name, current_ema
         import google.generativeai as genai
         genai.configure(api_key=gemini_api_key)
         
-        model = genai.GenerativeModel('gemini-2.5-pro')
+        model = genai.GenerativeModel('gemini-3-pro-preview')
         response = model.generate_content(prompt)
         
         if response and response.text:
