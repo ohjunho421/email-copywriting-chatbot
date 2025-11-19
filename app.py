@@ -5852,6 +5852,7 @@ def refine_email():
         data = request.json
         current_email = data.get('current_email', '')
         refinement_request = data.get('refinement_request', '')
+        company_data = data.get('company_data', {})
         
         if not current_email or not refinement_request:
             return jsonify({
@@ -5859,6 +5860,52 @@ def refine_email():
                 'error': '현재 이메일 내용과 개선 요청사항이 필요합니다.'
             }), 400
         
+        # "다시 작성" 키워드 감지 - 전체 프로세스 재실행
+        regenerate_keywords = ['다시 작성', '재생성', '다시 생성', '처음부터', '새로 만들', '전체 재생성', '완전히 다시']
+        should_regenerate = any(keyword in refinement_request for keyword in regenerate_keywords)
+        
+        if should_regenerate:
+            logger.info(f"🔄 '다시 작성' 요청 감지 - 전체 로직 재실행")
+            
+            # company_data가 없으면 session에서 가져오기
+            if not company_data:
+                from flask import session
+                session_data = session.get('chat_session', {})
+                company_data = session_data.get('company_data', {})
+            
+            if not company_data or '회사명' not in company_data:
+                return jsonify({
+                    'success': False,
+                    'error': '회사 데이터가 없습니다. 먼저 회사 조사를 진행해주세요.'
+                }), 400
+            
+            # 전체 프로세스 재실행
+            logger.info(f"회사명: {company_data.get('회사명')} - 전체 문안 재생성 시작")
+            
+            # generate_email_with_gemini_and_cases 함수 호출
+            result = generate_email_with_gemini_and_cases(
+                company_data=company_data,
+                research_data=company_data.get('research_data', {}),
+                user_info={'name': current_user.name if current_user else '오준호'}
+            )
+            
+            if result and result.get('success'):
+                logger.info(f"✅ 전체 문안 재생성 완료")
+                return jsonify({
+                    'success': True,
+                    'regenerated': True,
+                    'variations': result.get('variations', {}),
+                    'recommended': result.get('recommended', {}),
+                    'timestamp': datetime.now().isoformat()
+                })
+            else:
+                logger.error(f"❌ 전체 문안 재생성 실패")
+                return jsonify({
+                    'success': False,
+                    'error': '문안 재생성에 실패했습니다.'
+                }), 500
+        
+        # 일반 개선 요청
         # Gemini 2.5 Pro로 이메일 개선 요청
         refined_email = refine_email_with_gemini(current_email, refinement_request)
         
@@ -5871,6 +5918,7 @@ def refine_email():
         return jsonify({
             'success': True,
             'refined_email': refined_email,
+            'regenerated': False,
             'timestamp': datetime.now().isoformat()
         })
         

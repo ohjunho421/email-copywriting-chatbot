@@ -2167,6 +2167,9 @@ ${variation.body}
             });
             
             // 백엔드 API로 개선 요청
+            // 회사 데이터도 함께 전송 (다시 작성 요청 시 필요)
+            const companyData = this.generatedResults?.[companyIndex]?.company || {};
+            
             const response = await fetch('/api/refine-email', {
                 method: 'POST',
                 headers: {
@@ -2174,7 +2177,8 @@ ${variation.body}
                 },
                 body: JSON.stringify({
                     current_email: currentContent,
-                    refinement_request: refinementRequest
+                    refinement_request: refinementRequest,
+                    company_data: companyData
                 })
             });
             
@@ -2187,7 +2191,37 @@ ${variation.body}
             const result = await response.json();
             console.log('API 응답 결과:', result);
             
-            if (result.success && result.refined_email) {
+            if (result.success && result.regenerated) {
+                // "다시 작성" 요청으로 전체 문안이 재생성된 경우
+                this.addBotMessage('✅ 전체 문안을 다시 생성했습니다!');
+                
+                // 기존 회사 데이터 가져오기
+                const companyData = this.generatedResults[companyIndex]?.company || {};
+                
+                // 재생성된 variations로 결과 업데이트
+                const regeneratedResult = {
+                    company: companyData,
+                    emails: {
+                        variations: result.variations || {},
+                        recommended: result.recommended || {}
+                    }
+                };
+                
+                // generatedResults 업데이트
+                if (this.generatedResults && this.generatedResults[companyIndex]) {
+                    this.generatedResults[companyIndex] = regeneratedResult;
+                }
+                
+                // 전체 결과 다시 표시
+                this.displayAIGeneratedTemplates(this.generatedResults);
+                
+                this.addBotMessage('📍 새로 생성된 문안을 위에서 확인하세요!');
+                
+                // 맨 위로 스크롤
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                
+            } else if (result.success && result.refined_email) {
+                // 일반 개선 요청
                 // 개선된 내용으로 기존 문안 덮어쓰기
                 this.updateExistingVariation(companyIndex, variationIndex, result.refined_email, refinementRequest);
                 
