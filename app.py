@@ -17,6 +17,7 @@ import google.generativeai as genai
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import atexit
+from collections import Counter
 
 # SSR 엔진 및 사례 DB 임포트
 from ssr_engine import rank_emails, get_top_email, calculate_ssr_score
@@ -3150,7 +3151,9 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         if not hosting:
             logger.warning(f"{company_name} 호스팅 정보 없음 - CSV에 호스팅사 컴럼이 있는지 확인하세요")
         
-        is_self_hosted = '자체' in hosting or 'self' in hosting or '직접' in hosting
+        # AWS, Cloudflare도 자체구축으로 간주
+        is_self_hosted = ('자체' in hosting or 'self' in hosting or '직접' in hosting or 
+                         'aws' in hosting.lower() or 'cloudflare' in hosting.lower())
         
         # 🆕 sales_item에서 복수 서비스 감지 (콤마, +, & 등으로 분리)
         def parse_sales_items(sales_item_str):
@@ -4304,7 +4307,9 @@ def generate_email_with_user_template(company_data, research_data, user_template
         if not hosting:
             logger.warning(f"[사용자문안] {company_name} 호스팅 정보 없음 - CSV에 호스팅사 컴럼이 있는지 확인하세요")
         
-        is_self_hosted = '자체' in hosting or 'self' in hosting or '직접' in hosting
+        # AWS, Cloudflare도 자체구축으로 간주
+        is_self_hosted = ('자체' in hosting or 'self' in hosting or '직접' in hosting or 
+                         'aws' in hosting.lower() or 'cloudflare' in hosting.lower())
         
         # sales_item에 따른 서비스 결정
         sales_item = company_data.get('sales_item', '').lower().strip()

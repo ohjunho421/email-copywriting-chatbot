@@ -8,8 +8,31 @@ import logging
 import json
 from collections import Counter
 from flask import has_app_context
+import requests
 
 logger = logging.getLogger(__name__)
+
+def verify_url_exists(url, timeout=3):
+    """
+    URL이 실제로 접근 가능한지 확인 (HEAD 요청)
+    
+    Args:
+        url: 확인할 URL
+        timeout: 타임아웃 (초)
+    
+    Returns:
+        bool: URL이 접근 가능하면 True, 아니면 False
+    """
+    try:
+        response = requests.head(url, timeout=timeout, allow_redirects=True)
+        if response.status_code == 200:
+            return True
+        # 404나 다른 에러
+        logger.warning(f"❌ URL 접근 실패 ({response.status_code}): {url}")
+        return False
+    except Exception as e:
+        logger.warning(f"❌ URL 접근 오류: {url} - {str(e)}")
+        return False
 
 # 모듈 레벨에서 import (app context 체크 포함)
 def get_db():
