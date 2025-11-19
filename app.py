@@ -6040,12 +6040,9 @@ def scrape_portone_blog_category(category_url, category_name, max_pages=5):
                         
                         if link_elem and link_elem.get('href'):
                             link = link_elem['href']
+                            # 상대 경로면 절대 경로로 변환
                             if not link.startswith('http'):
-                                # 상대 경로를 절대 경로로 변환
-                                if link.startswith('/'):
-                                    link = 'https://portone.io' + link
-                                else:
-                                    link = 'https://portone.io/korea/blog/' + link
+                                link = 'https://blog.portone.io' + link
                             
                             logger.info(f"      ✅ {title[:40]}...")
                             
