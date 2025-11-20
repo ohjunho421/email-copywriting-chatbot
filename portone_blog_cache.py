@@ -394,7 +394,7 @@ def format_relevant_blog_for_email(blog_posts, company_name='', service_type='')
     for i, post in enumerate(blog_posts[:3], 1):
         content += f"**참고자료 {i}:**\n"
         content += f"주제: {post['title']}\n"
-        content += f"링크: {post.get('link', '')}\n\n"
+        content += f"🔗 **원본 링크 (이메일 출처로 사용 시 이 URL을 정확히 복사)**: {post.get('link', '')}\n\n"
         
         summary = post.get('summary', '')
         full_content = post.get('content', '')
@@ -481,6 +481,7 @@ def get_service_knowledge(service_type=''):
             knowledge += f"**대표 인사이트:**\n\n"
             for i, post in enumerate(posts_query[:5], 1):
                 knowledge += f"{i}. {post.title}\n"
+                knowledge += f"   🔗 **원본 링크**: {post.link}\n"
                 if post.summary:
                     knowledge += f"   → {post.summary[:150]}...\n\n"
             
