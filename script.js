@@ -371,8 +371,8 @@ class EmailCopywritingChatbot {
             this.addBotMessage(`📊 총 ${totalCompanies}개 회사를 ${maxWorkers}개 동시 작업으로 병렬 처리를 시작합니다...`);
             this.addBotMessage(`⚡ 예상 시간: 약 ${Math.ceil(totalCompanies / maxWorkers * 15 / 60)}분 (기존 대비 ${Math.round((1 - 1/maxWorkers) * 100)}% 단축)`);
             
-            // 진행률 표시를 위한 요소 추가
-            this.addProgressIndicator(totalCompanies);
+            // 진행률 표시를 위한 요소 추가 (maxWorkers 값 전달)
+            this.addProgressIndicator(totalCompanies, maxWorkers);
             
             const startTime = Date.now();
             
@@ -802,7 +802,7 @@ class EmailCopywritingChatbot {
         emailCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    addProgressIndicator(total) {
+    addProgressIndicator(total, maxWorkers = 3) {
         const chatContainer = document.getElementById('chatContainer');
         const progressDiv = document.createElement('div');
         progressDiv.id = 'progressIndicator';
@@ -820,19 +820,18 @@ class EmailCopywritingChatbot {
         chatContainer.appendChild(progressDiv);
         chatContainer.scrollTop = chatContainer.scrollHeight;
         
-        // 가상의 진행률 업데이트 (실제로는 백엔드에서 실시간 업데이트가 어려움)
-        this.simulateProgress(total);
+        // 백엔드 실제 진행률과 동일하게 업데이트 (maxWorkers 전달)
+        this.simulateProgress(total, maxWorkers);
     }
 
-    simulateProgress(total) {
+    simulateProgress(total, maxWorkers) {
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
         
         if (!progressBar || !progressText) return;
         
-        // 회사당 평균 처리 시간 (초) - 병렬 처리 고려
+        // 회사당 평균 처리 시간 (초) - 실제 측정값 기반
         const avgTimePerCompany = 15;
-        const maxWorkers = 3; // 동시 처리 개수
         
         // 예상 총 시간 계산 (병렬 처리 고려)
         const estimatedTotalTime = Math.ceil(total / maxWorkers) * avgTimePerCompany;
@@ -848,8 +847,8 @@ class EmailCopywritingChatbot {
             const elapsedTime = (Date.now() - startTime) / 1000; // 초 단위
             const remainingTime = Math.max(0, estimatedTotalTime - elapsedTime);
             
-            // 시간 기반 진행률 계산 (90%까지)
-            const timeBasedProgress = Math.min(90, (elapsedTime / estimatedTotalTime) * 90);
+            // 시간 기반 진행률 계산 (95%까지) - 백엔드 실제 진행률과 더 가깝게
+            const timeBasedProgress = Math.min(95, (elapsedTime / estimatedTotalTime) * 100);
             
             // 부드러운 증가를 위해 현재 진행률에서 목표까지 점진적으로 이동
             const targetProgress = timeBasedProgress;
@@ -863,14 +862,13 @@ class EmailCopywritingChatbot {
             const minutes = Math.floor(remainingTime / 60);
             const seconds = Math.floor(remainingTime % 60);
             
-            if (progress < 90) {
-                if (remainingTime > 60) {
-                    progressText.textContent = `${Math.round(progress)}% (약 ${minutes}분 ${seconds}초 남음)`;
-                } else if (remainingTime > 0) {
-                    progressText.textContent = `${Math.round(progress)}% (약 ${seconds}초 남음)`;
-                } else {
-                    progressText.textContent = `${Math.round(progress)}% (완료 중...)`;
-                }
+            // 진행률에 따라 메시지 변경
+            if (remainingTime > 60) {
+                progressText.textContent = `${Math.round(progress)}% (약 ${minutes}분 ${seconds}초 남음)`;
+            } else if (remainingTime > 0) {
+                progressText.textContent = `${Math.round(progress)}% (약 ${seconds}초 남음)`;
+            } else if (progress < 95) {
+                progressText.textContent = `${Math.round(progress)}% (완료 중...)`;
             } else {
                 progressText.textContent = `${Math.round(progress)}% (거의 완료...)`;
             }
