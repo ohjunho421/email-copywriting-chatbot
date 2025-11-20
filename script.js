@@ -1758,8 +1758,13 @@ ${variation.body}
         console.log('🔍 Element 검색:', `#ai_template_${companyIndex}_${variationIndex}`, variationElement ? '찾음' : '못 찾음');
         
         if (variationElement) {
-            // textarea 값 업데이트
+            // textarea 값 업데이트 (최신 문안으로 확실히 덮어쓰기)
             variationElement.value = refinedEmail;
+            console.log('✅ textarea 업데이트 완료:', {
+                elementId: variationElement.id,
+                valueLength: variationElement.value.length,
+                valuePreview: variationElement.value.substring(0, 50) + '...'
+            });
             
             // 화면에 표시되는 본문 영역 업데이트
             const parentTemplate = variationElement.closest('.email-template');
@@ -2099,10 +2104,30 @@ ${variation.body}
         this.showLoading('뉴스 기사를 분석하고 있습니다...');
         
         try {
-            // 현재 이메일 내용과 회사명 가져오기
+            // 현재 이메일 내용과 회사명 가져오기 (최신 버전 확보)
             const { companyIndex, variationIndex } = this.currentRefinementTarget;
+            
+            // 1순위: textarea에서 직접 읽기 (사용자가 수정한 내용 포함)
             const templateElement = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
-            const currentContent = templateElement ? templateElement.value : '';
+            let currentContent = '';
+            
+            if (templateElement && templateElement.value.trim()) {
+                currentContent = templateElement.value;
+                console.log('✅ textarea에서 최신 문안 읽기 성공 (뉴스 분석)');
+            } else {
+                // 2순위: generatedResults에서 읽기 (fallback)
+                console.warn('⚠️ textarea가 없거나 비어있음, generatedResults에서 읽기 시도 (뉴스 분석)');
+                const result = this.generatedResults?.[companyIndex];
+                if (result && result.emails && result.emails.variations) {
+                    const variationKeys = Object.keys(result.emails.variations);
+                    const targetKey = variationKeys[variationIndex];
+                    if (targetKey && result.emails.variations[targetKey]) {
+                        const variation = result.emails.variations[targetKey];
+                        currentContent = `제목: ${variation.subject}\n\n${variation.body}`;
+                        console.log('✅ generatedResults에서 읽기 성공 (뉴스 분석)');
+                    }
+                }
+            }
             
             // 회사명 추출 (결과 데이터에서)
             let companyName = '';
@@ -2173,15 +2198,40 @@ ${variation.body}
         this.showLoading('이메일 문안을 개선하고 있습니다...');
         
         try {
-            // 현재 이메일 내용 가져오기
+            // 현재 이메일 내용 가져오기 (최신 버전 확보)
             const { companyIndex, variationIndex } = this.currentRefinementTarget;
+            
+            // 1순위: textarea에서 직접 읽기 (사용자가 수정한 내용 포함)
             const templateElement = document.getElementById(`ai_template_${companyIndex}_${variationIndex}`);
-            const currentContent = templateElement ? templateElement.value : '';
+            let currentContent = '';
+            
+            if (templateElement && templateElement.value.trim()) {
+                currentContent = templateElement.value;
+                console.log('✅ textarea에서 최신 문안 읽기 성공');
+            } else {
+                // 2순위: generatedResults에서 읽기 (fallback)
+                console.warn('⚠️ textarea가 없거나 비어있음, generatedResults에서 읽기 시도');
+                const result = this.generatedResults?.[companyIndex];
+                if (result && result.emails && result.emails.variations) {
+                    const variationKeys = Object.keys(result.emails.variations);
+                    const targetKey = variationKeys[variationIndex];
+                    if (targetKey && result.emails.variations[targetKey]) {
+                        const variation = result.emails.variations[targetKey];
+                        currentContent = `제목: ${variation.subject}\n\n${variation.body}`;
+                        console.log('✅ generatedResults에서 읽기 성공');
+                    }
+                }
+            }
+            
+            if (!currentContent.trim()) {
+                throw new Error('현재 문안을 찾을 수 없습니다. 페이지를 새로고침하거나 문안을 다시 생성해주세요.');
+            }
             
             console.log('개선 요청 데이터:', {
                 companyIndex,
                 variationIndex,
-                currentContent: currentContent.substring(0, 100) + '...',
+                currentContentLength: currentContent.length,
+                currentContentPreview: currentContent.substring(0, 100) + '...',
                 refinementRequest
             });
             
