@@ -277,14 +277,15 @@ def extract_keywords_from_post(post):
         logger.error(f"키워드 추출 오류: {str(e)}")
         return '', ''
 
-def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=None):
+def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=None, pain_points=None):
     """
-    회사 정보를 기반으로 관련 블로그 글 조회 (PostgreSQL)
+    회사 정보와 Pain Point를 기반으로 관련 블로그 글 조회 (PostgreSQL)
     
     Args:
         company_info: 회사 정보 딕셔너리
         max_posts: 최대 반환 글 수
         service_type: 서비스 타입 ('OPI', 'Recon', 'Prism', 'PS' 등)
+        pain_points: Pain Point 키워드 리스트 (예: ['구독결제', 'PG관리', '정산'])
     
     Returns:
         list: 관련 블로그 글 리스트
@@ -304,6 +305,12 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
         if category:
             search_terms.append(category)
         
+        # Pain Point 키워드 추가 (최우선)
+        pain_point_terms = []
+        if pain_points:
+            pain_point_terms.extend(pain_points)
+            logger.info(f"🎯 Pain Point 키워드: {', '.join(pain_points)}")
+        
         # 설명에서 키워드 추출
         if description:
             desc_lower = description.lower()
@@ -311,18 +318,43 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
                 if keyword in desc_lower:
                     search_terms.append(keyword)
         
-        # 쿼리 시작
-        query = db.session.query(BlogPost)
+        from sqlalchemy import or_
         
-        # 서비스 타입 필터링
-        if service_type:
-            query = query.filter(BlogPost.category == service_type)
+        # 두 단계 검색: 1) Pain Point 매칭 우선 2) 업종 매칭
+        all_posts = []
+        seen_ids = set()
         
-        # 검색어로 필터링
-        if search_terms:
-            from sqlalchemy import or_
+        # 1단계: Pain Point 키워드로 검색 (최우선)
+        if pain_point_terms:
+            pain_query = db.session.query(BlogPost)
+            if service_type:
+                pain_query = pain_query.filter(BlogPost.category == service_type)
+            
+            pain_pattern = f"%{'%'.join(pain_point_terms)}%"
+            pain_query = pain_query.filter(
+                or_(
+                    BlogPost.keywords.like(pain_pattern),
+                    BlogPost.title.like(pain_pattern),
+                    BlogPost.content.like(pain_pattern)
+                )
+            )
+            
+            pain_posts = pain_query.order_by(BlogPost.created_at.desc()).limit(max_posts).all()
+            for post in pain_posts:
+                if post.id not in seen_ids:
+                    all_posts.append(post)
+                    seen_ids.add(post.id)
+                    logger.info(f"  ✅ Pain Point 매칭: {post.title[:50]}...")
+        
+        # 2단계: 업종 키워드로 검색 (Pain Point 매칭 후 부족하면 채우기)
+        remaining_count = max_posts - len(all_posts)
+        if remaining_count > 0 and search_terms:
+            industry_query = db.session.query(BlogPost)
+            if service_type:
+                industry_query = industry_query.filter(BlogPost.category == service_type)
+            
             search_pattern = f"%{'%'.join(search_terms)}%"
-            query = query.filter(
+            industry_query = industry_query.filter(
                 or_(
                     BlogPost.industry_tags.like(search_pattern),
                     BlogPost.keywords.like(search_pattern),
@@ -330,9 +362,14 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
                     BlogPost.content.like(search_pattern)
                 )
             )
+            
+            industry_posts = industry_query.order_by(BlogPost.created_at.desc()).limit(remaining_count).all()
+            for post in industry_posts:
+                if post.id not in seen_ids:
+                    all_posts.append(post)
+                    seen_ids.add(post.id)
         
-        # 최신순 정렬 및 개수 제한
-        posts_query = query.order_by(BlogPost.created_at.desc()).limit(max_posts).all()
+        posts_query = all_posts
         
         service_label = f"[{service_type}] " if service_type else ""
         
@@ -384,10 +421,12 @@ def format_relevant_blog_for_email(blog_posts, company_name='', service_type='')
     
     service_label = service_type if service_type else '포트원'
     
-    content = f"\n\n**📚 {service_label} 관련 참고 정보 (RAG - 블로그 직접 언급 금지!):**\n\n"
+    content = f"\n\n**📚 {service_label} 관련 참고 정보 (RAG - Pain Point 매칭 사례 우선!):**\n\n"
     content += "⚠️ **중요 지침**: 아래 정보는 이메일 본문의 설득력을 높이기 위한 참고 자료입니다.\n"
     content += "- 블로그 글을 직접 언급하지 마세요 (\"최근 포트원 블로그에서...\" ❌)\n"
-    content += "- 정보만 자연스럽게 활용하여 근거 있는 주장을 펼치세요\n"
+    content += "- **아래 블로그는 {company_name}의 Pain Point와 유사한 문제를 해결한 기존 고객 사례입니다**\n"
+    content += "- **참고자료 1번이 가장 관련성 높은 사례**이므로 우선 활용하세요\n"
+    content += "- 정보를 자연스럽게 활용하여 \"{company_name}님도 이런 문제 겪으시죠?\"라는 공감대 형성\n"
     content += "- 수치, 트렌드, 사례 등을 자신의 말로 녹여서 사용하세요\n\n"
     content += "---\n\n"
     
@@ -408,11 +447,12 @@ def format_relevant_blog_for_email(blog_posts, company_name='', service_type='')
         
         content += "---\n\n"
     
-    content += f"💡 **활용 방법**: 위 정보를 바탕으로 {company_name}에게 {service_label} 서비스가 "
-    content += "어떻게 도움이 되는지 구체적이고 설득력 있게 작성하세요.\n"
-    content += "- 업계 트렌드나 Pain Point를 언급할 때 위 정보 활용\n"
-    content += "- \"많은 기업들이 X 문제를 겪고 있습니다\" 같은 표현에 근거 제시\n"
-    content += "- 수치나 사례가 있다면 \"업계 평균\", \"다른 기업 사례\" 등으로 자연스럽게 인용\n"
+    content += f"💡 **Pain Point 매칭 사례 활용법**: \n"
+    content += f"- 위 블로그는 {company_name}와 유사한 Pain Point를 겪은 기존 고객의 성공 사례입니다\n"
+    content += f"- 이메일에서 \"{company_name}님도 이런 어려움 겪고 계시지 않나요?\"라는 공감으로 시작\n"
+    content += f"- 기존 고객이 어떻게 문제를 해결했는지 구체적 수치와 함께 언급\n"
+    content += f"- 예: \"유사한 업종의 X사는 포트원 도입 후 Y% 개선 효과를 보았습니다\"\n"
+    content += f"- 출처를 명시할 경우 이메일 하단에 [참고] 형식으로만 표기\n"
     
     return content
 

@@ -2283,27 +2283,52 @@ class EmailCopywriter:
             'description': research_data.get('company_info', '')
         }
         
-        # OPI 관련 블로그 (업종별 필터링)
+        # Pain Point 키워드 추출 (Perplexity 조사 결과에서)
+        pain_point_keywords = []
+        company_info_text = research_data.get('company_info', '').lower()
+        
+        # Pain Point 관련 키워드 매칭
+        pain_point_mapping = {
+            '구독': ['구독', 'subscription', '정기결제', '빌링'],
+            'PG관리': ['pg', '여러', '복수', '다수', '관리', '연동'],
+            '정산': ['정산', '대사', '마감', '회계', '재무'],
+            '해외': ['해외', '글로벌', 'global', '수출', '진출'],
+            '전환율': ['전환율', '이탈', '성공률', 'conversion'],
+            '수수료': ['수수료', '비용', 'fee', '절감'],
+            '플랫폼': ['플랫폼', '마켓플레이스', '중개', '파트너'],
+            '인앱': ['인앱', 'in-app', '앱스토어', '구글플레이']
+        }
+        
+        for pain_point, keywords in pain_point_mapping.items():
+            if any(keyword in company_info_text for keyword in keywords):
+                pain_point_keywords.append(pain_point)
+        
+        if pain_point_keywords:
+            logger.info(f"🎯 {company_name} Pain Point 감지: {', '.join(pain_point_keywords)}")
+        
+        # OPI 관련 블로그 (Pain Point + 업종 필터링)
         if cached_posts and (sales_point in ['opi', ''] or 'opi' in sales_point):
             opi_blogs = get_relevant_blog_posts_by_industry(
                 company_info_for_blog,
-                max_posts=3,  # 관련성 높은 블로그만 선택
-                service_type='OPI'
+                max_posts=3,
+                service_type='OPI',
+                pain_points=pain_point_keywords if pain_point_keywords else None
             )
             if opi_blogs:
                 blog_content_opi = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
-                logger.info(f"📰 [OPI] {company_name}: 업종 관련 블로그 {len(opi_blogs)}개 조회")
+                logger.info(f"📰 [OPI] {company_name}: Pain Point 매칭 블로그 {len(opi_blogs)}개 조회")
         
-        # Recon 관련 블로그 (업종별 필터링)
+        # Recon 관련 블로그 (Pain Point + 업종 필터링)
         if cached_posts and (sales_point in ['recon', ''] or 'recon' in sales_point):
             recon_blogs = get_relevant_blog_posts_by_industry(
                 company_info_for_blog,
-                max_posts=3,  # 관련성 높은 블로그만 선택
-                service_type='Recon'
+                max_posts=3,
+                service_type='Recon',
+                pain_points=pain_point_keywords if pain_point_keywords else None
             )
             if recon_blogs:
                 blog_content_recon = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
-                logger.info(f"📰 [Recon] {company_name}: 업종 관련 블로그 {len(recon_blogs)}개 조회")
+                logger.info(f"📰 [Recon] {company_name}: Pain Point 매칭 블로그 {len(recon_blogs)}개 조회")
         
         # 세일즈포인트에 따라 생성할 이메일 유형 결정
         email_definitions = {
