@@ -2276,27 +2276,34 @@ class EmailCopywriter:
             except Exception as blog_error:
                 logger.error(f"❌ 블로그 스크래핑 오류: {str(blog_error)}")
         
-        # OPI 관련 블로그 (배경지식 활용)
+        # 회사 정보 구조화 (업종별 블로그 필터링용)
+        company_info_for_blog = {
+            'industry': research_data.get('industry', ''),
+            'category': research_data.get('category', ''),
+            'description': research_data.get('company_info', '')
+        }
+        
+        # OPI 관련 블로그 (업종별 필터링)
         if cached_posts and (sales_point in ['opi', ''] or 'opi' in sales_point):
             opi_blogs = get_relevant_blog_posts_by_industry(
-                {'description': research_data.get('company_info', '')},
-                max_posts=5,  # 더 풍부한 배경지식 활용
+                company_info_for_blog,
+                max_posts=3,  # 관련성 높은 블로그만 선택
                 service_type='OPI'
             )
             if opi_blogs:
                 blog_content_opi = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
-                logger.info(f"📰 [OPI] {company_name}: 관련 블로그 {len(opi_blogs)}개 조회 (배경지식 활용)")
+                logger.info(f"📰 [OPI] {company_name}: 업종 관련 블로그 {len(opi_blogs)}개 조회")
         
-        # Recon 관련 블로그 (배경지식 활용)
+        # Recon 관련 블로그 (업종별 필터링)
         if cached_posts and (sales_point in ['recon', ''] or 'recon' in sales_point):
             recon_blogs = get_relevant_blog_posts_by_industry(
-                {'description': research_data.get('company_info', '')},
-                max_posts=5,  # 더 풍부한 배경지식 활용
+                company_info_for_blog,
+                max_posts=3,  # 관련성 높은 블로그만 선택
                 service_type='Recon'
             )
             if recon_blogs:
                 blog_content_recon = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
-                logger.info(f"📰 [Recon] {company_name}: 관련 블로그 {len(recon_blogs)}개 조회 (배경지식 활용)")
+                logger.info(f"📰 [Recon] {company_name}: 업종 관련 블로그 {len(recon_blogs)}개 조회")
         
         # 세일즈포인트에 따라 생성할 이메일 유형 결정
         email_definitions = {
@@ -3361,6 +3368,11 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
   2. **아래 OPI/Recon 참고 정보에 제공된 "링크:" 부분의 URL을 정확히 복사**해서 사용하세요
   3. **예시**: 참고자료에 "링크: https://blog.portone.io/opi_case_game/" 이 있다면, 정확히 이 URL을 사용
   4. **잘못된 예**: https://blog.portone.io/84f99450-... (UUID 형식 절대 금지!)
+- **🚨 블로그 출처 표기 규칙 (매우 중요!):**
+  1. **이메일 본문에서 실제로 언급하거나 인용한 블로그만 출처로 표기**하세요
+  2. **언급하지 않은 블로그를 출처로 넣지 마세요** (참고만 하고 본문에 안 쓴 경우 출처 불필요)
+  3. **해당 회사 업종과 전혀 관련 없는 블로그는 사용하지 마세요** (예: 게임업체에 여행업계 블로그 ❌)
+  4. **아래 참고 정보의 블로그는 이미 {company_name}의 업종에 맞춰 필터링된 것**이므로 안심하고 활용하세요
 - **Perplexity 조사 결과와 PortOne 공식 블로그는 모두 검증된 출처이므로 환각이 아닙니다**
 
 **✅ OPI에서 언급 가능한 결제 수단 (소개서 기반):**
@@ -4686,6 +4698,11 @@ def generate_persuasive_reply(context, company_name, email_name, case_examples="
   2. **아래 참고 정보에 제공된 "링크:" 부분의 URL을 정확히 복사**해서 사용하세요
   3. **예시**: 참고자료에 "링크: https://blog.portone.io/opi_case_game/" 이 있다면, 정확히 이 URL을 사용
   4. **잘못된 예**: https://blog.portone.io/84f99450-... (UUID 형식 절대 금지!)
+- **🚨 블로그 출처 표기 규칙 (매우 중요!):**
+  1. **이메일 본문에서 실제로 언급하거나 인용한 블로그만 출처로 표기**하세요
+  2. **언급하지 않은 블로그를 출처로 넣지 마세요** (참고만 하고 본문에 안 쓴 경우 출처 불필요)
+  3. **해당 회사 업종과 전혀 관련 없는 블로그는 사용하지 마세요** (예: 게임업체에 여행업계 블로그 ❌)
+  4. **아래 참고 정보의 블로그는 이미 {company_name}의 업종에 맞춰 필터링된 것**이므로 안심하고 활용하세요
 - **Perplexity 조사 결과와 PortOne 공식 블로그는 모두 검증된 출처이므로 환각이 아닙니다**
 
 **🎯 목표: 고객의 우려를 해소하고 재미팅 기회를 만드는 설득력 있는 메일 작성**
