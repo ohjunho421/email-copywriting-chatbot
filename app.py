@@ -5371,9 +5371,13 @@ PortOne {user_name} 매니저입니다.</p>
         
         result = response.json()
         
+        # 전체 응답 구조 로깅 (디버깅용)
+        logger.debug(f"{company_name} Gemini 응답 구조: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}")
+        
         # 안전한 응답 처리
         if 'candidates' not in result or not result['candidates']:
             logger.error(f"{company_name} 개선 실패: Gemini 응답에 candidates가 없음")
+            logger.error(f"전체 응답: {result}")
             return None
         
         candidate = result['candidates'][0]
@@ -5387,25 +5391,31 @@ PortOne {user_name} 매니저입니다.</p>
         # content와 parts 안전하게 접근
         if 'content' not in candidate:
             logger.error(f"{company_name} 개선 실패: 응답에 content가 없음")
-            logger.debug(f"Candidate 키들: {list(candidate.keys())}")
+            logger.error(f"Candidate 전체: {json.dumps(candidate, ensure_ascii=False, indent=2)}")
             return None
         
         if 'parts' not in candidate['content']:
             logger.error(f"{company_name} 개선 실패: content에 parts가 없음")
-            logger.debug(f"Content 키들: {list(candidate['content'].keys())}")
-            return None
-        
-        parts = candidate['content']['parts']
-        if not parts:
-            logger.error(f"{company_name} 개선 실패: parts 리스트가 비어있음")
-            return None
-        
-        if not parts[0].get('text'):
-            logger.error(f"{company_name} 개선 실패: parts[0]에 text가 없음")
-            logger.debug(f"parts[0] 키들: {list(parts[0].keys())}")
-            return None
-        
-        generated_text = parts[0]['text'].strip()
+            logger.error(f"Content 전체: {json.dumps(candidate['content'], ensure_ascii=False, indent=2)}")
+            
+            # text 필드가 직접 있는지 확인 (일부 응답 형식)
+            if 'text' in candidate['content']:
+                logger.info(f"{company_name} content.text 필드 발견 - 대체 경로 사용")
+                generated_text = candidate['content']['text'].strip()
+            else:
+                return None
+        else:
+            parts = candidate['content']['parts']
+            if not parts:
+                logger.error(f"{company_name} 개선 실패: parts 리스트가 비어있음")
+                return None
+            
+            if not parts[0].get('text'):
+                logger.error(f"{company_name} 개선 실패: parts[0]에 text가 없음")
+                logger.error(f"parts[0] 전체: {json.dumps(parts[0], ensure_ascii=False, indent=2)}")
+                return None
+            
+            generated_text = parts[0]['text'].strip()
         
         # JSON 파싱 안전하게 처리
         import json
