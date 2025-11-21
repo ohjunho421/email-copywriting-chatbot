@@ -5129,6 +5129,8 @@ def refine_email_with_user_request(original_subject, original_body, user_request
     ⚠️ 핵심: 원본 이메일의 Pain Point + 포트원 해결책을 반드시 유지하면서
              사용자 요청사항(톤, 강조점, 제목 스타일 등)만 반영
     """
+    import json  # 함수 상단에서 import
+    
     try:
         company_name = company_data.get('회사명', 'Unknown')
         
@@ -5518,7 +5520,6 @@ PortOne {user_name} 매니저입니다.</p>
             generated_text = parts[0]['text'].strip()
         
         # JSON 파싱 안전하게 처리
-        import json
         try:
             # JSON 정제 (코드 블록 제거)
             if generated_text.startswith('```json'):
