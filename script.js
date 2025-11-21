@@ -1379,7 +1379,7 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                 <div class="row">
                     ${emailVariations.map((variation, vIndex) => `
                         <div class="col-md-${emailVariations.length === 1 ? '12' : '6'} mb-3">
-                            <div class="email-template ${variation.hallucination_warning ? 'border-danger border-3' : (variation.isRecommended ? 'border-success border-3' : '')}" style="position: relative;">
+                            <div class="email-template ${variation.auto_corrected ? 'border-info border-3' : (variation.hallucination_warning ? 'border-danger border-3' : (variation.isRecommended ? 'border-success border-3' : ''))}" style="position: relative;">
                                 ${emailAddress ? `
                                     <div class="form-check position-absolute" style="top: 10px; left: 10px; z-index: 10;">
                                         <input class="form-check-input" type="checkbox" 
@@ -1394,6 +1394,12 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                                         <label class="form-check-label" for="email_select_${index}_${vIndex}" style="font-size: 0.85em;">
                                             발송 선택
                                         </label>
+                                    </div>
+                                ` : ''}
+                                ${variation.auto_corrected ? `
+                                    <div class="alert alert-info mb-3" style="margin-left: ${emailAddress ? '100px' : '0'}; border-left: 4px solid #0dcaf0;">
+                                        <i class="fas fa-check-circle"></i> <strong>출처 기반 자동 수정</strong><br>
+                                        <small>✅ ${variation.correction_note || '환각 감지 후 Perplexity 조사 결과 기반으로 자동 수정되었습니다.'}</small>
                                     </div>
                                 ` : ''}
                                 ${variation.hallucination_warning ? `

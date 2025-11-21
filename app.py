@@ -4081,17 +4081,55 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 verified_variations[service_key] = formatted_variations[service_key]
                                 logger.info(f"✅ {service_key}: 검증 통과 ({result['groundedness']}, 신뢰도: {result['confidence_score']:.2f})")
                             else:
-                                # 환각 감지 - 경고 플래그 추가하고 일단 보여주기
+                                # 환각 감지 - 출처 기반 자동 수정 시도
                                 hallucinated_count += 1
                                 hallucinated_services.append(service_key)
                                 
-                                # 원본 이메일에 환각 경고 플래그 추가
-                                hallucination_email = formatted_variations[service_key].copy()
-                                hallucination_email['hallucination_warning'] = True
-                                hallucination_email['warning_message'] = '⚠️ 이 문안은 사실 확인이 필요할 수 있습니다. Perplexity 조사 결과와 일부 불일치가 감지되었습니다.'
-                                verified_variations[service_key] = hallucination_email
+                                logger.warning(f"❌ {service_key}: 환각 감지! 출처 기반 자동 수정 시도...")
                                 
-                                logger.warning(f"❌ {service_key}: 환각 감지! 경고 표시와 함께 보여줌")
+                                # 출처 기반 자동 수정
+                                try:
+                                    from upstage_groundedness import correct_hallucinated_email_with_source
+                                    
+                                    original_email_for_correction = {
+                                        'subject': formatted_variations[service_key]['subject'],
+                                        'body': formatted_variations[service_key]['body']
+                                    }
+                                    
+                                    correction_result = correct_hallucinated_email_with_source(
+                                        original_email=original_email_for_correction,
+                                        context=context_for_verification,
+                                        company_name=company_name,
+                                        gemini_api_key=GEMINI_API_KEY
+                                    )
+                                    
+                                    if correction_result['correction_applied']:
+                                        # 수정 성공 - 수정된 버전을 추가
+                                        corrected_email = formatted_variations[service_key].copy()
+                                        corrected_email['subject'] = correction_result['corrected_email']['subject']
+                                        corrected_email['body'] = correction_result['corrected_email']['body']
+                                        corrected_email['type'] = f"{corrected_email['type']} (출처 기반 수정)"
+                                        corrected_email['hallucination_warning'] = False
+                                        corrected_email['auto_corrected'] = True
+                                        corrected_email['correction_note'] = correction_result['correction_note']
+                                        
+                                        verified_variations[service_key] = corrected_email
+                                        logger.info(f"✅ {service_key}: 자동 수정 완료 - {correction_result['correction_note']}")
+                                    else:
+                                        # 수정 실패 - 원본에 경고 추가
+                                        hallucination_email = formatted_variations[service_key].copy()
+                                        hallucination_email['hallucination_warning'] = True
+                                        hallucination_email['warning_message'] = f"⚠️ 환각 감지됨. 자동 수정 실패: {correction_result['correction_note']}"
+                                        verified_variations[service_key] = hallucination_email
+                                        logger.warning(f"⚠️ {service_key}: 자동 수정 실패 - 원본에 경고 추가")
+                                        
+                                except Exception as correction_error:
+                                    logger.error(f"{service_key} 자동 수정 오류: {str(correction_error)}")
+                                    # 오류 시 원본에 경고 추가
+                                    hallucination_email = formatted_variations[service_key].copy()
+                                    hallucination_email['hallucination_warning'] = True
+                                    hallucination_email['warning_message'] = '⚠️ 이 문안은 사실 확인이 필요할 수 있습니다. Perplexity 조사 결과와 일부 불일치가 감지되었습니다.'
+                                    verified_variations[service_key] = hallucination_email
                         
                         # 🔄 환각 감지된 이메일 재생성 시도 (비활성화 - 사용자가 직접 확인)
                         # 사용자가 원본을 보고 직접 판단할 수 있도록 재생성 로직 비활성화

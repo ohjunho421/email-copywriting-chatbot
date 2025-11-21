@@ -325,3 +325,122 @@ def get_groundedness_checker() -> UpstageGroundednessChecker:
     if _groundedness_checker is None:
         _groundedness_checker = UpstageGroundednessChecker()
     return _groundedness_checker
+
+
+def correct_hallucinated_email_with_source(
+    original_email: Dict[str, str],
+    context: str,
+    company_name: str,
+    gemini_api_key: str
+) -> Dict[str, Any]:
+    """
+    환각이 감지된 이메일을 출처 기반으로 자동 수정
+    
+    Args:
+        original_email: {'subject': str, 'body': str} 형태의 원본 이메일
+        context: 참조 문서 (Perplexity 조사 결과)
+        company_name: 회사명
+        gemini_api_key: Gemini API 키
+        
+    Returns:
+        {
+            'corrected_email': {'subject': str, 'body': str},
+            'correction_applied': bool,
+            'correction_note': str
+        }
+    """
+    try:
+        import google.generativeai as genai
+        
+        genai.configure(api_key=gemini_api_key)
+        model = genai.GenerativeModel('gemini-3-pro-preview')
+        
+        prompt = f"""당신은 정확한 영업 이메일 작성 전문가입니다.
+
+**문제**: 아래 이메일에 참조 문서에 없는 내용(환각)이 포함되어 있습니다.
+
+**참조 문서 (반드시 이 내용만 사용):**
+```
+{context[:4000]}
+```
+
+**환각이 포함된 원본 이메일:**
+제목: {original_email['subject']}
+
+본문:
+{original_email['body']}
+
+---
+
+**수정 작업:**
+1. 참조 문서에 **명시되지 않은 모든 내용 제거**
+2. 참조 문서에 있는 **사실만 사용하여 재작성**
+3. 추측, 가정, 과장 금지
+4. 회사명({company_name})은 유지
+
+**수정 규칙:**
+- ❌ "최근 시리즈 A 투자 유치" → 참조 문서에 없으면 삭제
+- ❌ "급성장하고 있는" → 참조 문서에 없으면 삭제
+- ✅ "결제 시스템 개선이 필요하실 것 같습니다" → 일반적 Pain Point는 OK
+- ✅ PortOne 제품 설명 → 항상 사용 가능
+
+**출력 형식 (JSON):**
+{{
+  "subject": "수정된 제목",
+  "body": "수정된 본문 (HTML 태그 포함)",
+  "changes_made": "어떤 부분을 수정했는지 간단히 설명"
+}}
+
+이제 수정된 이메일을 JSON으로 출력하세요:"""
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                'temperature': 0.3,  # 보수적으로 수정
+                'max_output_tokens': 2048
+            }
+        )
+        
+        if not response.candidates or not response.candidates[0].content.parts:
+            logger.error("Gemini 응답 없음")
+            return {
+                'corrected_email': original_email,
+                'correction_applied': False,
+                'correction_note': '자동 수정 실패 - 원본 유지'
+            }
+        
+        result_text = response.candidates[0].content.parts[0].text.strip()
+        
+        # JSON 파싱
+        import json
+        import re
+        
+        # 코드 블록 제거
+        if result_text.startswith('```json'):
+            result_text = result_text[7:]
+        if result_text.startswith('```'):
+            result_text = result_text[3:]
+        if result_text.endswith('```'):
+            result_text = result_text[:-3]
+        result_text = result_text.strip()
+        
+        corrected_data = json.loads(result_text)
+        
+        logger.info(f"✅ {company_name} 환각 수정 완료: {corrected_data.get('changes_made', 'N/A')}")
+        
+        return {
+            'corrected_email': {
+                'subject': corrected_data['subject'],
+                'body': corrected_data['body']
+            },
+            'correction_applied': True,
+            'correction_note': corrected_data.get('changes_made', '출처 기반으로 수정됨')
+        }
+        
+    except Exception as e:
+        logger.error(f"환각 수정 오류: {str(e)}")
+        return {
+            'corrected_email': original_email,
+            'correction_applied': False,
+            'correction_note': f'자동 수정 실패: {str(e)}'
+        }
