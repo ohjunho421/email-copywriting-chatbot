@@ -5245,12 +5245,17 @@ def refine_email_with_user_request(original_subject, original_body, user_request
 
 ---
 
-**📤 JSON 출력 형식:**
+**📤 JSON 출력 형식 (중요 - 정확히 준수):**
 
 {{
-  "subject": "사용자가 제목 수정을 요청했다면 개선된 제목, 아니면 '{original_subject}' 그대로",
+  "subject": "사용자가 제목 수정을 요청했다면 개선된 제목, 아니면 원본 제목 그대로",
   "body": "사용자 요청사항이 모두 반영된 개선된 본문 (HTML 형식, <p>, <br>, <strong> 태그 사용, 한국어 자연스러운 줄바꿈)"
 }}
+
+**⚠️ JSON 작성 주의사항:**
+- subject와 body 값에 큰따옴표(")가 있으면 반드시 이스케이프 처리 (\")
+- 줄바꿈은 HTML 태그(<br>)로만 표현 (\n 사용 금지)
+- 잘못된 JSON은 파싱 실패로 이어지므로 반드시 유효한 JSON 형식 준수
 
 **줄바꿈 예시 (본문):**
 ```html
@@ -5289,7 +5294,7 @@ PortOne {user_name} 매니저입니다.</p>
         )
         
         if response.status_code != 200:
-            logger.error(f"{company_name} 개선 API 오류: {response.status_code} - {response.text}")
+            logger.error(f"{company_name} 개선 API 오류: {response.status_code} - {response.text[:500]}")
             return None
         
         result = response.json()
@@ -5302,19 +5307,30 @@ PortOne {user_name} 매니저입니다.</p>
         candidate = result['candidates'][0]
         
         # finish_reason 확인 (안전 필터링 체크)
-        if candidate.get('finishReason') == 'SAFETY':
-            logger.warning(f"{company_name} 개선 실패: 안전 필터로 인한 응답 차단")
+        finish_reason = candidate.get('finishReason', candidate.get('finish_reason'))
+        if finish_reason in ['SAFETY', 2]:  # 2 = SAFETY enum value
+            logger.warning(f"{company_name} 개선 실패: 안전 필터로 인한 응답 차단 (finishReason: {finish_reason})")
             return None
         
         # content와 parts 안전하게 접근
-        if 'content' not in candidate or 'parts' not in candidate['content']:
-            logger.error(f"{company_name} 개선 실패: 응답에 content.parts가 없음")
-            logger.debug(f"응답 구조: {candidate}")
+        if 'content' not in candidate:
+            logger.error(f"{company_name} 개선 실패: 응답에 content가 없음")
+            logger.debug(f"Candidate 키들: {list(candidate.keys())}")
+            return None
+        
+        if 'parts' not in candidate['content']:
+            logger.error(f"{company_name} 개선 실패: content에 parts가 없음")
+            logger.debug(f"Content 키들: {list(candidate['content'].keys())}")
             return None
         
         parts = candidate['content']['parts']
-        if not parts or not parts[0].get('text'):
-            logger.error(f"{company_name} 개선 실패: parts가 비어있음")
+        if not parts:
+            logger.error(f"{company_name} 개선 실패: parts 리스트가 비어있음")
+            return None
+        
+        if not parts[0].get('text'):
+            logger.error(f"{company_name} 개선 실패: parts[0]에 text가 없음")
+            logger.debug(f"parts[0] 키들: {list(parts[0].keys())}")
             return None
         
         generated_text = parts[0]['text'].strip()
@@ -5322,10 +5338,28 @@ PortOne {user_name} 매니저입니다.</p>
         # JSON 파싱 안전하게 처리
         import json
         try:
+            # JSON 정제 (코드 블록 제거)
+            if generated_text.startswith('```json'):
+                generated_text = generated_text[7:]
+            if generated_text.startswith('```'):
+                generated_text = generated_text[3:]
+            if generated_text.endswith('```'):
+                generated_text = generated_text[:-3]
+            generated_text = generated_text.strip()
+            
             refined_email = json.loads(generated_text)
+            
+            # 필수 필드 확인
+            if 'subject' not in refined_email or 'body' not in refined_email:
+                logger.error(f"{company_name} JSON에 필수 필드(subject/body)가 없음")
+                logger.debug(f"JSON 키들: {list(refined_email.keys())}")
+                return None
+            
         except json.JSONDecodeError as je:
             logger.error(f"{company_name} JSON 파싱 실패: {str(je)}")
-            logger.debug(f"파싱 실패한 텍스트: {generated_text[:200]}...")
+            logger.error(f"파싱 실패 위치: line {je.lineno}, column {je.colno}")
+            logger.debug(f"파싱 실패한 텍스트 (처음 300자): {generated_text[:300]}")
+            logger.debug(f"파싱 실패한 텍스트 (마지막 100자): {generated_text[-100:]}")
             return None
         
         return {
@@ -5334,7 +5368,7 @@ PortOne {user_name} 매니저입니다.</p>
         }
         
     except Exception as e:
-        logger.error(f"이메일 개선 오류: {str(e)}")
+        logger.error(f"{company_name} 이메일 개선 오류: {str(e)}")
         logger.exception("상세 오류:")
         return None
 

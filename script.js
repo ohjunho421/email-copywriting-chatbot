@@ -1379,7 +1379,7 @@ ${companyName}의 현재 결제 환경을 분석해서 맞춤 해결책을 제�
                 <div class="row">
                     ${emailVariations.map((variation, vIndex) => `
                         <div class="col-md-${emailVariations.length === 1 ? '12' : '6'} mb-3">
-                            <div class="email-template ${variation.isRecommended ? 'border-success border-3' : ''}" style="position: relative;">
+                            <div class="email-template ${variation.hallucination_warning ? 'border-danger border-3' : (variation.isRecommended ? 'border-success border-3' : '')}" style="position: relative;">
                                 ${emailAddress ? `
                                     <div class="form-check position-absolute" style="top: 10px; left: 10px; z-index: 10;">
                                         <input class="form-check-input" type="checkbox" 
