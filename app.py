@@ -5834,16 +5834,24 @@ PortOne {{user_name}} 매니저입니다.</p>
         
         for attempt in range(max_retries):
             try:
-                response = model.generate_content(
-                    prompt,
-                    generation_config={
-                        'temperature': 0.5,
-                        'max_output_tokens': 4096,
-                        'top_p': 0.9,
-                        'top_k': 40
-                    },
-                    request_options={'timeout': 60}  # 30초 → 60초로 증가
-                )
+                # SDK 레벨 타임아웃 설정 (소켓 타임아웃)
+                import socket
+                original_timeout = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(60)  # 60초 타임아웃 설정
+                
+                try:
+                    response = model.generate_content(
+                        prompt,
+                        generation_config={
+                            'temperature': 0.5,
+                            'max_output_tokens': 4096,
+                            'top_p': 0.9,
+                            'top_k': 40
+                        }
+                    )
+                finally:
+                    # 타임아웃 원복
+                    socket.setdefaulttimeout(original_timeout)
                 
                 # 성공하면 루프 탈출
                 break
