@@ -5286,16 +5286,47 @@ PortOne {user_name} 매니저입니다.</p>
         
         gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
         
-        response = requests.post(
-            gemini_api_url,
-            json=payload,
-            headers={'Content-Type': 'application/json'},
-            timeout=30
-        )
+        # Retry 로직 추가 (최대 2회 시도)
+        max_retries = 2
+        retry_delay = 2  # 재시도 간격 (초)
         
-        if response.status_code != 200:
-            logger.error(f"{company_name} 개선 API 오류: {response.status_code} - {response.text[:500]}")
-            return None
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    gemini_api_url,
+                    json=payload,
+                    headers={'Content-Type': 'application/json'},
+                    timeout=60  # 30초 → 60초로 증가
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"{company_name} 개선 API 오류 (시도 {attempt+1}/{max_retries}): {response.status_code} - {response.text[:500]}")
+                    if attempt < max_retries - 1:
+                        import time
+                        time.sleep(retry_delay)
+                        continue
+                    return None
+                
+                # 성공하면 retry 루프 탈출
+                break
+                
+            except requests.exceptions.Timeout as timeout_error:
+                logger.warning(f"{company_name} API 타임아웃 (시도 {attempt+1}/{max_retries}, 60초 초과)")
+                if attempt < max_retries - 1:
+                    logger.info(f"{company_name} {retry_delay}초 후 재시도...")
+                    import time
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    logger.error(f"{company_name} 최대 재시도 횟수 초과 - 개선 실패")
+                    return None
+            except requests.exceptions.RequestException as req_error:
+                logger.error(f"{company_name} API 요청 오류 (시도 {attempt+1}/{max_retries}): {str(req_error)}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                    continue
+                return None
         
         result = response.json()
         
@@ -5793,19 +5824,50 @@ PortOne {{user_name}} 매니저입니다.</p>
 이제 개선된 이메일 본문만 출력하세요 (다른 텍스트 없이):
 """
         
-        # Gemini API 호출
+        # Gemini API 호출 (Retry 로직 추가)
         genai.configure(api_key=gemini_api_key)
         model = genai.GenerativeModel('gemini-3-pro-preview')
         
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                'temperature': 0.5,  # 더 일관된 응답을 위해 낮춤
-                'max_output_tokens': 4096,
-                'top_p': 0.9,
-                'top_k': 40
-            }
-        )
+        max_retries = 2
+        retry_delay = 2
+        response = None
+        
+        for attempt in range(max_retries):
+            try:
+                response = model.generate_content(
+                    prompt,
+                    generation_config={
+                        'temperature': 0.5,
+                        'max_output_tokens': 4096,
+                        'top_p': 0.9,
+                        'top_k': 40
+                    },
+                    request_options={'timeout': 60}  # 30초 → 60초로 증가
+                )
+                
+                # 성공하면 루프 탈출
+                break
+                
+            except Exception as api_error:
+                error_msg = str(api_error)
+                if 'timeout' in error_msg.lower() or 'timed out' in error_msg.lower():
+                    logger.warning(f"Gemini API 타임아웃 (시도 {attempt+1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        logger.info(f"{retry_delay}초 후 재시도...")
+                        import time
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error(f"최대 재시도 횟수 초과 - 개선 실패")
+                        raise Exception("Gemini API 타임아웃 (60초 초과, 재시도 실패)")
+                else:
+                    # 타임아웃이 아닌 다른 오류는 즉시 재발생
+                    raise
+        
+        # 응답이 없으면 (모든 재시도 실패)
+        if response is None:
+            logger.error("모든 재시도 실패 - 응답 없음")
+            raise Exception("Gemini 응답 없음")
         
         # Gemini 응답 안전성 검증
         if hasattr(response, 'candidates') and response.candidates:
