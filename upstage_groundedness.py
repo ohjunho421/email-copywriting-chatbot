@@ -403,8 +403,8 @@ def correct_hallucinated_email_with_source(
             prompt,
             generation_config={
                 'temperature': 0.3,  # 보수적으로 수정
-                'max_output_tokens': 2048,
-                'response_mime_type': 'application/json'  # JSON 형식 강제
+                'max_output_tokens': 2048
+                # response_mime_type는 일부 SDK 버전에서 미지원
             }
         )
         
