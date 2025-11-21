@@ -5289,14 +5289,44 @@ PortOne {user_name} 매니저입니다.</p>
         )
         
         if response.status_code != 200:
-            logger.error(f"{company_name} 개선 API 오류: {response.status_code}")
+            logger.error(f"{company_name} 개선 API 오류: {response.status_code} - {response.text}")
             return None
         
         result = response.json()
-        generated_text = result['candidates'][0]['content']['parts'][0]['text']
         
+        # 안전한 응답 처리
+        if 'candidates' not in result or not result['candidates']:
+            logger.error(f"{company_name} 개선 실패: Gemini 응답에 candidates가 없음")
+            return None
+        
+        candidate = result['candidates'][0]
+        
+        # finish_reason 확인 (안전 필터링 체크)
+        if candidate.get('finishReason') == 'SAFETY':
+            logger.warning(f"{company_name} 개선 실패: 안전 필터로 인한 응답 차단")
+            return None
+        
+        # content와 parts 안전하게 접근
+        if 'content' not in candidate or 'parts' not in candidate['content']:
+            logger.error(f"{company_name} 개선 실패: 응답에 content.parts가 없음")
+            logger.debug(f"응답 구조: {candidate}")
+            return None
+        
+        parts = candidate['content']['parts']
+        if not parts or not parts[0].get('text'):
+            logger.error(f"{company_name} 개선 실패: parts가 비어있음")
+            return None
+        
+        generated_text = parts[0]['text'].strip()
+        
+        # JSON 파싱 안전하게 처리
         import json
-        refined_email = json.loads(generated_text)
+        try:
+            refined_email = json.loads(generated_text)
+        except json.JSONDecodeError as je:
+            logger.error(f"{company_name} JSON 파싱 실패: {str(je)}")
+            logger.debug(f"파싱 실패한 텍스트: {generated_text[:200]}...")
+            return None
         
         return {
             'subject': refined_email.get('subject', original_subject),
@@ -5305,6 +5335,7 @@ PortOne {user_name} 매니저입니다.</p>
         
     except Exception as e:
         logger.error(f"이메일 개선 오류: {str(e)}")
+        logger.exception("상세 오류:")
         return None
 
 def refine_email_with_gemini(current_email, refinement_request):
