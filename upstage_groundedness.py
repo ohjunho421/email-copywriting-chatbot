@@ -391,13 +391,20 @@ def correct_hallucinated_email_with_source(
   "changes_made": "어떤 부분을 수정했는지 간단히 설명"
 }}
 
+⚠️ **JSON 작성 주의사항**:
+- 큰따옴표(")가 있으면 반드시 이스케이프 처리 (\\")
+- 줄바꿈은 HTML 태그(<br>)로만 표현 (\\n 사용 금지)
+- 유효한 JSON 형식을 엄격히 준수
+- 코드 블록(```)이나 설명 없이 JSON만 출력
+
 이제 수정된 이메일을 JSON으로 출력하세요:"""
 
         response = model.generate_content(
             prompt,
             generation_config={
                 'temperature': 0.3,  # 보수적으로 수정
-                'max_output_tokens': 2048
+                'max_output_tokens': 2048,
+                'response_mime_type': 'application/json'  # JSON 형식 강제
             }
         )
         
@@ -424,7 +431,36 @@ def correct_hallucinated_email_with_source(
             result_text = result_text[:-3]
         result_text = result_text.strip()
         
-        corrected_data = json.loads(result_text)
+        # JSON 파싱 시도
+        try:
+            corrected_data = json.loads(result_text)
+        except json.JSONDecodeError as je:
+            logger.error(f"JSON 파싱 실패: {str(je)}")
+            logger.debug(f"파싱 실패한 텍스트 (처음 500자): {result_text[:500]}")
+            logger.debug(f"파싱 실패한 텍스트 (마지막 200자): {result_text[-200:]}")
+            
+            # 재시도: JSON 부분만 추출
+            json_match = re.search(r'\{[\s\S]*\}', result_text)
+            if json_match:
+                result_text = json_match.group(0)
+                logger.info("JSON 객체 추출 재시도 중...")
+                try:
+                    corrected_data = json.loads(result_text)
+                    logger.info("✅ JSON 재파싱 성공")
+                except json.JSONDecodeError:
+                    logger.error("JSON 재파싱도 실패 - 수정 불가")
+                    return {
+                        'corrected_email': original_email,
+                        'correction_applied': False,
+                        'correction_note': 'JSON 파싱 실패'
+                    }
+            else:
+                logger.error("JSON 객체를 찾을 수 없음")
+                return {
+                    'corrected_email': original_email,
+                    'correction_applied': False,
+                    'correction_note': 'JSON 형식 오류'
+                }
         
         logger.info(f"✅ {company_name} 환각 수정 완료: {corrected_data.get('changes_made', 'N/A')}")
         

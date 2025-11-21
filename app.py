@@ -4036,7 +4036,8 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                             
                             formatted_variations[service] = {
                                 'subject': subject,
-                                'body': body
+                                'body': body,
+                                'type': service  # type 필드 추가 (프론트엔드 렌더링용)
                             }
                             logger.info(f"서비스 '{service}' 문안 생성 완료: {company_name}")
                     
@@ -4118,6 +4119,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                     else:
                                         # 수정 실패 - 원본에 경고 추가
                                         hallucination_email = formatted_variations[service_key].copy()
+                                        hallucination_email['type'] = service_key  # type 필드 추가
                                         hallucination_email['hallucination_warning'] = True
                                         hallucination_email['warning_message'] = f"⚠️ 환각 감지됨. 자동 수정 실패: {correction_result['correction_note']}"
                                         verified_variations[service_key] = hallucination_email
@@ -4127,6 +4129,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                     logger.error(f"{service_key} 자동 수정 오류: {str(correction_error)}")
                                     # 오류 시 원본에 경고 추가
                                     hallucination_email = formatted_variations[service_key].copy()
+                                    hallucination_email['type'] = service_key  # type 필드 추가
                                     hallucination_email['hallucination_warning'] = True
                                     hallucination_email['warning_message'] = '⚠️ 이 문안은 사실 확인이 필요할 수 있습니다. Perplexity 조사 결과와 일부 불일치가 감지되었습니다.'
                                     verified_variations[service_key] = hallucination_email
