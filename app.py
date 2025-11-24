@@ -695,12 +695,16 @@ class CompanyResearcher:
                     reliability_warning = f"\n\n✅ **신뢰도**: {verification_result['confidence_score']}% (검증 완료)"
                     formatted_content += reliability_warning
                 
+                # 🆕 최근 뉴스 존재 여부 확인 (3개월 이내)
+                has_recent_news = self.check_recent_news_in_content(formatted_content, company_name)
+                
                 return {
                     'success': True,
                     'company_info': formatted_content,
                     'pain_points': pain_points,
                     'citations': result.get('citations', []),
                     'verification': verification_result,
+                    'has_recent_news': has_recent_news,  # 🆕 최근 뉴스 플래그 추가
                     'timestamp': datetime.now().isoformat(),
                     'raw_response': raw_content  # 디버깅용
                 }
@@ -728,6 +732,7 @@ class CompanyResearcher:
 - 데이터 기반 의사결정 지원 시스템 구축 관심""",
                 'pain_points': pain_points,
                 'citations': [],
+                'has_recent_news': False,  # 🆕 API 오류 시 뉴스 없음
                 'timestamp': datetime.now().isoformat(),
                 'note': f'API 오류로 인한 맞춤형 시ミュ레이션: {str(e)}'
             }
@@ -1245,6 +1250,76 @@ class CompanyResearcher:
     def search_company_news(self, company_name):
         """기존 호환성을 위한 함수 - 새로운 확장된 함수 호출"""
         return self.search_company_news_enhanced(company_name)
+    
+    def check_recent_news_in_content(self, content, company_name):
+        """
+        Perplexity 조사 결과에서 3개월 이내 최근 뉴스가 있는지 확인
+        
+        Returns:
+            bool: 3개월 이내 뉴스가 있으면 True, 없으면 False
+        """
+        from datetime import datetime, timedelta
+        import re
+        
+        try:
+            # 현재 날짜와 3개월 전 날짜
+            now = datetime.now()
+            three_months_ago = now - timedelta(days=90)
+            
+            # 날짜 패턴 검색 (2024.11, 2024년 11월, 2024-11 등)
+            date_patterns = [
+                r'(\d{4})[\.\-년\s]+(\d{1,2})[\.\-월\s]',  # 2024.11, 2024년 11월
+                r'(\d{4})[\.\-/](\d{1,2})[\.\-/](\d{1,2})',  # 2024-11-24
+            ]
+            
+            found_recent_news = False
+            
+            for pattern in date_patterns:
+                matches = re.finditer(pattern, content)
+                for match in matches:
+                    try:
+                        year = int(match.group(1))
+                        month = int(match.group(2))
+                        
+                        # 날짜가 유효한지 확인
+                        if year >= 2024 and 1 <= month <= 12:
+                            news_date = datetime(year, month, 1)
+                            
+                            # 3개월 이내 뉴스인지 확인
+                            if news_date >= three_months_ago:
+                                logger.info(f"{company_name}: {year}년 {month}월 최근 뉴스 발견")
+                                found_recent_news = True
+                                break
+                    except (ValueError, IndexError):
+                        continue
+                
+                if found_recent_news:
+                    break
+            
+            # 날짜 패턴이 없어도 최근 키워드가 있으면 최근 뉴스로 간주
+            if not found_recent_news:
+                recent_keywords = ['최근', '지난달', '이번달', '올해', '금년', '최신', '신규', '새로', 
+                                 '투자', '유치', '런칭', '출시', '확장', '사업', '인수']
+                
+                # "최신 뉴스" 섹션 또는 구체적인 뉴스 내용이 있는지 확인
+                has_news_section = '## 1. 최신 뉴스' in content or '최신 뉴스 및 활동' in content
+                has_recent_keywords = any(keyword in content for keyword in recent_keywords)
+                
+                if has_news_section and has_recent_keywords:
+                    logger.info(f"{company_name}: 날짜는 없지만 최신 뉴스 키워드 발견")
+                    found_recent_news = True
+            
+            if found_recent_news:
+                logger.info(f"✅ {company_name}: 3개월 이내 최근 뉴스 존재")
+            else:
+                logger.warning(f"⚠️ {company_name}: 3개월 이내 뉴스 없음 → 산업 동향 사용")
+            
+            return found_recent_news
+            
+        except Exception as e:
+            logger.error(f"{company_name} 뉴스 날짜 확인 오류: {str(e)}")
+            # 오류 시 안전하게 True 반환 (기존 동작 유지)
+            return True
     
     def search_with_google(self, company_name):
         """Google Search API 활용"""
@@ -3346,6 +3421,9 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
         
+        # 🆕 Perplexity 조사 결과에 3개월 이내 최근 뉴스가 있는지 확인
+        has_recent_news_in_research = research_data.get('has_recent_news', True)
+        
         # 해외 진출 여부 확인 (뉴스/조사 내용에서 키워드 추출)
         global_keywords = ['해외', '글로벌', 'global', '수출', 'export', '해외진출', '국제', '아시아', '유럽', '미국', '일본', '중국', '동남아']
         is_global = any(keyword in research_summary.lower() for keyword in global_keywords)
@@ -3358,7 +3436,7 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             pg_count = "국내 20여개"
             logger.info(f"🇰🇷 {company_name}: 국내 타겟 → {pg_count} PG사 언급")
         
-        # 기본 context 정의
+        # 기본 context 정의 - 뉴스 후킹 우선순위: CSV 뉴스 > Perplexity 최근 뉴스 > 산업 동향
         if has_csv_news:
             news_instruction = """**🎯 최우선 지시: CSV에서 제공된 '관련 뉴스 기사' 섹션의 내용을 반드시 이메일 도입부에 활용하세요!**
 
@@ -3372,23 +3450,25 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 예시:
 - "최근 '{company_name}가 100억원 투자를 유치했다'는 기사를 봤습니다. 사업 확장 준비로 바쁘시겠지만, 결제 인프라 확장도 지금 준비해야 할 시점이 아닐까요?"
 - "'{company_name}의 매출 200% 증가' 소식을 들었습니다. 급성장할 때 결제 시스템 병목이 가장 큰 리스크인데, 지금 어떻게 대응하고 계신가요?" """
-        else:
-            # Perplexity 조사 결과에서 구체적인 뉴스 키워드 확인
-            recent_news_keywords = ['투자', '유치', '확장', '런칭', '출시', '신규', '사업', '인수', '합병', '시장 진출', '매출', '성장']
-            has_specific_news = any(keyword in research_summary for keyword in recent_news_keywords)
-            
-            if has_specific_news:
-                news_instruction = """**중요**: 위의 Perplexity 조사 결과에서 구체적인 뉴스 내용을 직접 인용하여 이메일 도입부에 활용하세요.
+        elif has_recent_news_in_research:
+            # 🆕 Perplexity 조사 결과에 3개월 이내 최근 뉴스가 있는 경우
+            news_instruction = """**중요**: 위의 Perplexity 조사 결과에서 구체적인 최근 뉴스 내용을 직접 인용하여 이메일 도입부에 활용하세요.
 
 예시:
 - "최근 기사에서 '{company_name}가 100억원 투자를 유치했다'고 봤습니다. 사업 확장에 따른 결제 인프라 확장 계획도 있으실 텐데..."
 - "'{company_name}의 3분기 매출이 전년 대비 150% 증가했다'는 소식을 들었습니다. 급성장에 따른 결제 시스템 준비는 어떻게 진행하고 계신가요?" """
-            else:
-                news_instruction = """**중요**: 최근 뉴스가 없는 경우 다음 중 하나의 자연스러운 도입 방식을 선택하세요:
+            logger.info(f"📰 {company_name}: 최근 뉴스 사용 (Perplexity 조사 결과)")
+        else:
+            # 🆕 3개월 이내 최근 뉴스가 없는 경우 → 산업 동향 사용
+            logger.info(f"🏭 {company_name}: 최근 뉴스 없음 → 산업 동향 기반 서론 사용")
+            news_instruction = """**🎯 중요**: 3개월 이내 최근 뉴스가 없으므로, 관련 산업의 동향을 서론에 자연스럽게 언급하세요.
+
+**필수**: 위 조사 결과의 "업계별 기술 트렌드" 섹션 또는 업종 정보를 활용하여 산업 동향 기반 도입부를 작성하세요.
 
 **옵션 1 - 업계 트렌드 기반 (권장):**
 - "{company_name}님이 속한 {업종} 업계에서는 요즘 {트렌드}가 화두인데, 혹시 {관련 Pain Point} 고민 중이신가요?"
 - 예: "게임 업계에서 인앱 결제 수수료 부담이 커지고 있는데, {company_name}님도 이 부분 고민하고 계시지 않나요?"
+- 예: "커머스 업계에서 멀티 채널 확장이 활발한데, {company_name}님도 오픈마켓 정산 통합 고민하고 계시지 않나요?"
 
 **옵션 2 - 회사 규모/성장 단계 언급:**
 - "{company_name}님 규모의 회사라면 {예상 Pain Point}를 겪고 계실 것 같은데, 맞나요?"
@@ -5129,8 +5209,6 @@ def refine_email_with_user_request(original_subject, original_body, user_request
     ⚠️ 핵심: 원본 이메일의 Pain Point + 포트원 해결책을 반드시 유지하면서
              사용자 요청사항(톤, 강조점, 제목 스타일 등)만 반영
     """
-    import json  # 함수 상단에서 import
-    
     try:
         company_name = company_data.get('회사명', 'Unknown')
         
@@ -5445,7 +5523,6 @@ PortOne {user_name} 매니저입니다.</p>
                 if response.status_code != 200:
                     logger.error(f"{company_name} 개선 API 오류 (시도 {attempt+1}/{max_retries}): {response.status_code} - {response.text[:500]}")
                     if attempt < max_retries - 1:
-                        import time
                         time.sleep(retry_delay)
                         continue
                     return None
@@ -5457,7 +5534,6 @@ PortOne {user_name} 매니저입니다.</p>
                 logger.warning(f"{company_name} API 타임아웃 (시도 {attempt+1}/{max_retries}, 60초 초과)")
                 if attempt < max_retries - 1:
                     logger.info(f"{company_name} {retry_delay}초 후 재시도...")
-                    import time
                     time.sleep(retry_delay)
                     continue
                 else:
@@ -5466,7 +5542,6 @@ PortOne {user_name} 매니저입니다.</p>
             except requests.exceptions.RequestException as req_error:
                 logger.error(f"{company_name} API 요청 오류 (시도 {attempt+1}/{max_retries}): {str(req_error)}")
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(retry_delay)
                     continue
                 return None
