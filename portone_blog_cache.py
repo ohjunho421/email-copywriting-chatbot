@@ -539,3 +539,81 @@ def get_service_knowledge(service_type=''):
     knowledge += f"- {service_type} 서비스에 대한 전문성과 신뢰성을 보여주세요\n"
     
     return knowledge
+
+def get_existing_blog_links():
+    """
+    DB에 이미 저장된 블로그 링크 목록 조회
+    
+    Returns:
+        set: 기존 블로그 링크 집합
+    """
+    try:
+        db = get_db()
+        BlogPost = get_blog_post_model()
+        
+        # 모든 링크 조회
+        posts = db.session.query(BlogPost.link).all()
+        existing_links = {post.link for post in posts if post.link}
+        
+        logger.info(f"📋 DB에 저장된 블로그: {len(existing_links)}개")
+        return existing_links
+        
+    except Exception as e:
+        logger.error(f"기존 링크 조회 오류: {str(e)}")
+        return set()
+
+def check_for_new_posts(category_url, existing_links, max_check_pages=2):
+    """
+    블로그 카테고리에서 새로운 포스트만 확인
+    
+    Args:
+        category_url: 카테고리 URL
+        existing_links: 기존 블로그 링크 집합
+        max_check_pages: 확인할 최대 페이지 수 (기본 2페이지)
+    
+    Returns:
+        list: 새로운 포스트 링크 목록
+    """
+    try:
+        from bs4 import BeautifulSoup
+        import requests
+        
+        new_post_links = []
+        
+        for page in range(1, max_check_pages + 1):
+            page_url = f"{category_url}&page={page}" if page > 1 else category_url
+            
+            response = requests.get(page_url, timeout=10)
+            if response.status_code != 200:
+                logger.warning(f"페이지 로드 실패: {page_url}")
+                break
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            articles = soup.find_all('article', class_='post')
+            
+            if not articles:
+                logger.info(f"더 이상 글이 없음 (페이지 {page})")
+                break
+            
+            found_existing = False
+            for article in articles:
+                link_tag = article.find('a', href=True)
+                if link_tag:
+                    link = f"https://blog.portone.io{link_tag['href']}"
+                    
+                    # 기존 DB에 없는 새로운 글만 추가
+                    if link not in existing_links:
+                        new_post_links.append(link)
+                    else:
+                        found_existing = True
+            
+            # 기존 글을 발견하면 더 이상 확인 불필요
+            if found_existing:
+                logger.info(f"기존 글 발견 - {page}페이지에서 확인 중단")
+                break
+        
+        return new_post_links
+        
+    except Exception as e:
+        logger.error(f"새 포스트 확인 오류: {str(e)}")
+        return []

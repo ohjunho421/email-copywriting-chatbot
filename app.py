@@ -3528,10 +3528,13 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 
 **💳 사용PG 정보 활용 가이드 (중요!):**
 - 타겟 회사가 이미 특정 PG를 사용 중이라면 (위 회사 정보에 "💳 현재 사용 중인 PG" 표시됨), 이를 OPI의 필요성과 자연스럽게 연결하세요
-- **활용 방법:**
+- **단일 PG 사용 시:**
   • "현재 [사용PG]를 사용하고 계신데, 단일 PG 의존으로 인한 리스크(장애 시 전체 결제 중단, 높은 수수료, PG사와의 협상력 부족)를 OPI의 멀티 PG 전략으로 해결할 수 있습니다"
   • "현재 [사용PG] 한 곳만 사용 중이시라면, OPI의 스마트 라우팅으로 결제 성공률을 15% 높이고 수수료도 15-30% 절감할 수 있습니다"
   • "현재 [사용PG]를 메인으로 쓰시면서 OPI로 백업 PG를 추가하면, 장애 시에도 결제가 중단되지 않아 매출 손실을 방지할 수 있습니다"
+- **여러 PG 사용 시:**
+  • "현재 [사용PG]를 사용하고 계신데, 각 PG사 콘솔을 따로 들어가서 정산 데이터를 확인하시느라 불편하지 않으신가요? PortOne 대시보드 하나로 모든 PG의 거래 내역과 정산 데이터를 통합 관리할 수 있습니다"
+  • "여러 PG사를 개별적으로 관리하시는 것보다, PortOne 콘솔 하나에서 모든 결제 데이터를 실시간으로 확인하고 정산 관리를 자동화할 수 있습니다"
 - **PG 정보가 없는 경우**: 일반적인 멀티 PG 전략의 장점만 언급
 
 **🔥 회사 조사 결과 (이메일에 반드시 활용해야 함):**
@@ -4792,9 +4795,33 @@ def generate_email_with_user_template(company_data, research_data, user_template
         
         try:
             model = genai.GenerativeModel('gemini-3-pro-preview')
-            response = model.generate_content(context)
             
-            if response.text:
+            # 503 에러 재시도 로직
+            max_retries = 3
+            retry_delay = 3
+            response = None
+            
+            for attempt in range(max_retries):
+                try:
+                    response = model.generate_content(context)
+                    break  # 성공하면 루프 탈출
+                except Exception as api_error:
+                    error_msg = str(api_error)
+                    if '503' in error_msg or 'overloaded' in error_msg.lower() or 'unavailable' in error_msg.lower():
+                        logger.warning(f"Gemini API 과부하 (시도 {attempt+1}/{max_retries}): {company_name}")
+                        if attempt < max_retries - 1:
+                            logger.info(f"{retry_delay}초 후 재시도...")
+                            import time
+                            time.sleep(retry_delay)
+                            continue
+                        else:
+                            logger.error(f"최대 재시도 횟수 초과 - Gemini 서버 과부하: {company_name}")
+                            raise Exception("Gemini API 서버 과부하 (재시도 실패)")
+                    else:
+                        # 503이 아닌 다른 오류는 즉시 재발생
+                        raise
+            
+            if response and response.text:
                 # JSON 파싱
                 clean_response = response.text.strip()
                 if '```json' in clean_response:
@@ -6127,8 +6154,18 @@ PortOne {{user_name}} 매니저입니다.</p>
                     else:
                         logger.error(f"최대 재시도 횟수 초과 - 개선 실패")
                         raise Exception("Gemini API 타임아웃 (60초 초과, 재시도 실패)")
+                elif '503' in error_msg or 'overloaded' in error_msg.lower() or 'unavailable' in error_msg.lower():
+                    logger.warning(f"Gemini API 과부하 (시도 {attempt+1}/{max_retries}): {error_msg}")
+                    if attempt < max_retries - 1:
+                        logger.info(f"{retry_delay * 2}초 후 재시도...")
+                        import time
+                        time.sleep(retry_delay * 2)  # 503은 더 긴 대기 시간
+                        continue
+                    else:
+                        logger.error(f"최대 재시도 횟수 초과 - Gemini 서버 과부하")
+                        raise Exception("Gemini API 서버 과부하 (재시도 실패)")
                 else:
-                    # 타임아웃이 아닌 다른 오류는 즉시 재발생
+                    # 타임아웃이나 503이 아닌 다른 오류는 즉시 재발생
                     raise
         
         # 응답이 없으면 (모든 재시도 실패)
@@ -6848,6 +6885,86 @@ def scrape_portone_blog_initial():
             
         except Exception as e:
             logger.error(f"초기 데이터 스크래핑 오류: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+
+def scrape_portone_blog_incremental():
+    """
+    포트원 블로그 증분 스크래핑 (새로운 글만)
+    - 기존 DB에 없는 새 글만 확인 및 스크래핑
+    - 매일 자동 실행 시 효율적
+    
+    Returns:
+        list: 새로 추가된 블로그 포스트 리스트
+    """
+    with app.app_context():
+        try:
+            from portone_blog_cache import get_existing_blog_links, check_for_new_posts, save_blog_cache, extract_keywords_from_post
+            
+            logger.info("🔍 블로그 증분 스크래핑 시작 (새 글만 확인)")
+            
+            # 1. 기존 DB에 있는 링크들 조회
+            existing_links = get_existing_blog_links()
+            
+            if not existing_links:
+                logger.info("📝 DB가 비어있음 - 전체 스크래핑 필요")
+                return scrape_portone_blog_initial()
+            
+            # 2. 각 카테고리에서 새 글 확인 (최근 2페이지만)
+            categories = [
+                ('https://blog.portone.io/?filter=%EA%B5%AD%EB%82%B4%20%EA%B2%B0%EC%A0%9C', 'OPI'),
+                ('https://blog.portone.io/?filter=%EB%A7%A4%EC%B6%9C%20%EB%A7%88%EA%B0%90', 'Recon'),
+                ('https://blog.portone.io/category/news/?filter=%ED%94%8C%EB%9E%AB%ED%8F%BC%20%EC%A0%95%EC%82%B0', 'PS'),
+                ('https://blog.portone.io/?filter=%EA%B8%80%EB%A1%9C%EB%B2%8C%20%EA%B2%B0%EC%A0%9C', 'OPI'),
+            ]
+            
+            all_new_links = []
+            for category_url, category_name in categories:
+                new_links = check_for_new_posts(category_url, existing_links, max_check_pages=2)
+                if new_links:
+                    logger.info(f"📰 [{category_name}] 새 글 {len(new_links)}개 발견")
+                    all_new_links.extend([(link, category_name) for link in new_links])
+            
+            if not all_new_links:
+                logger.info("✅ 새로운 블로그 글 없음")
+                return []
+            
+            logger.info(f"📚 총 {len(all_new_links)}개 새 글 발견 - 스크래핑 시작")
+            
+            # 3. 새 글만 스크래핑
+            new_posts = []
+            for link, category in all_new_links:
+                try:
+                    content = scrape_article_content(link)
+                    if content:
+                        post = {
+                            'title': content.split('\n')[0] if content else link,
+                            'link': link,
+                            'summary': content[:200] if len(content) > 200 else content,
+                            'content': content,
+                            'category': category
+                        }
+                        
+                        # 키워드 추출
+                        keywords, industry_tags = extract_keywords_from_post(post)
+                        post['keywords'] = keywords
+                        post['industry_tags'] = industry_tags
+                        
+                        new_posts.append(post)
+                        logger.info(f"   ✅ {post['title'][:50]}...")
+                except Exception as e:
+                    logger.error(f"   ❌ 글 스크래핑 실패 ({link}): {str(e)}")
+            
+            # 4. DB에 저장 (기존 글은 유지, 새 글만 추가)
+            if new_posts:
+                save_blog_cache(new_posts, replace_all=False)
+                logger.info(f"✅ 증분 스크래핑 완료: {len(new_posts)}개 새 글 추가")
+            
+            return new_posts
+            
+        except Exception as e:
+            logger.error(f"증분 스크래핑 오류: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
             return []
@@ -8595,27 +8712,36 @@ def scheduled_blog_update():
     """
     스케줄러에 의해 자동으로 실행되는 블로그 업데이트 함수
     하루 2번 (오전 9시, 오후 6시) 실행됨
+    
+    증분 스크래핑 사용: 새로운 글만 확인하여 효율적으로 업데이트
     """
     # Flask app context 내에서 실행 (PostgreSQL 접근을 위해 필수)
     with app.app_context():
         try:
-            logger.info("⏰ 스케줄 블로그 업데이트 시작")
+            logger.info("⏰ 스케줄 블로그 업데이트 시작 (증분 스크래핑)")
             
-            from portone_blog_cache import get_blog_cache_age
+            from portone_blog_cache import get_blog_cache_age, load_blog_cache
             
-            # 캐시 나이 확인 (12시간 이상 지났으면 업데이트)
+            # 캐시 상태 확인
             cache_age = get_blog_cache_age()
+            cached_posts = load_blog_cache()
             
-            if cache_age is None or cache_age >= 12:
-                logger.info(f"📰 블로그 캐시 업데이트 필요 (나이: {cache_age}시간)")
+            if cache_age is None:
+                # DB가 비어있으면 전체 스크래핑
+                logger.info("📝 DB 비어있음 - 전체 스크래핑 실행")
                 blog_posts = scrape_portone_blog_initial()
-                
                 if blog_posts:
-                    logger.info(f"✅ 자동 블로그 업데이트 완료: {len(blog_posts)}개 글 (PostgreSQL)")
-                else:
-                    logger.warning("⚠️ 자동 블로그 업데이트 실패")
+                    logger.info(f"✅ 초기 블로그 스크래핑 완료: {len(blog_posts)}개 글")
             else:
-                logger.info(f"✅ 블로그 캐시 최신 상태 (나이: {cache_age:.1f}시간)")
+                # 증분 스크래핑 (새 글만 확인)
+                logger.info(f"🔍 증분 스크래핑 실행 (현재 캐시: {len(cached_posts) if cached_posts else 0}개, 나이: {cache_age:.1f}시간)")
+                new_posts = scrape_portone_blog_incremental()
+                
+                if new_posts:
+                    logger.info(f"✅ 증분 업데이트 완료: {len(new_posts)}개 새 글 추가")
+                else:
+                    logger.info("✅ 새로운 블로그 글 없음 - DB 최신 상태 유지")
+                    
         except Exception as e:
             logger.error(f"❌ 스케줄 블로그 업데이트 오류: {str(e)}")
             import traceback
