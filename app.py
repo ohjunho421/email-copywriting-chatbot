@@ -3232,10 +3232,15 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         if competitor_name:
             company_info += f"\nPortOne 이용 경쟁사: {competitor_name}"
         
+        # 사용PG 정보 추가 (우선 표시)
+        pg_info = company_data.get('사용PG', '') or company_data.get('PG', '')
+        if pg_info:
+            company_info += f"\n💳 현재 사용 중인 PG: {pg_info}"
+        
         # 추가 회사 정보가 있다면 포함
         for key, value in company_data.items():
             # N열 담당자명도 제외 목록에 추가 (중복 방지)
-            excluded_keys = ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사']
+            excluded_keys = ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사', '사용PG', 'PG']
             if len(column_keys) >= 14:
                 excluded_keys.append(column_keys[13])  # N열 키도 제외
             if key not in excluded_keys and value:
@@ -3520,6 +3525,14 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 
 **타겟 회사 정보:**
 {company_info}
+
+**💳 사용PG 정보 활용 가이드 (중요!):**
+- 타겟 회사가 이미 특정 PG를 사용 중이라면 (위 회사 정보에 "💳 현재 사용 중인 PG" 표시됨), 이를 OPI의 필요성과 자연스럽게 연결하세요
+- **활용 방법:**
+  • "현재 {PG명}을 사용하고 계신데, 단일 PG 의존으로 인한 리스크(장애 시 전체 결제 중단, 높은 수수료, PG사와의 협상력 부족)를 OPI의 멀티 PG 전략으로 해결할 수 있습니다"
+  • "현재 {PG명} 한 곳만 사용 중이시라면, OPI의 스마트 라우팅으로 결제 성공률을 15% 높이고 수수료도 15-30% 절감할 수 있습니다"
+  • "현재 {PG명}을 메인으로 쓰시면서 OPI로 백업 PG를 추가하면, 장애 시에도 결제가 중단되지 않아 매출 손실을 방지할 수 있습니다"
+- **PG 정보가 없는 경우**: 일반적인 멀티 PG 전략의 장점만 언급
 
 **🔥 회사 조사 결과 (이메일에 반드시 활용해야 함):**
 {research_summary}
@@ -4135,8 +4148,27 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                     try:
                         checker = get_groundedness_checker()
                         
-                        # Perplexity 조사 결과를 참조 문서로 사용
-                        context_for_verification = research_summary
+                        # Perplexity 조사 결과 + CSV 데이터를 참조 문서로 사용
+                        # CSV에 있는 정보(대표자명, 담당자명 등)는 환각이 아니므로 context에 포함
+                        csv_data_context = f"""
+**CSV에서 확인된 회사 정보 (검증된 데이터):**
+- 회사명: {company_name}
+- 담당자/대표자: {email_name}
+"""
+                        if competitor_name:
+                            csv_data_context += f"- 경쟁사: {competitor_name}\n"
+                        
+                        # 사용PG 정보 추가
+                        pg_info = company_data.get('사용PG', '') or company_data.get('PG', '')
+                        if pg_info:
+                            csv_data_context += f"- 사용 중인 PG: {pg_info}\n"
+                        
+                        # 기타 CSV 데이터 추가
+                        for key, value in company_data.items():
+                            if key not in ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사', '사용PG', 'PG'] and value and str(value).strip():
+                                csv_data_context += f"- {key}: {value}\n"
+                        
+                        context_for_verification = csv_data_context + "\n\n" + research_summary
                         
                         # 배치 검증: 모든 이메일 동시 검증
                         emails_to_verify = {}
