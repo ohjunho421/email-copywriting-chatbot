@@ -351,9 +351,14 @@ def correct_hallucinated_email_with_source(
     """
     try:
         import google.generativeai as genai
+        import time
         
         genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel('gemini-3-pro-preview')
+        
+        # Fallback 로직: gemini-3-pro-preview 3회 시도 후 gemini-2.5-pro 1회 시도
+        models = ['gemini-3-pro-preview', 'gemini-2.5-pro']
+        response = None
+        last_error = None
         
         prompt = f"""당신은 정확한 영업 이메일 작성 전문가입니다.
 
@@ -407,16 +412,50 @@ def correct_hallucinated_email_with_source(
 
 이제 수정된 이메일을 JSON으로 출력하세요:"""
 
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                'temperature': 0.3,  # 보수적으로 수정
-                'max_output_tokens': 2048
-                # response_mime_type는 일부 SDK 버전에서 미지원
-            }
-        )
+        # Fallback 로직으로 API 호출
+        for model_index, model_name in enumerate(models):
+            attempts = 3 if model_index == 0 else 1
+            
+            for retry in range(attempts):
+                try:
+                    logger.info(f"🔄 Gemini API 호출 중... (모델: {model_name}, 시도: {retry + 1}/{attempts})")
+                    model = genai.GenerativeModel(model_name)
+                    
+                    response = model.generate_content(
+                        prompt,
+                        generation_config={
+                            'temperature': 0.3,
+                            'max_output_tokens': 2048
+                        }
+                    )
+                    
+                    if response and response.candidates and response.candidates[0].content.parts:
+                        logger.info(f"✅ Gemini API 성공 (모델: {model_name})")
+                        break
+                    else:
+                        logger.warning(f"⚠️ Gemini 응답 없음 (모델: {model_name})")
+                        continue
+                        
+                except Exception as e:
+                    last_error = str(e)
+                    error_message = str(e)
+                    
+                    # 429 에러 또는 할당량 초과 감지
+                    if '429' in error_message or 'quota' in error_message.lower() or 'rate limit' in error_message.lower():
+                        logger.warning(f"⚠️ Gemini({model_name}) 할당량 초과 - fallback 시도")
+                        break
+                    
+                    if retry < attempts - 1:
+                        logger.warning(f"⚠️ Gemini API 오류, 재시도 중... ({retry + 1}/{attempts}): {error_message}")
+                        time.sleep(2)
+                        continue
+                    else:
+                        logger.error(f"❌ Gemini({model_name}) 최종 실패: {error_message}")
+            
+            if response and response.candidates and response.candidates[0].content.parts:
+                break
         
-        if not response.candidates or not response.candidates[0].content.parts:
+        if not response or not response.candidates or not response.candidates[0].content.parts:
             logger.error("Gemini 응답 없음")
             return {
                 'corrected_email': original_email,
