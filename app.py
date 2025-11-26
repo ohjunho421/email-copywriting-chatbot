@@ -161,6 +161,82 @@ if GEMINI_API_KEY:
         transport='rest'  # REST 전송 사용
     )
 
+def call_gemini_with_fallback(prompt, timeout=180, max_retries=3, generation_config=None):
+    """
+    Gemini API 호출 with 자동 fallback (최후의 수단)
+    gemini-3-pro-preview를 충분히 재시도한 후 실패 시에만 gemini-2.5-pro로 재시도
+    """
+    models = ['gemini-3-pro-preview', 'gemini-2.5-pro']
+    last_error = None
+    
+    for model_index, model in enumerate(models):
+        retry_count = 0
+        model_name = 'GEMINI(3-pro)' if model_index == 0 else 'GEMINI(2.5-pro) [최후의 fallback]'
+        
+        # 첫 번째 모델은 max_retries번 재시도, 두 번째 모델은 1번만 시도
+        attempts = max_retries if model_index == 0 else 1
+        
+        while retry_count < attempts:
+            try:
+                api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
+                
+                request_body = {
+                    "contents": [{
+                        "parts": [{"text": prompt}]
+                    }]
+                }
+                
+                if generation_config:
+                    request_body["generationConfig"] = generation_config
+                
+                response = requests.post(
+                    api_url,
+                    json=request_body,
+                    timeout=timeout
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if 'candidates' in result and len(result['candidates']) > 0:
+                        response_text = result['candidates'][0]['content']['parts'][0]['text']
+                        logger.info(f"✅ {model_name} API 호출 성공 (시도 {retry_count + 1}/{attempts})")
+                        return response_text
+                    else:
+                        raise Exception(f"{model_name} API 응답에 candidates가 없습니다")
+                elif response.status_code == 429:
+                    # 할당량 초과 시 다음 모델로 이동
+                    logger.warning(f"⚠️ {model_name} 할당량 초과 (429)")
+                    if model_index < len(models) - 1:
+                        logger.warning(f"→ 최후의 수단으로 fallback to {models[model_index + 1]}")
+                    break
+                else:
+                    raise Exception(f"{model_name} API 오류: {response.status_code} - {response.text}")
+                    
+            except Exception as retry_error:
+                retry_count += 1
+                error_str = str(retry_error)
+                last_error = retry_error
+                
+                # 타임아웃이나 일시적 오류면 재시도
+                if '504' in error_str or 'Deadline' in error_str or 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
+                    if retry_count < attempts:
+                        logger.warning(f"⏱️ {model_name} API 타임아웃 ({retry_count}/{attempts}) - 재시도 중...")
+                        time.sleep(5 * retry_count)
+                        continue
+                
+                # 마지막 재시도이고 다음 모델이 있으면 fallback
+                if retry_count >= attempts and model_index < len(models) - 1:
+                    logger.warning(f"❌ {model_name} 모든 재시도 실패 - 최후의 수단으로 fallback")
+                    break
+                
+                # 마지막 모델까지 실패하면 예외 발생
+                if model_index == len(models) - 1:
+                    raise
+    
+    if last_error:
+        raise last_error
+    raise Exception("모든 Gemini 모델 호출 실패")
+
 # AWS Bedrock 설정 (현재 사용 안 함)
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY') 
@@ -4027,43 +4103,8 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
             # 최대 3회 재시도
             max_retries = 3
             retry_count = 0
-            response_text = None
-            
-            while retry_count < max_retries:
-                try:
-                    # REST API 직접 호출 (타임아웃 180초)
-                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
-                    
-                    response = requests.post(
-                        api_url,
-                        json={
-                            "contents": [{
-                                "parts": [{"text": prompt}]
-                            }]
-                        },
-                        timeout=180  # 180초 타임아웃
-                    )
-                    
-                    if response.status_code == 200:
-                        result = response.json()
-                        if 'candidates' in result and len(result['candidates']) > 0:
-                            response_text = result['candidates'][0]['content']['parts'][0]['text']
-                            break  # 성공하면 루프 탈출
-                        else:
-                            raise Exception("Gemini API 응답에 candidates가 없습니다")
-                    else:
-                        raise Exception(f"Gemini API 오류: {response.status_code} - {response.text}")
-                        
-                except Exception as retry_error:
-                    retry_count += 1
-                    error_str = str(retry_error)
-                    if '504' in error_str or 'Deadline' in error_str or 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
-                        if retry_count < max_retries:
-                            logger.warning(f"⏱️ Gemini API 타임아웃 ({retry_count}/{max_retries}) - 재시도 중...")
-                            time.sleep(5 * retry_count)  # 지수 백오프 (5초, 10초, 15초)
-                            continue
-                    # 다른 에러거나 마지막 재시도면 예외 발생
-                    raise
+            # Gemini API 호출 (자동 fallback 적용)
+            response_text = call_gemini_with_fallback(prompt, timeout=180, max_retries=max_retries)
             
             # response_text를 response.text로 변환 (기존 코드 호환성)
             class ResponseWrapper:
@@ -4278,33 +4319,21 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
 재생성 대상: {', '.join(retry_services)}
 """
                                 
-                                # 재생성 요청 (REST API 직접 호출)
+                                # 재생성 요청 (자동 fallback 적용)
                                 retry_prompt = context + strict_prompt_addition
                                 
                                 try:
-                                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
-                                    
-                                    retry_response_raw = requests.post(
-                                        api_url,
-                                        json={
-                                            "contents": [{
-                                                "parts": [{"text": retry_prompt}]
-                                            }],
-                                            "generationConfig": {
-                                                "temperature": 0.3,
-                                                "topP": 0.85,
-                                                "topK": 30,
-                                                "maxOutputTokens": 8000
-                                            }
-                                        },
-                                        timeout=180
+                                    retry_response_text = call_gemini_with_fallback(
+                                        retry_prompt,
+                                        timeout=180,
+                                        max_retries=3,
+                                        generation_config={
+                                            "temperature": 0.3,
+                                            "topP": 0.85,
+                                            "topK": 30,
+                                            "maxOutputTokens": 8000
+                                        }
                                     )
-                                    
-                                    if retry_response_raw.status_code != 200:
-                                        raise Exception(f"API 오류: {retry_response_raw.text}")
-                                    
-                                    retry_result = retry_response_raw.json()
-                                    retry_response_text = retry_result['candidates'][0]['content']['parts'][0]['text']
                                     
                                     # ResponseWrapper로 변환
                                     class RetryResponseWrapper:
@@ -4385,30 +4414,18 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
 JSON 형식으로 출력하세요.
 """
                                     
-                                    # REST API 직접 호출
-                                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
-                                    
-                                    conservative_response_raw = requests.post(
-                                        api_url,
-                                        json={
-                                            "contents": [{
-                                                "parts": [{"text": conservative_prompt}]
-                                            }],
-                                            "generationConfig": {
-                                                "temperature": 0.2,
-                                                "topP": 0.7,
-                                                "topK": 20,
-                                                "maxOutputTokens": 8000
-                                            }
-                                        },
-                                        timeout=180
+                                    # 자동 fallback 적용
+                                    conservative_response_text = call_gemini_with_fallback(
+                                        conservative_prompt,
+                                        timeout=180,
+                                        max_retries=3,
+                                        generation_config={
+                                            "temperature": 0.2,
+                                            "topP": 0.7,
+                                            "topK": 20,
+                                            "maxOutputTokens": 8000
+                                        }
                                     )
-                                    
-                                    if conservative_response_raw.status_code != 200:
-                                        raise Exception(f"API 오류: {conservative_response_raw.text}")
-                                    
-                                    conservative_result = conservative_response_raw.json()
-                                    conservative_response_text = conservative_result['candidates'][0]['content']['parts'][0]['text']
                                     
                                     conservative_variations = json.loads(conservative_response_text)
                                     
@@ -5565,48 +5582,25 @@ PortOne {user_name} 매니저입니다.</p>
             }
         }
         
-        gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent?key={GEMINI_API_KEY}"
-        
-        # Retry 로직 추가 (최대 2회 시도)
-        max_retries = 2
-        retry_delay = 2  # 재시도 간격 (초)
-        
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(
-                    gemini_api_url,
-                    json=payload,
-                    headers={'Content-Type': 'application/json'},
-                    timeout=60  # 30초 → 60초로 증가
-                )
-                
-                if response.status_code != 200:
-                    logger.error(f"{company_name} 개선 API 오류 (시도 {attempt+1}/{max_retries}): {response.status_code} - {response.text[:500]}")
-                    if attempt < max_retries - 1:
-                        time.sleep(retry_delay)
-                        continue
-                    return None
-                
-                # 성공하면 retry 루프 탈출
-                break
-                
-            except requests.exceptions.Timeout as timeout_error:
-                logger.warning(f"{company_name} API 타임아웃 (시도 {attempt+1}/{max_retries}, 60초 초과)")
-                if attempt < max_retries - 1:
-                    logger.info(f"{company_name} {retry_delay}초 후 재시도...")
-                    time.sleep(retry_delay)
-                    continue
-                else:
-                    logger.error(f"{company_name} 최대 재시도 횟수 초과 - 개선 실패")
-                    return None
-            except requests.exceptions.RequestException as req_error:
-                logger.error(f"{company_name} API 요청 오류 (시도 {attempt+1}/{max_retries}): {str(req_error)}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    continue
-                return None
-        
-        result = response.json()
+        # 자동 fallback 적용
+        try:
+            response_text = call_gemini_with_fallback(
+                context,
+                timeout=60,
+                max_retries=2,
+                generation_config={
+                    "temperature": 0.7,
+                    "maxOutputTokens": 2048,
+                    "responseMimeType": "application/json"
+                }
+            )
+            
+            # JSON 파싱
+            result = {"candidates": [{"content": {"parts": [{"text": response_text}]}}]}
+            
+        except Exception as e:
+            logger.error(f"{company_name} API 호출 실패: {str(e)}")
+            return None
         
         # 전체 응답 구조 로깅 (디버깅용)
         logger.debug(f"{company_name} Gemini 응답 구조: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}")
