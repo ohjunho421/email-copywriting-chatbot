@@ -70,15 +70,38 @@ class UpstageGroundednessChecker:
         """
         try:
             # Solar Pro 2로 Groundedness 검증 (프롬프트 기반)
-            system_prompt = """당신은 정확성 검증 전문가입니다.
-주어진 참조 문서(Reference)를 바탕으로 답변(Answer)이 사실에 근거하고 있는지 판단하세요.
+            system_prompt = """당신은 영업 이메일의 사실성을 검증하는 전문가입니다.
+주어진 참조 문서(Reference)를 기반으로, 답변(Answer)이 참조 문서와 **명백히 모순**되는 내용이 있는지만 판단하세요.
+
+**중요: 이것은 영업 이메일입니다. 엄격한 학술 논문 검증이 아닙니다.**
 
 판단 기준:
-- grounded: 답변의 모든 주요 내용이 참조 문서에 명시되어 있음
-- notGrounded: 답변에 참조 문서에 없는 중요한 정보나 사실이 포함됨
-- notSure: 애매하거나 추론 가능하지만 직접 명시되지 않은 내용
+1. **grounded**: 답변이 참조 문서와 모순되지 않음 (일반적 제품 설명, Pain Point 추론 포함 가능)
+2. **notGrounded**: 답변에 참조 문서와 **명백히 모순**되는 사실이 포함됨 (예: 투자 유치 사실 왜곡, 회사 규모 과장)
+3. **notSure**: 판단이 모호한 경우
 
-결과는 반드시 "grounded", "notGrounded", "notSure" 중 하나만 출력하고, 간단한 이유를 한 줄로 추가하세요."""
+✅ 환각이 **아닌** 내용 (허용):
+- PortOne 제품 기능 설명 (OPI, Recon, Prism 등)
+- 일반적인 업계 Pain Point (예: "결제 시스템 확장이 부담되실 수 있습니다")
+- 제품 가치 제안 (예: "수수료 15-30% 절감 가능")
+- 참조 문서에 없지만 **모순되지 않는** 일반적 추론
+
+❌ 환각인 내용 (차단 필요):
+- 참조 문서와 **모순**되는 투자/매출 정보 (예: 실제 A라운드인데 "시리즈 B 유치"라고 함)
+- 참조 문서에 없는 **구체적 수치**를 마치 사실인 것처럼 언급 (예: "작년 매출 500억")
+- 경쟁사를 잘못 언급하거나 사용 PG를 왜곡
+
+**출력 형식:**
+1. 첫 줄: "grounded", "notGrounded", "notSure" 중 하나
+2. 둘째 줄: 판단 이유 (한 줄)
+3. notGrounded인 경우: 셋째 줄에 "문제부분: [구체적 내용]"
+4. notGrounded인 경우: 넷째 줄에 "수정제안: [개선 방안]"
+
+예시:
+notGrounded
+참조 문서에 없는 투자 정보가 포함됨
+문제부분: "최근 시리즈 B 투자 300억 유치" - 참조 문서에는 A 라운드만 언급됨
+수정제안: "최근 A 라운드 투자 유치" 또는 투자 정보 제거"""
             
             user_prompt = f"""**참조 문서(Reference):**
 {context[:4000]}
@@ -86,7 +109,7 @@ class UpstageGroundednessChecker:
 **검증할 답변(Answer):**
 {answer[:2000]}
 
-위 답변이 참조 문서에 근거하고 있나요?"""
+위 답변을 검증하고, 문제가 있다면 구체적으로 지적해주세요."""
             
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -98,21 +121,37 @@ class UpstageGroundednessChecker:
             )
             
             # 응답에서 groundedness 결과 추출
-            result_text = response.choices[0].message.content.strip().lower()
+            result_text = response.choices[0].message.content.strip()
+            result_lines = result_text.split('\n')
             
-            # 결과 파싱 (Solar Pro 2의 응답 분석)
-            if "grounded" in result_text:
-                if "not" in result_text.split("grounded")[0][-10:]:
-                    # "not grounded" 케이스
+            # 첫 줄에서 groundedness 판단
+            first_line = result_lines[0].strip().lower()
+            if "grounded" in first_line:
+                if "not" in first_line.split("grounded")[0][-10:]:
                     groundedness = "notGrounded"
                 else:
                     groundedness = "grounded"
-            elif "근거" in result_text and ("없" in result_text or "불일치" in result_text):
+            elif "근거" in first_line and ("없" in first_line or "불일치" in first_line):
                 groundedness = "notGrounded"
-            elif "확인" in result_text and ("가능" in result_text or "일치" in result_text):
+            elif "확인" in first_line and ("가능" in first_line or "일치" in first_line):
                 groundedness = "grounded"
             else:
                 groundedness = "notSure"
+            
+            # 판단 이유 추출
+            reason = result_lines[1].strip() if len(result_lines) > 1 else "이유 없음"
+            
+            # notGrounded인 경우 문제부분과 수정제안 추출
+            problem_part = None
+            fix_suggestion = None
+            
+            if groundedness == "notGrounded":
+                for line in result_lines[2:]:
+                    line = line.strip()
+                    if line.startswith("문제부분:") or line.startswith("문제 부분:"):
+                        problem_part = line.split(":", 1)[1].strip()
+                    elif line.startswith("수정제안:") or line.startswith("수정 제안:"):
+                        fix_suggestion = line.split(":", 1)[1].strip()
             
             # 신뢰도 점수 계산
             confidence_map = {
@@ -123,12 +162,19 @@ class UpstageGroundednessChecker:
             confidence_score = confidence_map.get(groundedness, 0.0)
             
             logger.info(f"✅ Groundedness Check 완료 (Solar Pro): {groundedness} (신뢰도: {confidence_score})")
-            logger.debug(f"Solar Pro 2 응답: {result_text[:200]}")
+            if problem_part:
+                logger.warning(f"  └ 문제부분: {problem_part}")
+            if fix_suggestion:
+                logger.info(f"  └ 수정제안: {fix_suggestion}")
+            logger.debug(f"Solar Pro 2 응답: {result_text[:300]}")
             
             return {
                 'groundedness': groundedness,
                 'confidence_score': confidence_score,
                 'is_verified': groundedness == 'grounded',
+                'reason': reason,
+                'problem_part': problem_part,
+                'fix_suggestion': fix_suggestion,
                 'error': None
             }
         

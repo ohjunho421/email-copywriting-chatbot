@@ -4196,8 +4196,28 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 company_name
                             )
                     
-                    # 🆕 Upstage Groundedness Check: 생성된 이메일 검증
+                    # 🆕 Upstage Groundedness Check: 생성된 이메일 검증 (선택적)
+                    ENABLE_HALLUCINATION_CHECK = True  # 환각 검증 활성화 (기준 완화됨)
+                    
+                    if not ENABLE_HALLUCINATION_CHECK:
+                        # 환각 검증 비활성화 - 모든 이메일 바로 반환
+                        logger.info(f"{company_name}: ℹ️ 환각 검증 비활성화 - 모든 이메일 사용")
+                        return {
+                            'success': True,
+                            'variations': formatted_variations,
+                            'services_generated': services_to_generate,
+                            'sales_item': sales_item if sales_item else 'all',
+                            'timestamp': datetime.now().isoformat(),
+                            'model': 'gemini-3-pro-preview',
+                            'groundedness_check': {
+                                'enabled': False,
+                                'note': '환각 검증이 비활성화되었습니다.'
+                            }
+                        }
+                    
+                    # 🔍 환각 검증 활성화된 경우
                     logger.info(f"{company_name}: 🔍 Upstage Groundedness Check 시작...")
+                    
                     try:
                         checker = get_groundedness_checker()
                         
@@ -4247,57 +4267,39 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 verified_variations[service_key] = formatted_variations[service_key]
                                 logger.info(f"✅ {service_key}: 검증 통과 ({result['groundedness']}, 신뢰도: {result['confidence_score']:.2f})")
                             else:
-                                # 환각 감지 - 출처 기반 자동 수정 시도
+                                # 환각 감지 - 문제부분과 수정제안 표시
                                 hallucinated_count += 1
                                 hallucinated_services.append(service_key)
                                 
-                                logger.warning(f"❌ {service_key}: 환각 감지! 출처 기반 자동 수정 시도...")
+                                logger.warning(f"⚠️ {service_key}: 환각 감지 (신뢰도: {result['confidence_score']:.2f})")
+                                if result.get('reason'):
+                                    logger.warning(f"  └ 이유: {result['reason']}")
+                                if result.get('problem_part'):
+                                    logger.warning(f"  └ 문제부분: {result['problem_part']}")
+                                if result.get('fix_suggestion'):
+                                    logger.info(f"  └ 수정제안: {result['fix_suggestion']}")
                                 
-                                # 출처 기반 자동 수정
-                                try:
-                                    from upstage_groundedness import correct_hallucinated_email_with_source
-                                    
-                                    original_email_for_correction = {
-                                        'subject': formatted_variations[service_key]['subject'],
-                                        'body': formatted_variations[service_key]['body']
-                                    }
-                                    
-                                    correction_result = correct_hallucinated_email_with_source(
-                                        original_email=original_email_for_correction,
-                                        context=context_for_verification,
-                                        company_name=company_name,
-                                        gemini_api_key=GEMINI_API_KEY
-                                    )
-                                    
-                                    if correction_result['correction_applied']:
-                                        # 수정 성공 - 수정된 버전을 추가
-                                        corrected_email = formatted_variations[service_key].copy()
-                                        corrected_email['subject'] = correction_result['corrected_email']['subject']
-                                        corrected_email['body'] = correction_result['corrected_email']['body']
-                                        corrected_email['type'] = f"{corrected_email['type']} (출처 기반 수정)"
-                                        corrected_email['hallucination_warning'] = False
-                                        corrected_email['auto_corrected'] = True
-                                        corrected_email['correction_note'] = correction_result['correction_note']
-                                        
-                                        verified_variations[service_key] = corrected_email
-                                        logger.info(f"✅ {service_key}: 자동 수정 완료 - {correction_result['correction_note']}")
-                                    else:
-                                        # 수정 실패 - 원본에 경고 추가
-                                        hallucination_email = formatted_variations[service_key].copy()
-                                        hallucination_email['type'] = service_key  # type 필드 추가
-                                        hallucination_email['hallucination_warning'] = True
-                                        hallucination_email['warning_message'] = f"⚠️ 환각 감지됨. 자동 수정 실패: {correction_result['correction_note']}"
-                                        verified_variations[service_key] = hallucination_email
-                                        logger.warning(f"⚠️ {service_key}: 자동 수정 실패 - 원본에 경고 추가")
-                                        
-                                except Exception as correction_error:
-                                    logger.error(f"{service_key} 자동 수정 오류: {str(correction_error)}")
-                                    # 오류 시 원본에 경고 추가
-                                    hallucination_email = formatted_variations[service_key].copy()
-                                    hallucination_email['type'] = service_key  # type 필드 추가
-                                    hallucination_email['hallucination_warning'] = True
-                                    hallucination_email['warning_message'] = '⚠️ 이 문안은 사실 확인이 필요할 수 있습니다. Perplexity 조사 결과와 일부 불일치가 감지되었습니다.'
-                                    verified_variations[service_key] = hallucination_email
+                                # 원본에 상세한 피드백 추가
+                                hallucination_email = formatted_variations[service_key].copy()
+                                hallucination_email['type'] = service_key
+                                hallucination_email['hallucination_warning'] = True
+                                
+                                # 사용자를 위한 수정 가이드 생성
+                                feedback_message = f"⚠️ 환각 가능성 감지됨"
+                                if result.get('reason'):
+                                    feedback_message += f"\n📌 이유: {result['reason']}"
+                                if result.get('problem_part'):
+                                    feedback_message += f"\n🔍 문제부분: {result['problem_part']}"
+                                if result.get('fix_suggestion'):
+                                    feedback_message += f"\n💡 수정제안: {result['fix_suggestion']}"
+                                
+                                hallucination_email['feedback_message'] = feedback_message
+                                hallucination_email['hallucination_details'] = {
+                                    'reason': result.get('reason'),
+                                    'problem_part': result.get('problem_part'),
+                                    'fix_suggestion': result.get('fix_suggestion')
+                                }
+                                verified_variations[service_key] = hallucination_email
                         
                         # 🔄 환각 감지된 이메일 재생성 시도 (비활성화 - 사용자가 직접 확인)
                         # 사용자가 원본을 보고 직접 판단할 수 있도록 재생성 로직 비활성화
