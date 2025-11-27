@@ -6121,86 +6121,28 @@ PortOne {{user_name}} 매니저입니다.</p>
 이제 개선된 이메일 본문만 출력하세요 (다른 텍스트 없이):
 """
         
-        # Gemini API 호출 (Retry 로직 추가)
-        genai.configure(api_key=gemini_api_key)
-        model = genai.GenerativeModel('gemini-3-pro-preview')
+        # Gemini API 호출 (자동 fallback 적용)
+        logger.info("이메일 개선 시작 - call_gemini_with_fallback 사용")
         
-        max_retries = 2
-        retry_delay = 2
-        response = None
-        
-        for attempt in range(max_retries):
-            try:
-                # SDK 레벨 타임아웃 설정 (소켓 타임아웃)
-                import socket
-                original_timeout = socket.getdefaulttimeout()
-                socket.setdefaulttimeout(60)  # 60초 타임아웃 설정
-                
-                try:
-                    response = model.generate_content(
-                        prompt,
-                        generation_config={
-                            'temperature': 0.5,
-                            'max_output_tokens': 4096,
-                            'top_p': 0.9,
-                            'top_k': 40
-                        }
-                    )
-                finally:
-                    # 타임아웃 원복
-                    socket.setdefaulttimeout(original_timeout)
-                
-                # 성공하면 루프 탈출
-                break
-                
-            except Exception as api_error:
-                error_msg = str(api_error)
-                if 'timeout' in error_msg.lower() or 'timed out' in error_msg.lower():
-                    logger.warning(f"Gemini API 타임아웃 (시도 {attempt+1}/{max_retries})")
-                    if attempt < max_retries - 1:
-                        logger.info(f"{retry_delay}초 후 재시도...")
-                        import time
-                        time.sleep(retry_delay)
-                        continue
-                    else:
-                        logger.error(f"최대 재시도 횟수 초과 - 개선 실패")
-                        raise Exception("Gemini API 타임아웃 (60초 초과, 재시도 실패)")
-                elif '503' in error_msg or 'overloaded' in error_msg.lower() or 'unavailable' in error_msg.lower():
-                    logger.warning(f"Gemini API 과부하 (시도 {attempt+1}/{max_retries}): {error_msg}")
-                    if attempt < max_retries - 1:
-                        logger.info(f"{retry_delay * 2}초 후 재시도...")
-                        import time
-                        time.sleep(retry_delay * 2)  # 503은 더 긴 대기 시간
-                        continue
-                    else:
-                        logger.error(f"최대 재시도 횟수 초과 - Gemini 서버 과부하")
-                        raise Exception("Gemini API 서버 과부하 (재시도 실패)")
-                else:
-                    # 타임아웃이나 503이 아닌 다른 오류는 즉시 재발생
-                    raise
-        
-        # 응답이 없으면 (모든 재시도 실패)
-        if response is None:
-            logger.error("모든 재시도 실패 - 응답 없음")
-            raise Exception("Gemini 응답 없음")
-        
-        # Gemini 응답 안전성 검증
-        if hasattr(response, 'candidates') and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 2:
-                logger.warning("Gemini 안전 필터로 인한 응답 차단")
-                raise Exception("콘텐츠가 안전 정책에 의해 차단되었습니다")
-            elif hasattr(candidate, 'content') and candidate.content and candidate.content.parts:
-                refined_content = candidate.content.parts[0].text.strip()
-                logger.info(f"Gemini 이메일 개선 완료 - 응답 길이: {len(refined_content)} 문자")
-                return refined_content
-            else:
-                logger.warning("Gemini 응답에 유효한 콘텐츠가 없습니다")
-                raise Exception("응답 콘텐츠가 비어있습니다")
-        
-        # 응답이 없는 경우 폴백
-        logger.warning("Gemini 응답이 없어 폴백 응답 생성")
-        raise Exception("Gemini 응답 없음")
+        try:
+            refined_content = call_gemini_with_fallback(
+                prompt=prompt,
+                timeout=60,
+                max_retries=3,
+                generation_config={
+                    'temperature': 0.5,
+                    'maxOutputTokens': 4096,
+                    'topP': 0.9,
+                    'topK': 40
+                }
+            )
+            
+            logger.info(f"Gemini 이메일 개선 완료 - 응답 길이: {len(refined_content)} 문자")
+            return refined_content
+            
+        except Exception as fallback_error:
+            logger.error(f"Gemini fallback 포함 모든 시도 실패: {str(fallback_error)}")
+            raise
         
     except Exception as e:
         logger.error(f"Gemini 이메일 개선 오류: {str(e)}")
