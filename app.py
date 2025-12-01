@@ -3363,10 +3363,17 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         # 🆕 BM 분석 결과 추가
         if 'business_model' in research_data:
             bm_info = research_data['business_model']
+            
+            # 부가 BM 한글 번역
+            secondary_models_kr = []
+            if bm_info.get('secondary_models'):
+                bm_translator = BusinessModelAnalyzer()
+                secondary_models_kr = [bm_translator._translate_bm(bm) for bm in bm_info['secondary_models']]
+            
             bm_summary = f"""
 ## 🎯 비즈니스 모델 분석 결과 (신뢰도: {bm_info['confidence']}%)
 **주요 BM**: {bm_info['primary_model_kr']}
-**부가 BM**: {', '.join([researcher.bm_analyzer._translate_bm(bm) for bm in bm_info.get('secondary_models', [])])}
+**부가 BM**: {', '.join(secondary_models_kr) if secondary_models_kr else '없음'}
 
 **추천 솔루션**:
 """
