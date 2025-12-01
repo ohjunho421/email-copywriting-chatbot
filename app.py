@@ -26,6 +26,9 @@ from case_database import select_relevant_cases, get_case_details, format_case_f
 # 🆕 Upstage Groundedness Check 임포트
 from upstage_groundedness import get_groundedness_checker
 
+# 🆕 비즈니스 모델 분석 모듈 임포트
+from business_model_analyzer import BusinessModelAnalyzer
+
 # .env 파일 로드
 load_dotenv()
 
@@ -361,6 +364,7 @@ class CompanyResearcher:
             "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
             "Content-Type": "application/json"
         }
+        self.bm_analyzer = BusinessModelAnalyzer()  # 🆕 BM 분석기 추가
     
     def extract_emails_from_html(self, html_content):
         """HTML에서 이메일 주소 추출 - 단순화된 버전"""
@@ -774,6 +778,33 @@ class CompanyResearcher:
                 # 🆕 최근 뉴스 존재 여부 확인 (3개월 이내)
                 has_recent_news = self.check_recent_news_in_content(formatted_content, company_name)
                 
+                # 🆕 비즈니스 모델 분석 (홈페이지 + Perplexity 데이터 기반)
+                homepage_content = ""
+                if website:
+                    try:
+                        # 홈페이지 간단 스크래핑 (BM 키워드 추출용)
+                        logger.info(f"{company_name} 홈페이지 BM 분석을 위한 스크래핑: {website}")
+                        import requests as req
+                        from bs4 import BeautifulSoup
+                        response = req.get(website, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+                        if response.status_code == 200:
+                            soup = BeautifulSoup(response.content, 'html.parser')
+                            # 주요 텍스트 추출 (메타, 제목, 본문)
+                            homepage_content = soup.get_text(separator=' ', strip=True)[:5000]  # 첫 5000자
+                            logger.info(f"{company_name} 홈페이지 스크래핑 완료: {len(homepage_content)} 문자")
+                    except Exception as e:
+                        logger.warning(f"{company_name} 홈페이지 스크래핑 실패: {e}")
+                
+                # BM 분석 수행
+                bm_analysis = self.bm_analyzer.analyze_business_model(
+                    homepage_content, 
+                    {'company_info': formatted_content}
+                )
+                logger.info(f"{company_name} BM 분석 완료: {bm_analysis['primary_model_kr']} (신뢰도: {bm_analysis['confidence']}%)")
+                
+                # 맞춤형 세일즈 포인트 생성
+                customized_pitch = self.bm_analyzer.generate_customized_pitch(bm_analysis, company_name)
+                
                 return {
                     'success': True,
                     'company_info': formatted_content,
@@ -781,6 +812,8 @@ class CompanyResearcher:
                     'citations': result.get('citations', []),
                     'verification': verification_result,
                     'has_recent_news': has_recent_news,  # 🆕 최근 뉴스 플래그 추가
+                    'business_model': bm_analysis,  # 🆕 BM 분석 결과
+                    'customized_pitch': customized_pitch,  # 🆕 맞춤형 세일즈 포인트
                     'timestamp': datetime.now().isoformat(),
                     'raw_response': raw_content  # 디버깅용
                 }
@@ -3326,6 +3359,28 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         research_summary = research_data.get('company_info', '조사 정보 없음')
         pain_points = research_data.get('pain_points', '일반적인 Pain Point')
         industry_trends = research_data.get('industry_trends', '')
+        
+        # 🆕 BM 분석 결과 추가
+        if 'business_model' in research_data:
+            bm_info = research_data['business_model']
+            bm_summary = f"""
+## 🎯 비즈니스 모델 분석 결과 (신뢰도: {bm_info['confidence']}%)
+**주요 BM**: {bm_info['primary_model_kr']}
+**부가 BM**: {', '.join([researcher.bm_analyzer._translate_bm(bm) for bm in bm_info.get('secondary_models', [])])}
+
+**추천 솔루션**:
+"""
+            for idx, solution in enumerate(bm_info.get('recommended_solutions', [])[:2], 1):
+                bm_summary += f"{idx}. **{solution['primary']}**: {solution['description']}\n"
+                bm_summary += f"   - Pain Point: {solution['pain_points'][0] if solution['pain_points'] else 'N/A'}\n"
+                bm_summary += f"   - 핵심 혜택: {solution['benefits'][0] if solution['benefits'] else 'N/A'}\n\n"
+            
+            research_summary += "\n\n" + bm_summary
+            logger.info(f"✅ BM 정보를 research_summary에 추가: {bm_info['primary_model_kr']}")
+        
+        # 🆕 맞춤형 세일즈 포인트 추가
+        if 'customized_pitch' in research_data and research_data['customized_pitch']:
+            research_summary += f"\n\n## 💡 맞춤형 세일즈 포인트\n{research_data['customized_pitch']}"
         
         # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단)
         # CSV 컴럼 구조 디버깅
