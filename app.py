@@ -8279,7 +8279,8 @@ def send_email():
                     },
                     json={
                         'personalizations': [{
-                            'to': [{'email': to_email, 'name': to_name}]
+                            'to': [{'email': to_email, 'name': to_name}],
+                            'bcc': [{'email': from_email}]  # 발송자를 BCC에 추가하여 Gmail 보낸편지함에 자동 저장
                         }],
                         'from': {
                             'email': from_email,
@@ -8295,12 +8296,13 @@ def send_email():
                 )
                 
                 if response.status_code == 202:
-                    logger.info(f"✅ SendGrid API 발송 성공: {to_email}")
+                    logger.info(f"✅ SendGrid API 발송 성공: {to_email} (BCC: {from_email})")
                     return jsonify({
                         'success': True,
-                        'message': '이메일이 성공적으로 발송되었습니다 (SendGrid API).',
+                        'message': '이메일이 성공적으로 발송되었습니다 (SendGrid API).\n📧 발송한 메일이 내 Gmail 보낸편지함에도 저장됩니다.',
                         'from': from_email,
                         'to': to_email,
+                        'bcc': from_email,
                         'signature_included': bool(user_signature),
                         'method': 'SendGrid API'
                     })
@@ -8366,6 +8368,7 @@ SendGrid에서 "{from_email}" 주소를 인증해주세요.
             msg['Subject'] = subject
             msg['From'] = f"{from_name} <{from_email}>"
             msg['To'] = to_email
+            msg['Bcc'] = from_email  # 발송자를 BCC에 추가하여 Gmail 보낸편지함에 자동 저장
             
             # HTML 본문 추가
             html_part = MIMEText(full_body, 'html', 'utf-8')
@@ -8398,13 +8401,14 @@ SendGrid에서 "{from_email}" 주소를 인증해주세요.
                             server.login(from_email, gmail_app_password)
                             server.send_message(msg)
                     
-                    logger.info(f"✅ 이메일 발송 성공 ({method_config['name']}): {to_email}")
+                    logger.info(f"✅ 이메일 발송 성공 ({method_config['name']}): {to_email} (BCC: {from_email})")
                     
                     return jsonify({
                         'success': True,
-                        'message': f'이메일이 성공적으로 발송되었습니다 ({method_config["name"]}).',
+                        'message': f'이메일이 성공적으로 발송되었습니다 ({method_config["name"]}).\n📧 발송한 메일이 내 Gmail 보낸편지함에도 저장됩니다.',
                         'from': from_email,
                         'to': to_email,
+                        'bcc': from_email,
                         'signature_included': bool(user_signature),
                         'smtp_method': method_config['name']
                     })
