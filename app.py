@@ -166,15 +166,16 @@ if GEMINI_API_KEY:
 
 def call_gemini_with_fallback(prompt, timeout=180, max_retries=3, generation_config=None):
     """
-    Gemini API 호출 with 자동 fallback (최후의 수단)
-    gemini-3-pro-preview를 충분히 재시도한 후 실패 시에만 gemini-2.5-pro로 재시도
+    Gemini API 호출 with 자동 fallback
+    gemini-3-pro-preview → gemini-2.5-pro → gemini-2.5-flash (높은 할당량)
     """
-    models = ['gemini-3-pro-preview', 'gemini-2.5-pro']
+    models = ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash']
     last_error = None
     
     for model_index, model in enumerate(models):
         retry_count = 0
-        model_name = 'GEMINI(3-pro)' if model_index == 0 else 'GEMINI(2.5-pro) [최후의 fallback]'
+        model_names = ['GEMINI(3-pro)', 'GEMINI(2.5-pro)', 'GEMINI(2.5-flash) [fallback]']
+        model_name = model_names[model_index]
         
         # 첫 번째 모델은 max_retries번 재시도, 두 번째 모델은 1번만 시도
         attempts = max_retries if model_index == 0 else 1
