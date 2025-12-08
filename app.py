@@ -164,11 +164,24 @@ if GEMINI_API_KEY:
         transport='rest'  # REST 전송 사용
     )
 
+# Gemini API Rate Limiter (RPM 제한 대응)
+_gemini_last_call_time = 0
+_gemini_min_interval = 3.0  # 최소 3초 간격 (분당 최대 20회)
+
 def call_gemini_with_fallback(prompt, timeout=180, max_retries=3, generation_config=None):
     """
-    Gemini API 호출 with 자동 fallback
+    Gemini API 호출 with 자동 fallback + Rate Limiting
     gemini-3-pro-preview → gemini-2.5-pro → gemini-2.5-flash (높은 할당량)
     """
+    global _gemini_last_call_time
+    
+    # Rate Limiting: 최소 간격 유지
+    elapsed = time.time() - _gemini_last_call_time
+    if elapsed < _gemini_min_interval:
+        wait_time = _gemini_min_interval - elapsed
+        logger.debug(f"⏳ Rate limiting: {wait_time:.1f}초 대기")
+        time.sleep(wait_time)
+    
     models = ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash']
     last_error = None
     
@@ -182,6 +195,7 @@ def call_gemini_with_fallback(prompt, timeout=180, max_retries=3, generation_con
         
         while retry_count < attempts:
             try:
+                _gemini_last_call_time = time.time()  # 호출 시간 기록
                 api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
                 
                 request_body = {
@@ -6433,7 +6447,7 @@ def batch_process():
     try:
         data = request.json
         companies = data.get('companies', [])
-        max_workers = data.get('max_workers', 3)  # 동시 처리 개수 (기본 3개로 감소)
+        max_workers = data.get('max_workers', 1)  # 동시 처리 개수 (RPM 제한 대응 위해 순차 처리)
         user_template = data.get('user_template', None)  # 사용자 문안 또는 요청사항
         user_input_mode = data.get('user_input_mode', 'template')  # 'request' 또는 'template'
         
