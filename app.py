@@ -3452,6 +3452,8 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
                 detected_services.add('prism')
             if 'ps' in item or '플랫폼정산' in item or '파트너정산' in item:
                 detected_services.add('ps')
+            if '세금계산서' in item or '역발행' in item or 'tax' in item or 'invoice' in item:
+                detected_services.add('tax_invoice')
         
         detected_services = list(detected_services)
         logger.info(f"🎯 감지된 서비스: {detected_services} for {company_name}")
@@ -3478,6 +3480,8 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
                     service_names.append('Prism')
                 if 'ps' in detected_services:
                     service_names.append('PS')
+                if 'tax_invoice' in detected_services:
+                    service_names.append('세금계산서')
                 
                 logger.info(f"🎯 복수 서비스 통합 문안 생성: {' + '.join(service_names)} for {company_name}")
             
@@ -3503,6 +3507,10 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             elif 'ps' in detected_services:
                 services_to_generate = ['ps_professional', 'ps_curiosity']
                 logger.info(f"플랫폼 정산(파트너 정산+세금계산서+지급대행) 서비스 문안만 생성: {company_name}")
+            
+            elif 'tax_invoice' in detected_services:
+                services_to_generate = ['tax_invoice_professional', 'tax_invoice_curiosity']
+                logger.info(f"세금계산서 자동화(역발행) 서비스 문안만 생성: {company_name}")
             
             else:
                 # 알 수 없는 sales_item인 경우
@@ -4066,7 +4074,30 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
    - **경쟁사가 있다면**: "{competitor_name}도 이 방식으로 정산 자동화를 구현하여 재무팀 리소스를 핵심 업무에 집중하고 있습니다" (설명 형식)
    - 마지막에 간단한 CTA: "미팅을 통해 실제로 어떻게 한 달 정산을 이틀로 줄였는지 상세히 안내드리겠습니다"
 
-🆕 **9. 복수 서비스 통합 문안 (multi_service_professional / multi_service_curiosity):**
+9. **세금계산서 자동화 (역발행) - 전문적 톤**: 
+   - **필수**: 파트너/공급업체 증가 또는 사업 확장 뉴스 인용. 예: "'{company_name}의 거래처 2배 증가'라는 소식을 봤는데, 세금계산서 발행 업무도 같이 늘어나셨을 것 같습니다"
+   - **🎯 세금계산서 자동화 핵심 가치 제안**:
+     * **재무 리소스 1/3로 단축**: 복잡하고 반복적인 세금계산서 업무를 자동화하여 업무 효율 획기적 향상
+     * **역발행 지원**: 홈택스는 역발행 절차가 복잡하지만, 포트원은 정발행/역발행 모두 간편하게 처리
+     * **대량 발행**: 홈택스는 최대 1,000건까지만 가능하지만, **포트원은 100,000건 이상 일괄 발행** 가능
+     * **휴먼 에러 제로**: 사업자 정보 조회 API로 수기 입력 오류 방지 + 휴폐업 자동 확인
+     * **파트너 관리**: 발행 대상 저장/불러오기 가능, 모든 히스토리 관리
+   - **블렛 포인트 필수 사용**: 핵심 기능을 블렛으로 명확하게 제시 (예: 역발행 지원, 대량 발행, 휴먼 에러 제거)
+   - **구체적 수치 활용**: "**재무 리소스 3분의 1로 단축**", "**100,000건 이상 일괄 발행**", "**파트너 정산과 연동 시 정산→세금계산서→지급 한번에**"
+   - **경쟁사가 있다면**: "{competitor_name}도 거래처 증가로 세금계산서 자동화를 도입했습니다"
+
+10. **세금계산서 자동화 (역발행) - 호기심 유발형**: 
+   - **필수**: 구체적 상황으로 시작하는 질문 (초반 1회만). 예: "'{company_name}의 파트너사 확대' 소식을 봤는데, 혹시 매달 수백 건의 세금계산서 때문에 월말마다 야근하고 계시진 않으신가요?"
+   - **🎯 질문 후 바로 해결책 제시 (설명 형식으로 전환)**:
+     * 홈택스로는 역발행이 복잡하고 1,000건까지만 발행 가능하지만, **포트원 세금계산서는 역발행도 간편하게, 100,000건 이상도 일괄 발행** 가능합니다
+     * **사업자 정보 조회 API**로 수기 입력 오류를 방지하고 휴폐업도 자동 확인합니다
+     * **파트너 정산과 함께 사용하면** 정산금 계산→지급→세금계산서 발행까지 오류 없이 한번에 완료됩니다
+   - **블렛 포인트 필수 사용**: 핵심 해결책을 블렛으로 명확하게 제시
+   - **구체적 수치 활용**: "재무 리소스를 3분의 1로 줄일 수 있습니다", "홈택스 1,000건 vs 포트원 100,000건 이상"
+   - **경쟁사가 있다면**: "{competitor_name}도 이 방식으로 세금계산서 업무를 자동화하여 재무팀 리소스를 핵심 업무에 집중하고 있습니다" (설명 형식)
+   - 마지막에 간단한 CTA: "미팅을 통해 어떻게 세금계산서 업무를 자동화할 수 있는지 상세히 안내드리겠습니다"
+
+🆕 **11. 복수 서비스 통합 문안 (multi_service_professional / multi_service_curiosity):**
 
 Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
 
@@ -4162,6 +4193,12 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "ps_curiosity": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+  }},
+  "tax_invoice_professional": {{
+    "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
+  }},
+  "tax_invoice_curiosity": {{
     "body": "<p>안녕하세요, {company_name} {email_name}.<br>PortOne {user_name} 매니저입니다.</p>[본문 내용]<p><br>다음주 중 편하신 일정을 알려주시면 {company_name}의 성장에 <br>포트원이 어떻게 기여할 수 있을지 이야기 나누고 싶습니다.<br>긍정적인 회신 부탁드립니다.</p><p>감사합니다.<br>{user_name} 드림</p>"
   }},
   "multi_service_professional": {{
