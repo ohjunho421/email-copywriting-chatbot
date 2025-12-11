@@ -3865,7 +3865,7 @@ Perplexity 조사 결과에서 회사의 비즈니스 모델을 파악하고, �
 **올바른 형식 (들여쓰기 + 소제목 줄바꿈 + 명료한 설명):**
 ```html
 저희 포트원은 다음과 같은 방식으로 도움을 드릴 수 있습니다:
-<ul style="padding-left: 20px; margin: 10px 0;">
+<ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;">
 <li><strong>PG 수수료 15-30% 절감:</strong><br>
 3,000여 개 고객사 규모와 PG사 파트너십을 통해 **최적의 수수료 조건** 제안</li>
 <li><strong>스마트 라우팅 리스크 관리:</strong><br>
@@ -3885,7 +3885,7 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
 
 **✅ 좋은 예시 (들여쓰기 + 소제목 줄바꿈 적용):**
 ```html
-<ul style="padding-left: 20px; margin: 10px 0;">
+<ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;">
 <li><strong>PG 수수료 15-30% 절감:</strong><br>
 3,000여 개 고객사 규모와 PG사 파트너십을 통해 **최적의 수수료 조건** 제안</li>
 <li><strong>스마트 라우팅 리스크 관리:</strong><br>
@@ -3894,7 +3894,7 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
 ```
 
 **블렛 포인트 작성 규칙:**
-1. **반드시 `<ul style="padding-left: 20px; margin: 10px 0;"><li>` 태그 사용** (들여쓰기 필수!)
+1. **반드시 `<ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;"><li>` 태그 사용** (들여쓰기 필수!)
 2. 각 `<li>` 안에 `<strong>기능명:</strong><br>` 형식으로 작성 (소제목 다음 줄바꿈!)
 3. **2-4개의 핵심 기능만** 간결하게 제시
 4. **🎯 OPI는 반드시 이 순서**: PG 수수료 절감 → 스마트 라우팅 리스크 관리 → 비즈니스 특화 기능
@@ -4125,7 +4125,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
     
     <p>포트원은 다음과 같이 복잡한 정산 업무를 자동화해 드립니다:</p>
     
-    <ul style="padding-left: 20px; margin: 10px 0;">
+    <ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;">
     <li><strong>실시간 현금흐름 파악:</strong><br>
     각 오픈마켓의 상이한 정산 기준을 자동으로 통합하여 **미수금과 자금 흐름을 한눈에 확인** 가능</li>
     <li><strong>정산 업무 90% 자동화:</strong><br>
@@ -5511,7 +5511,7 @@ def refine_email_with_user_request(original_subject, original_body, user_request
    - **OPI 이메일 예시** (들여쓰기 + 소제목 줄바꿈 + 명료한 설명):
    ```html
    포트원은 다음과 같은 방식으로 도움을 드릴 수 있습니다:
-   <ul style="padding-left: 20px; margin: 10px 0;">
+   <ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;">
    <li><strong>PG 수수료 15-30% 절감:</strong><br>
    3,000여 개 고객사 규모와 PG사 파트너십을 통해 **최적의 수수료 조건** 제안</li>
    <li><strong>스마트 라우팅 리스크 관리:</strong><br>
@@ -5521,7 +5521,7 @@ def refine_email_with_user_request(original_subject, original_body, user_request
    </ul>
    ```
    - 블렛 포인트 규칙:
-     * **반드시 `<ul style="padding-left: 20px; margin: 10px 0;"><li>` 태그 사용** (들여쓰기 필수!)
+     * **반드시 `<ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;"><li>` 태그 사용** (들여쓰기 필수!)
      * 각 `<li>` 안에 `<strong>기능명:</strong><br>` 형식으로 작성 (소제목 다음 줄바꿈!)
      * **2-4개의 핵심 기능만** 간결하게 제시
      * **⚠️ 설명은 문장이 아닌 명료한 형태로** (마침표로 끝나는 완전한 문장 금지)
@@ -5538,7 +5538,7 @@ def refine_email_with_user_request(original_subject, original_body, user_request
      <p>최근 투자 유치 소식을 봤습니다.<br>
      빠른 성장 속도를 보니 결제 시스템 확장이 부담되실 것 같습니다.</p>
      <p>저희 포트원은 다음과 같은 방식으로 도움을 드릴 수 있습니다:</p>
-     <ul style="padding-left: 20px; margin: 10px 0;">
+     <ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;">
      <li><strong>PG 수수료 15-30% 절감:</strong><br>
      3,000개 고객사 규모와 PG사 파트너십을 통해 **최적의 수수료 조건** 제안</li>
      </ul>
@@ -5621,7 +5621,7 @@ def refine_email_with_user_request(original_subject, original_body, user_request
 <p>'{company_name} 투자 유치' 소식 정말 축하드립니다!<br>
 이렇게 빠르게 성장하시다 보면, 결제 시스템 확장이 개발팀에 큰 부담 되지 않으실까요?</p>
 <p>포트원은 다음과 같은 방식으로 도움을 드릴 수 있습니다:</p>
-<ul style="padding-left: 20px; margin: 10px 0;">
+<ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;">
 <li><strong>PG 수수료 15-30% 절감:</strong><br>
 3,000개 고객사 규모와 PG사 파트너십을 통해 **최적의 수수료 조건** 제안</li>
 <li><strong>스마트 라우팅 리스크 관리:</strong><br>
@@ -5670,7 +5670,7 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
 이렇게 빠르게 성장하시다 보면 결제 시스템 확장이 부담되실 것 같습니다.</p>
 
 <p>저희 포트원은 다음과 같은 방식으로 도움을 드릴 수 있습니다:</p>
-<ul style="padding-left: 20px; margin: 10px 0;">
+<ul style="padding-left: 20px; margin: 10px 0; font-size: inherit;">
 <li><strong>PG 수수료 15-30% 절감:</strong><br>
 3,000개 고객사 규모와 PG사 파트너십을 통해 **최적의 수수료 조건** 제안</li>
 <li><strong>스마트 라우팅 리스크 관리:</strong><br>

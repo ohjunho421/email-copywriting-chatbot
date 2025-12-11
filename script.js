@@ -4245,6 +4245,26 @@ function toggleEditMode(companyIndex, variationIndex) {
         
         // contenteditable div에 HTML 그대로 복사 (특수문자 불필요!)
         bodyEdit.innerHTML = bodyDisplay.innerHTML;
+        
+        // 🔥 Enter 키 시 <br> 태그만 삽입 (div 생성 방지 - 글자 크기 문제 해결)
+        bodyEdit.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                
+                // <br> 태그 삽입
+                const selection = window.getSelection();
+                const range = selection.getRangeAt(0);
+                const br = document.createElement('br');
+                range.deleteContents();
+                range.insertNode(br);
+                
+                // 커서를 <br> 다음으로 이동
+                range.setStartAfter(br);
+                range.setEndAfter(br);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        });
     }
     
     // 편집 모드로 전환
@@ -4311,7 +4331,14 @@ function saveEditedEmail(companyIndex, variationIndex) {
     
     // 수정된 내용 가져오기 (contenteditable에서 HTML 그대로)
     const newSubject = subjectEdit.value.trim();
-    const newBodyHtml = bodyEdit.innerHTML.trim();
+    let newBodyHtml = bodyEdit.innerHTML.trim();
+    
+    // 🔥 <div> 태그를 <br>로 정리 (글자 크기 문제 방지)
+    newBodyHtml = newBodyHtml
+        .replace(/<div><br><\/div>/gi, '<br>')  // 빈 div
+        .replace(/<div>/gi, '<br>')              // div 시작 -> br
+        .replace(/<\/div>/gi, '')                // div 종료 제거
+        .replace(/^<br>/, '');                   // 맨 앞 br 제거
     
     if (!newSubject || !newBodyHtml) {
         showToast('❌ 제목과 본문을 모두 입력해주세요.', 'danger');
@@ -4502,19 +4529,59 @@ async function batchSendEmails() {
         const companyName = checkbox.dataset.companyName;
         const email = checkbox.dataset.email;
         
-        // 현재 저장된 내용 가져오기 (saveEditedEmail에서 업데이트된 데이터)
-        // checkbox.dataset에 저장된 최신 내용 사용
-        let subject = checkbox.dataset.subject || '';
-        let body = checkbox.dataset.body ? checkbox.dataset.body.replace(/\\n/g, '\n') : '';
+        // 🔥 현재 화면에 표시된 내용을 직접 가져오기 (수정 내용 반영)
+        // 1순위: 편집 모드 중이면 편집창에서 가져오기
+        // 2순위: 표시 영역에서 가져오기 (저장된 수정 내용)
+        // 3순위: dataset 또는 원본 데이터
+        let subject = '';
+        let body = '';
         
-        // dataset이 비어있으면 원본 데이터에서 가져오기
+        // 제목 가져오기
+        const subjectEdit = document.getElementById(`subject_edit_${companyIndex}_${variationIndex}`);
+        const subjectDisplay = document.getElementById(`subject_display_${companyIndex}_${variationIndex}`);
+        
+        if (subjectEdit && subjectEdit.style.display !== 'none' && subjectEdit.value.trim()) {
+            // 편집 모드 중
+            subject = subjectEdit.value.trim();
+        } else if (subjectDisplay) {
+            // 표시 영역에서 가져오기 (em 태그 내부 텍스트)
+            subject = subjectDisplay.innerText.trim();
+        }
+        
+        // 본문 가져오기 (HTML)
+        const bodyEdit = document.getElementById(`body_edit_${companyIndex}_${variationIndex}`);
+        const bodyDisplay = document.getElementById(`body_display_${companyIndex}_${variationIndex}`);
+        
+        if (bodyEdit && bodyEdit.style.display !== 'none' && bodyEdit.innerHTML.trim()) {
+            // 편집 모드 중
+            body = bodyEdit.innerHTML.trim();
+        } else if (bodyDisplay) {
+            // 표시 영역에서 가져오기
+            body = bodyDisplay.innerHTML.trim();
+        }
+        
+        // 🔥 <div> 태그를 <br>로 정리 (글자 크기 문제 방지)
+        if (body) {
+            body = body
+                .replace(/<div><br><\/div>/gi, '<br>')
+                .replace(/<div>/gi, '<br>')
+                .replace(/<\/div>/gi, '')
+                .replace(/^<br>/, '');
+        }
+        
+        // fallback: dataset 또는 원본 데이터
         if (!subject || !body) {
-            if (window.emailChatbot && window.emailChatbot.generatedEmails) {
-                const company = window.emailChatbot.generatedEmails[companyIndex];
-                if (company && company.variations && company.variations[variationIndex]) {
-                    const variation = company.variations[variationIndex];
-                    subject = subject || variation.subject;
-                    body = body || variation.body;
+            if (checkbox.dataset.subject) subject = subject || checkbox.dataset.subject;
+            if (checkbox.dataset.body) body = body || checkbox.dataset.body.replace(/\\n/g, '\n');
+            
+            if (!subject || !body) {
+                if (window.emailChatbot && window.emailChatbot.generatedEmails) {
+                    const company = window.emailChatbot.generatedEmails[companyIndex];
+                    if (company && company.variations && company.variations[variationIndex]) {
+                        const variation = company.variations[variationIndex];
+                        subject = subject || variation.subject;
+                        body = body || variation.body;
+                    }
                 }
             }
         }
