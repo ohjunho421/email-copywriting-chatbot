@@ -4468,18 +4468,60 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                             if key not in ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사', '사용PG', 'PG'] and value and str(value).strip():
                                 csv_data_context += f"- {key}: {value}\n"
                         
-                        # 포트원 서비스 소개서 공식 정보 (검증된 데이터)
-                        portone_official_info = """
-**포트원 서비스 소개서 공식 정보 (검증된 데이터):**
-- 국내 3,000여개 기업이 포트원으로 결제 인프라 구축
-- 국내외 50여개 PG사와 파트너십
-- 결제 연동 개발 기간 최대 80% 단축
-- PG 수수료 평균 0.2~0.5%p 절감
-- 정산 업무 시간 90% 절감
-- 세금계산서 자동 발행으로 수작업 85% 감소
-- 매출/정산 데이터 실시간 통합 관리
-- 다양한 결제수단 지원 (신용카드, 간편결제, 계좌이체, 가상계좌 등)
+                        # 포트원 서비스 소개서 공식 정보 (sales_item에 따라 해당 서비스만 로드)
+                        portone_official_info = ""
+                        try:
+                            import os
+                            service_docs_dir = os.path.join(os.path.dirname(__file__), 'service_docs')
+                            
+                            # sales_item에서 서비스 타입 결정
+                            service_files_to_load = []
+                            sales_item_lower = sales_item.lower() if sales_item else ''
+                            
+                            # OPI 관련
+                            if 'opi' in sales_item_lower or any('opi' in s for s in services_to_generate):
+                                service_files_to_load.append('opi_service_info.txt')
+                            
+                            # 재무자동화/Recon 관련
+                            if 'recon' in sales_item_lower or '재무' in sales_item_lower or any('finance' in s for s in services_to_generate):
+                                service_files_to_load.append('recon_service_info.txt')
+                            
+                            # 세금계산서 관련
+                            if 'tax' in sales_item_lower or '세금' in sales_item_lower or '역발행' in sales_item_lower:
+                                service_files_to_load.append('tax_service_info.txt')
+                            
+                            # 지급대행 관련
+                            if 'payout' in sales_item_lower or '지급' in sales_item_lower:
+                                service_files_to_load.append('payout_service_info.txt')
+                            
+                            # 파트너정산 관련
+                            if 'partner' in sales_item_lower or '파트너' in sales_item_lower or 'prism' in sales_item_lower:
+                                service_files_to_load.append('partner_service_info.txt')
+                            
+                            # 기본값: 서비스가 특정되지 않으면 OPI + Recon 로드
+                            if not service_files_to_load:
+                                service_files_to_load = ['opi_service_info.txt', 'recon_service_info.txt']
+                            
+                            # 파일 로드
+                            loaded_docs = []
+                            for filename in service_files_to_load:
+                                filepath = os.path.join(service_docs_dir, filename)
+                                if os.path.exists(filepath):
+                                    with open(filepath, 'r', encoding='utf-8') as f:
+                                        loaded_docs.append(f.read())
+                                    logger.info(f"✅ 서비스 소개서 로드: {filename}")
+                            
+                            if loaded_docs:
+                                portone_official_info = f"""
+**포트원 서비스 소개서 공식 정보 (검증된 데이터 - sales_item: {sales_item or 'all'}):**
+
+{"".join(loaded_docs)}
 """
+                            else:
+                                logger.warning("⚠️ 서비스 소개서 파일을 찾을 수 없음")
+                                
+                        except Exception as e:
+                            logger.warning(f"⚠️ 서비스 소개서 로드 실패: {e}")
                         
                         context_for_verification = csv_data_context + "\n\n" + portone_official_info + "\n\n" + research_summary
                         
