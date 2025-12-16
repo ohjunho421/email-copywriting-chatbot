@@ -4583,9 +4583,9 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 }
                                 verified_variations[service_key] = hallucination_email
                         
-                        # 🔄 환각 감지된 이메일 재생성 시도 (비활성화)
-                        # 재생성 로직이 안정화될 때까지 비활성화
-                        MAX_RETRY = 0  # 재생성 비활성화
+                        # 🔄 환각 감지된 이메일 재생성 시도 (활성화)
+                        # 문제부분과 수정제안을 반영하여 재생성 후 재검증
+                        MAX_RETRY = 2  # 최대 2회 재시도
                         regeneration_log = []
                         
                         # 환각 감지된 이메일별 문제/수정제안 저장
@@ -4664,6 +4664,9 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                     
                                     # JSON 추출 (마크다운 코드블록 등에서)
                                     response_text = retry_response.text
+                                    logger.info(f"🔍 재생성 응답 길이: {len(response_text) if response_text else 0}")
+                                    logger.info(f"🔍 재생성 응답 시작 100자: {response_text[:100] if response_text else 'None'}")
+                                    
                                     if not response_text or not response_text.strip():
                                         raise ValueError("빈 응답")
                                     
@@ -4672,12 +4675,18 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                     json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', response_text)
                                     if json_match:
                                         response_text = json_match.group(1).strip()
+                                        logger.info(f"✅ 마크다운 코드블록에서 JSON 추출")
                                     
                                     # { 로 시작하는 JSON 찾기
                                     if not response_text.startswith('{'):
                                         brace_match = re.search(r'\{[\s\S]*\}', response_text)
                                         if brace_match:
                                             response_text = brace_match.group(0)
+                                            logger.info(f"✅ 중괄호 패턴에서 JSON 추출")
+                                    
+                                    # JSON 정리 (후행 쉼표 등)
+                                    response_text = re.sub(r',\s*}', '}', response_text)
+                                    response_text = re.sub(r',\s*]', ']', response_text)
                                     
                                     retry_variations_raw = json.loads(response_text)
                                     
