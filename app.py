@@ -4662,7 +4662,24 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                     
                                     retry_response = RetryResponseWrapper(retry_response_text)
                                     
-                                    retry_variations_raw = json.loads(retry_response.text)
+                                    # JSON 추출 (마크다운 코드블록 등에서)
+                                    response_text = retry_response.text
+                                    if not response_text or not response_text.strip():
+                                        raise ValueError("빈 응답")
+                                    
+                                    # 마크다운 코드블록에서 JSON 추출
+                                    import re
+                                    json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', response_text)
+                                    if json_match:
+                                        response_text = json_match.group(1).strip()
+                                    
+                                    # { 로 시작하는 JSON 찾기
+                                    if not response_text.startswith('{'):
+                                        brace_match = re.search(r'\{[\s\S]*\}', response_text)
+                                        if brace_match:
+                                            response_text = brace_match.group(0)
+                                    
+                                    retry_variations_raw = json.loads(response_text)
                                     
                                     # 재생성된 이메일 포맷팅
                                     retry_formatted = {}
@@ -4747,7 +4764,21 @@ JSON 형식으로 출력하세요.
                                         }
                                     )
                                     
-                                    conservative_variations = json.loads(conservative_response_text)
+                                    # JSON 추출 (마크다운 코드블록 등에서)
+                                    if not conservative_response_text or not conservative_response_text.strip():
+                                        raise ValueError("빈 응답")
+                                    
+                                    conservative_text = conservative_response_text
+                                    json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', conservative_text)
+                                    if json_match:
+                                        conservative_text = json_match.group(1).strip()
+                                    
+                                    if not conservative_text.startswith('{'):
+                                        brace_match = re.search(r'\{[\s\S]*\}', conservative_text)
+                                        if brace_match:
+                                            conservative_text = brace_match.group(0)
+                                    
+                                    conservative_variations = json.loads(conservative_text)
                                     
                                     # 보수적 버전을 검증 없이 추가 (이미 충분히 보수적으로 생성됨)
                                     for service_key in hallucinated_services.copy():
