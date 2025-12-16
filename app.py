@@ -4468,62 +4468,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                             if key not in ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사', '사용PG', 'PG'] and value and str(value).strip():
                                 csv_data_context += f"- {key}: {value}\n"
                         
-                        # 포트원 서비스 소개서 공식 정보 (sales_item에 따라 해당 서비스만 로드)
-                        portone_official_info = ""
-                        try:
-                            import os
-                            service_docs_dir = os.path.join(os.path.dirname(__file__), 'service_docs')
-                            
-                            # sales_item에서 서비스 타입 결정
-                            service_files_to_load = []
-                            sales_item_lower = sales_item.lower() if sales_item else ''
-                            
-                            # OPI 관련
-                            if 'opi' in sales_item_lower or any('opi' in s for s in services_to_generate):
-                                service_files_to_load.append('opi_service_info.txt')
-                            
-                            # 재무자동화/Recon 관련
-                            if 'recon' in sales_item_lower or '재무' in sales_item_lower or any('finance' in s for s in services_to_generate):
-                                service_files_to_load.append('recon_service_info.txt')
-                            
-                            # 세금계산서 관련
-                            if 'tax' in sales_item_lower or '세금' in sales_item_lower or '역발행' in sales_item_lower:
-                                service_files_to_load.append('tax_service_info.txt')
-                            
-                            # 지급대행 관련
-                            if 'payout' in sales_item_lower or '지급' in sales_item_lower:
-                                service_files_to_load.append('payout_service_info.txt')
-                            
-                            # 파트너정산 관련
-                            if 'partner' in sales_item_lower or '파트너' in sales_item_lower or 'prism' in sales_item_lower:
-                                service_files_to_load.append('partner_service_info.txt')
-                            
-                            # 기본값: 서비스가 특정되지 않으면 OPI + Recon 로드
-                            if not service_files_to_load:
-                                service_files_to_load = ['opi_service_info.txt', 'recon_service_info.txt']
-                            
-                            # 파일 로드
-                            loaded_docs = []
-                            for filename in service_files_to_load:
-                                filepath = os.path.join(service_docs_dir, filename)
-                                if os.path.exists(filepath):
-                                    with open(filepath, 'r', encoding='utf-8') as f:
-                                        loaded_docs.append(f.read())
-                                    logger.info(f"✅ 서비스 소개서 로드: {filename}")
-                            
-                            if loaded_docs:
-                                portone_official_info = f"""
-**포트원 서비스 소개서 공식 정보 (검증된 데이터 - sales_item: {sales_item or 'all'}):**
-
-{"".join(loaded_docs)}
-"""
-                            else:
-                                logger.warning("⚠️ 서비스 소개서 파일을 찾을 수 없음")
-                                
-                        except Exception as e:
-                            logger.warning(f"⚠️ 서비스 소개서 로드 실패: {e}")
-                        
-                        context_for_verification = csv_data_context + "\n\n" + portone_official_info + "\n\n" + research_summary
+                        context_for_verification = csv_data_context + "\n\n" + research_summary
                         
                         # 배치 검증: 모든 이메일 동시 검증
                         emails_to_verify = {}
@@ -4583,72 +4528,33 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 }
                                 verified_variations[service_key] = hallucination_email
                         
-                        # 🔄 환각 감지된 이메일 재생성 시도 (활성화)
-                        # 문제부분과 수정제안을 반영하여 재생성 후 재검증
-                        MAX_RETRY = 2  # 최대 2회 재시도
+                        # 🔄 환각 감지된 이메일 재생성 시도 (비활성화 - 사용자가 직접 확인)
+                        # 사용자가 원본을 보고 직접 판단할 수 있도록 재생성 로직 비활성화
+                        MAX_RETRY = 0  # 재생성 비활성화
                         regeneration_log = []
                         
-                        # 환각 감지된 이메일별 문제/수정제안 저장
-                        hallucination_feedback = {}
-                        for service_key, result in verification_results.items():
-                            if result['groundedness'] == 'notGrounded':
-                                hallucination_feedback[service_key] = {
-                                    'reason': result.get('reason', ''),
-                                    'problem_part': result.get('problem_part', ''),
-                                    'fix_suggestion': result.get('fix_suggestion', ''),
-                                    'original_email': formatted_variations[service_key]
-                                }
-                        
-                        if hallucinated_services and len(hallucinated_services) <= 4:
+                        if False and hallucinated_services and len(hallucinated_services) <= 4:  # 재생성 비활성화
                             logger.info(f"🔄 환각 감지된 {len(hallucinated_services)}개 이메일 재생성 시작...")
                             
                             for retry_attempt in range(MAX_RETRY):
-                                if not hallucinated_services:
-                                    break
-                                    
                                 logger.info(f"  재시도 {retry_attempt + 1}/{MAX_RETRY}...")
                                 
                                 # 재생성할 서비스만 선택
                                 retry_services = hallucinated_services.copy()
                                 
-                                # 문제부분과 수정제안을 포함한 상세 프롬프트
-                                fix_instructions = ""
-                                for svc in retry_services:
-                                    if svc in hallucination_feedback:
-                                        fb = hallucination_feedback[svc]
-                                        fix_instructions += f"""
-**[{svc}] 수정 필요:**
-- 문제부분: {fb['problem_part']}
-- 수정제안: {fb['fix_suggestion']}
-- 이유: {fb['reason']}
-"""
-                                
+                                # 더 엄격한 프롬프트로 재생성
                                 strict_prompt_addition = f"""
+                                
+**⚠️ 환각 방지 최우선 지침 (재생성) ⚠️**
+이전 생성에서 참조 문서에 없는 정보를 사용하여 환각이 감지되었습니다.
+다음 규칙을 엄격히 준수하세요:
 
-**⚠️ 환각 수정 지침 (재생성 {retry_attempt + 1}회차) ⚠️**
-이전 생성에서 환각이 감지되었습니다. 아래 수정 지침을 반드시 따르세요:
-
-{fix_instructions}
-
-**수정 규칙:**
-1. 위에서 지적된 문제부분만 수정하세요
-2. 수정제안을 참고하여 검증된 정보만 사용하세요
-3. 기존 이메일의 형식(서론, 본문, CTA, 서명)은 그대로 유지하세요
-4. 확실하지 않은 구체적 수치는 제거하고 일반적 표현 사용
+1. **참조 문서(Perplexity 조사 결과)에 명시된 정보만 사용**
+2. **추측하거나 일반적인 정보로 채우지 마세요**
+3. **구체적 수치나 사실은 참조 문서에 있을 때만 언급**
+4. **확실하지 않으면 일반적인 Pain Point 중심으로만 작성**
 
 재생성 대상: {', '.join(retry_services)}
-
-**⚠️ 반드시 JSON 형식으로 응답:**
-```json
-{{
-  "variations": {{
-    "서비스키": {{
-      "subject": "이메일 제목",
-      "body": "이메일 본문 (기존 형식 유지)"
-    }}
-  }}
-}}
-```
 """
                                 
                                 # 재생성 요청 (자동 fallback 적용)
@@ -4674,33 +4580,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                     
                                     retry_response = RetryResponseWrapper(retry_response_text)
                                     
-                                    # JSON 추출 (마크다운 코드블록 등에서)
-                                    response_text = retry_response.text
-                                    logger.info(f"🔍 재생성 응답 길이: {len(response_text) if response_text else 0}")
-                                    logger.info(f"🔍 재생성 응답 시작 100자: {response_text[:100] if response_text else 'None'}")
-                                    
-                                    if not response_text or not response_text.strip():
-                                        raise ValueError("빈 응답")
-                                    
-                                    # 마크다운 코드블록에서 JSON 추출
-                                    import re
-                                    json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', response_text)
-                                    if json_match:
-                                        response_text = json_match.group(1).strip()
-                                        logger.info(f"✅ 마크다운 코드블록에서 JSON 추출")
-                                    
-                                    # { 로 시작하는 JSON 찾기
-                                    if not response_text.startswith('{'):
-                                        brace_match = re.search(r'\{[\s\S]*\}', response_text)
-                                        if brace_match:
-                                            response_text = brace_match.group(0)
-                                            logger.info(f"✅ 중괄호 패턴에서 JSON 추출")
-                                    
-                                    # JSON 정리 (후행 쉼표 등)
-                                    response_text = re.sub(r',\s*}', '}', response_text)
-                                    response_text = re.sub(r',\s*]', ']', response_text)
-                                    
-                                    retry_variations_raw = json.loads(response_text)
+                                    retry_variations_raw = json.loads(retry_response.text)
                                     
                                     # 재생성된 이메일 포맷팅
                                     retry_formatted = {}
@@ -4785,21 +4665,7 @@ JSON 형식으로 출력하세요.
                                         }
                                     )
                                     
-                                    # JSON 추출 (마크다운 코드블록 등에서)
-                                    if not conservative_response_text or not conservative_response_text.strip():
-                                        raise ValueError("빈 응답")
-                                    
-                                    conservative_text = conservative_response_text
-                                    json_match = re.search(r'```(?:json)?\s*([\s\S]*?)```', conservative_text)
-                                    if json_match:
-                                        conservative_text = json_match.group(1).strip()
-                                    
-                                    if not conservative_text.startswith('{'):
-                                        brace_match = re.search(r'\{[\s\S]*\}', conservative_text)
-                                        if brace_match:
-                                            conservative_text = brace_match.group(0)
-                                    
-                                    conservative_variations = json.loads(conservative_text)
+                                    conservative_variations = json.loads(conservative_response_text)
                                     
                                     # 보수적 버전을 검증 없이 추가 (이미 충분히 보수적으로 생성됨)
                                     for service_key in hallucinated_services.copy():
