@@ -4468,7 +4468,20 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                             if key not in ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사', '사용PG', 'PG'] and value and str(value).strip():
                                 csv_data_context += f"- {key}: {value}\n"
                         
-                        context_for_verification = csv_data_context + "\n\n" + research_summary
+                        # 포트원 서비스 소개서 공식 정보 (검증된 데이터)
+                        portone_official_info = """
+**포트원 서비스 소개서 공식 정보 (검증된 데이터):**
+- 국내 3,000여개 기업이 포트원으로 결제 인프라 구축
+- 국내외 50여개 PG사와 파트너십
+- 결제 연동 개발 기간 최대 80% 단축
+- PG 수수료 평균 0.2~0.5%p 절감
+- 정산 업무 시간 90% 절감
+- 세금계산서 자동 발행으로 수작업 85% 감소
+- 매출/정산 데이터 실시간 통합 관리
+- 다양한 결제수단 지원 (신용카드, 간편결제, 계좌이체, 가상계좌 등)
+"""
+                        
+                        context_for_verification = csv_data_context + "\n\n" + portone_official_info + "\n\n" + research_summary
                         
                         # 배치 검증: 모든 이메일 동시 검증
                         emails_to_verify = {}
