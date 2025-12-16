@@ -1898,7 +1898,7 @@ ${variation.body}
                 type: 'OPI - 전문적 톤',
                 product: 'One Payment Infra',
                 subject: `${companyName}의 결제 인프라 혁신 제안`,
-                body: `${personalizedGreeting}\n\n귀사의 비즈니스 성장에 깊은 인상을 받았습니다.\n\nPortOne의 One Payment Infra로 85% 리소스 절감과 2주 내 구축이 가능합니다.\n\n15분 통화로 자세히 설명드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
+                body: `${personalizedGreeting}\n\n${companyName}의 비즈니스 성장에 깊은 인상을 받았습니다.\n\nPortOne의 통합 결제 인프라로 85% 리소스 절감과 2주 내 구축이 가능합니다.\n\n15분 통화로 자세히 설명드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 8.0
             },
             {
@@ -1912,7 +1912,7 @@ ${variation.body}
                 type: '재무자동화 - 전문적 톤',
                 product: '국내커머스채널 재무자동화 솔루션',
                 subject: `${companyName}의 재무마감 자동화 제안`,
-                body: `${personalizedGreeting}\n\n귀사의 다채널 커머스 운영에 깊은 인상을 받았습니다.\n\n현재 네이버스마트스토어, 카카오스타일, 카페24 등 채널별 재무마감에 월 수십 시간을 소비하고 계신가요? PortOne의 재무자동화 솔루션으로 90% 이상 단축하고 100% 데이터 정합성을 확보할 수 있습니다.\n\n브랜드별/채널별 매출보고서와 부가세신고자료까지 자동화로 제공해드립니다.\n\n감사합니다.\nPortOne 팀`,
+                body: `${personalizedGreeting}\n\n${companyName}의 다채널 커머스 운영에 깊은 인상을 받았습니다.\n\n현재 네이버스마트스토어, 카카오스타일, 카페24 등 채널별 재무마감에 월 수십 시간을 소비하고 계신가요? PortOne의 재무자동화 솔루션으로 90% 이상 단축하고 100% 데이터 정합성을 확보할 수 있습니다.\n\n브랜드별/채널별 매출보고서와 부가세신고자료까지 자동화로 제공해드립니다.\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 8.0
             },
             {
@@ -1926,7 +1926,7 @@ ${variation.body}
                 type: 'SaaS 스마트빌링 - 전문적 톤',
                 product: '스마트빌링 솔루션',
                 subject: `${companyName}의 구독 결제 시스템 혁신 제안`,
-                body: `${personalizedGreeting}\n\n귀사의 SaaS 비즈니스에서 구독 결제 시스템으로 고민이 많으실 것 같습니다.\n\n현재 국내 PG의 구독 결제 한계와 Stripe 사용 시 발생하는 규제/환전 이슈로 어려움을 겪고 계시지 않으신가요?\n\nPortOne의 스마트빌링 솔루션으로:\n✅ 국내 구독 결제의 모든 한계 해결\n✅ Stripe 대안으로 규제 이슈 완전 회피\n✅ 던닝 관리 및 실패율 최소화 자동화\n✅ 구독 변경/취소 프로세스 완전 자동화\n\n안정적인 구독 비즈니스 운영을 위한 맞춤 컨설팅을 제공해드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
+                body: `${personalizedGreeting}\n\n${companyName}의 SaaS 비즈니스에서 구독 결제 시스템으로 고민이 많으실 것 같습니다.\n\n현재 국내 PG의 구독 결제 한계와 Stripe 사용 시 발생하는 규제/환전 이슈로 어려움을 겪고 계시지 않으신가요?\n\nPortOne의 스마트빌링 솔루션으로:\n✅ 국내 구독 결제의 모든 한계 해결\n✅ Stripe 대안으로 규제 이슈 완전 회피\n✅ 던닝 관리 및 실패율 최소화 자동화\n✅ 구독 변경/취소 프로세스 완전 자동화\n\n안정적인 구독 비즈니스 운영을 위한 맞춤 컨설팅을 제공해드리겠습니다.\n\n감사합니다.\nPortOne 팀`,
                 personalizationScore: 8.5
             },
             {

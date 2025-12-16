@@ -155,6 +155,7 @@ with app.app_context():
 # API 키 설정 (환경변수에서 가져오기)
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY', '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')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 
 # Gemini API 설정 (타임아웃 180초)
 if GEMINI_API_KEY:
@@ -164,24 +165,113 @@ if GEMINI_API_KEY:
         transport='rest'  # REST 전송 사용
     )
 
+# Claude API Rate Limiter
+_claude_last_call_time = 0
+_claude_min_interval = 1.0  # 최소 1초 간격
+
+def call_claude_sonnet(prompt, timeout=180, max_retries=2):
+    """
+    Claude Sonnet 4.5 API 호출 (Anthropic API 직접 사용)
+    """
+    global _claude_last_call_time
+
+    if not ANTHROPIC_API_KEY or ANTHROPIC_API_KEY == '여기에_Anthropic_API_키_입력':
+        raise Exception("ANTHROPIC_API_KEY가 설정되지 않았습니다")
+
+    # Rate Limiting: 최소 간격 유지
+    elapsed = time.time() - _claude_last_call_time
+    if elapsed < _claude_min_interval:
+        wait_time = _claude_min_interval - elapsed
+        logger.debug(f"⏳ Claude Rate limiting: {wait_time:.1f}초 대기")
+        time.sleep(wait_time)
+
+    for retry_count in range(max_retries):
+        try:
+            _claude_last_call_time = time.time()
+
+            api_url = "https://api.anthropic.com/v1/messages"
+            headers = {
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+
+            payload = {
+                "model": "claude-sonnet-4-20250514",  # Claude Sonnet 4.5 최신 모델
+                "max_tokens": 16000,
+                "temperature": 0.7,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            }
+
+            logger.info(f"🤖 Claude Sonnet 4.5 API 호출 시작 (시도 {retry_count + 1}/{max_retries})")
+            response = requests.post(api_url, headers=headers, json=payload, timeout=timeout)
+
+            if response.status_code == 200:
+                result = response.json()
+                if 'content' in result and len(result['content']) > 0:
+                    content = result['content'][0]['text']
+                    logger.info(f"✅ Claude Sonnet 4.5 API 호출 성공 (시도 {retry_count + 1}/{max_retries})")
+                    return content
+                else:
+                    raise Exception("Claude API 응답에 content가 없습니다")
+            elif response.status_code == 429:
+                logger.warning(f"⚠️ Claude 할당량 초과 (429) - 재시도 중...")
+                if retry_count < max_retries - 1:
+                    time.sleep(5)
+                    continue
+                else:
+                    raise Exception("Claude API 할당량 초과")
+            else:
+                raise Exception(f"Claude API 오류: {response.status_code} - {response.text}")
+
+        except requests.exceptions.Timeout:
+            logger.warning(f"⏱️ Claude API 타임아웃 ({retry_count + 1}/{max_retries}) - 재시도 중...")
+            if retry_count >= max_retries - 1:
+                raise Exception("Claude API 타임아웃")
+        except Exception as e:
+            if retry_count >= max_retries - 1:
+                raise
+            logger.warning(f"⚠️ Claude API 오류 발생: {str(e)} - 재시도 중...")
+            time.sleep(2)
+
+    raise Exception("Claude API 호출 실패")
+
 # Gemini API Rate Limiter (RPM 제한 대응)
 _gemini_last_call_time = 0
 _gemini_min_interval = 3.0  # 최소 3초 간격 (분당 최대 20회)
 
 def call_gemini_with_fallback(prompt, timeout=180, max_retries=3, generation_config=None):
     """
-    Gemini API 호출 with 자동 fallback + Rate Limiting
-    gemini-3-pro-preview → gemini-2.5-pro → gemini-2.5-flash (높은 할당량)
+    AI API 호출 with 자동 fallback + Rate Limiting
+    Claude Sonnet 4.5 (우선) → gemini-3-pro-preview → gemini-2.5-pro → gemini-2.5-flash
     """
     global _gemini_last_call_time
-    
+
+    # 🆕 1순위: Claude Sonnet 4.5 시도
+    if ANTHROPIC_API_KEY and ANTHROPIC_API_KEY != '여기에_Anthropic_API_키_입력':
+        try:
+            logger.info("🎯 [1순위] Claude Sonnet 4.5 시도")
+            result = call_claude_sonnet(prompt, timeout=timeout, max_retries=2)
+            return result
+        except Exception as e:
+            logger.warning(f"⚠️ Claude Sonnet 4.5 실패: {str(e)}")
+            logger.info("→ Gemini로 fallback")
+    else:
+        logger.info("⚠️ ANTHROPIC_API_KEY가 설정되지 않아 Gemini로 진행")
+
+    # 2순위: Gemini 시도
     # Rate Limiting: 최소 간격 유지
     elapsed = time.time() - _gemini_last_call_time
     if elapsed < _gemini_min_interval:
         wait_time = _gemini_min_interval - elapsed
         logger.debug(f"⏳ Rate limiting: {wait_time:.1f}초 대기")
         time.sleep(wait_time)
-    
+
     models = ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash']
     last_error = None
     
@@ -1189,13 +1279,13 @@ class CompanyResearcher:
             sales_lower = sales_point.lower()
             
             if any(keyword in sales_lower for keyword in ['결제', '페이먼트', '정산', 'payment']):
-                return f"{company_name}의 '{sales_point}' 역량과 PortOne의 결제 인프라 통합 솔루션 간 높은 시너지 기대. 기존 강점을 더욱 확장할 수 있는 기회"
+                return f"{company_name}의 '{sales_point}' 역량과 저희 결제 인프라 통합 솔루션 간 높은 시너지 기대. 기존 강점을 더욱 확장할 수 있는 기회"
             elif any(keyword in sales_lower for keyword in ['데이터', '분석', '인사이트', 'analytics']):
-                return f"{company_name}의 '{sales_point}' 경험을 PortOne의 실시간 결제 데이터 분석과 결합하여 더 정교한 비즈니스 인텔리전스 구현 가능"
+                return f"{company_name}의 '{sales_point}' 경험을 저희 실시간 결제 데이터 분석과 결합하여 더 정교한 비즈니스 인텔리전스 구현 가능"
             elif any(keyword in sales_lower for keyword in ['자동화', 'automation', '효율', 'efficiency']):
-                return f"{company_name}의 '{sales_point}' 노하우와 PortOne의 재무 자동화 솔루션이 결합되어 운영 효율성 극대화 가능"
+                return f"{company_name}의 '{sales_point}' 노하우와 저희 재무 자동화 솔루션이 결합되어 운영 효율성 극대화 가능"
             else:
-                return f"{company_name}의 '{sales_point}' 핵심 역량을 PortOne의 결제 인프라로 더욱 강화하여 경쟁 우위 확보 가능"
+                return f"{company_name}의 '{sales_point}' 핵심 역량을 저희 결제 인프라로 더욱 강화하여 경쟁 우위 확보 가능"
         except Exception as e:
             return None
     
@@ -1203,13 +1293,13 @@ class CompanyResearcher:
         """규모별 특화 전략"""
         try:
             scale_strategies = {
-                '스타트업': f"{company_name} 같은 스타트업에게는 PortOne의 빠른 도입(2주), 낮은 초기 비용, 100만원 상당 무료 컨설팅이 가장 적합. 개발 리소스 85% 절약으로 핵심 제품 개발에 집중 가능",
-                '중견기업': f"{company_name} 같은 중견기업에게는 PortOne의 확장 가능한 아키텍처와 다중 PG 통합 관리가 핵심 가치. 성장에 따른 결제량 증가와 복잡한 정산 요구사항 효과적으로 대응",
-                '대기업': f"{company_name} 같은 대기업에게는 PortOne의 엔터프라이즈 기능과 고도화된 분석 도구가 중요. 대용량 트래픽 처리, 복잡한 조직 구조 지원, 고급 보안 기능 제공",
-                '중소기업': f"{company_name} 같은 중소기업에게는 PortOne의 간편한 설정과 직관적 관리 도구가 최적. 복잡한 IT 지식 없이도 전문적인 결제 시스템 운영 가능"
+                '스타트업': f"{company_name} 같은 스타트업에게는 저희 빠른 도입(2주), 낮은 초기 비용, 100만원 상당 무료 컨설팅이 가장 적합. 개발 리소스 85% 절약으로 핵심 제품 개발에 집중 가능",
+                '중견기업': f"{company_name} 같은 중견기업에게는 저희 확장 가능한 아키텍처와 다중 PG 통합 관리가 핵심 가치. 성장에 따른 결제량 증가와 복잡한 정산 요구사항 효과적으로 대응",
+                '대기업': f"{company_name} 같은 대기업에게는 저희 엔터프라이즈 기능과 고도화된 분석 도구가 중요. 대용량 트래픽 처리, 복잡한 조직 구조 지원, 고급 보안 기능 제공",
+                '중소기업': f"{company_name} 같은 중소기업에게는 저희 간편한 설정과 직관적 관리 도구가 최적. 복잡한 IT 지식 없이도 전문적인 결제 시스템 운영 가능"
             }
             
-            return scale_strategies.get(company_scale, f"{company_name}의 {company_scale} 특성에 최적화된 PortOne 솔루션 구성으로 최대 효과 달성")
+            return scale_strategies.get(company_scale, f"{company_name}의 {company_scale} 특성에 최적화된 저희 솔루션 구성으로 최대 효과 달성")
         except Exception as e:
             return None
     
@@ -1855,8 +1945,9 @@ class CompanyResearcher:
             # 1. 기본 텍스트 정리
             content = raw_content.strip()
             
-            # 2. 과도한 공백 및 줄바꿈 정리
+            # 2. 과도한 공백 및 줄바꿈 정리 강화
             content = re.sub(r'\n{3,}', '\n\n', content)  # 3개 이상 연속 줄바꿈을 2개로
+            content = re.sub(r'\n{2,}', '\n', content)    # 2개 이상 줄바꿈을 1개로 제한
             content = re.sub(r'[ \t]{2,}', ' ', content)   # 2개 이상 연속 스페이스를 1개로
             
             # 3. 섹션 헤더 포맷팅 개선
@@ -2661,16 +2752,17 @@ PG사별 정산 관리 업무도 콘솔에서 통합 관리하여 월 수십 시
 - 차지백 리스크 → 크립토 결제로 No Chargeback + D+1 정산
 
 **CRITICAL: 반드시 지켜야 할 패턴:**
-- '귀사'라는 단어 대신 반드시 '{company_name}' 회사명을 직접 사용하세요.
-- 문단 구분을 위해 반드시 줄바꿈 문자(\n)를 사용해주세요.
+- '귀사', '당사' 같은 대명사 대신 반드시 '{company_name}' 회사명을 직접 사용하세요.
+- 문단 구분을 위해 적절한 줄바꿈 사용 - 문단당 2-3문장으로 제한하고 과도한 줄바꿈 금지
 - 상황별 맞춤 접근법 사용 (위 템플릿들 참고)
 - YouTube 영상 링크 필수 포함
 - "다음 주 중" 일정 요청으로 CTA 마무리
 - 구체적 수치와 혜택 언급 (85% 절감, 90% 자동화 등)
 - **정량적 수치와 핵심 가치 제안은 반드시 볼드 처리하세요 (예: **85% 리소스 절감**, **2주 내 구축**, **90% 자동화**, **15% 향상** 등)**
 - 자연스러운 한국어 문체 유지
-- 한국어 자연스러운 줄바꿈을 위해 문단은 적절한 길이로 구분하세요
+- **⚠️ 서비스 약어 사용 금지**: 이메일 본문에서 'OPI', 'Recon', 'PS' 같은 약어는 사용하지 말고, '통합 결제 인프라', '재무 자동화 솔루션', '플랫폼 정산 자동화' 등 완전한 서비스명 사용. 'PortOne' 브랜드명은 사용 가능
 - **⚠️ 이메일 본문에서 극단적 표현 금지**: "즉시", "100%", "완벽한", "완벽", "절대", "무조건", "반드시", "필수" 등 과장된 표현은 피하고, 현실적이고 신뢰감 있는 표현 사용 (예: "90% 이상", "빠르게", "높은 정확도로", "대폭", "크게", "효과적으로" 등)
+- **⚠️ 줄바꿈 제한**: 각 문단은 최대 3-4줄을 넘지 않도록 하고, 연속된 줄바꿈은 최대 1개만 사용
 
 
 **명함 정보: 반드시 다음 서명으로 끝내기:**
@@ -2805,11 +2897,14 @@ https://www.portone.io
                 print("📦 전체 내용을 JSON으로 처리")
         
         # 3. 강력한 JSON 정리
-        # 문자열 내부의 줄바꿈을 \\n으로 변환
+        # 문자열 내부의 줄바꿈을 \\n으로 변환 및 과도한 줄바꿈 제거
         def clean_json_string(text):
             # 따옴표로 둘러싸인 문자열을 찾아서 내부 줄바꿈 처리
             def replace_newlines_in_string(match):
                 string_content = match.group(1)
+                # 과도한 줄바꿈 정리 (3개 이상 -> 2개로, 2개 이상 -> 1개로)
+                string_content = re.sub(r'\n{3,}', '\n\n', string_content)
+                string_content = re.sub(r'\n{2,}', '\n', string_content)
                 # 문자열 내부의 실제 줄바꿈을 이스케이프된 형태로 변환
                 string_content = string_content.replace('\n', '\\n')
                 string_content = string_content.replace('\r', '\\r')
@@ -2881,7 +2976,7 @@ https://www.portone.io
                 "opi_professional": {
                     "product": "One Payment Infra",
                     "subject": f"[PortOne] {company_name} 담당자님께 전달 부탁드립니다",
-                    "body": f"안녕하세요 {company_name} 담당자님,\n\n귀사의 비즈니스 성장에 깊은 인상을 받았습니다.\n\nPortOne의 One Payment Infra로 85% 리소스 절감과 2주 내 구축이 가능합니다. 20여 개 PG사를 하나로 통합하여 관리 효율성을 극대화하고, 스마트 라우팅으로 결제 성공률을 15% 향상시킬 수 있습니다.\n\n15분 통화로 자세한 내용을 설명드리고 싶습니다.\n\n감사합니다.\nPortOne 팀",
+                    "body": f"안녕하세요 {company_name} 담당자님,\n\n{company_name}의 비즈니스 성장에 깊은 인상을 받았습니다.\n\nPortOne의 통합 결제 인프라로 85% 리소스 절감과 2주 내 구축이 가능합니다. 20여 개 PG사를 하나로 통합하여 관리 효율성을 극대화하고, 스마트 라우팅으로 결제 성공률을 15% 향상시킬 수 있습니다.\n\n15분 통화로 자세한 내용을 설명드리고 싶습니다.\n\n감사합니다.\nPortOne 팀",
                     "cta": "15분 통화 일정 잡기",
                     "tone": "전문적이고 신뢰감 있는 톤",
                     "personalization_score": 8
@@ -2897,7 +2992,7 @@ https://www.portone.io
                 "finance_professional": {
                     "product": "국내커머스채널 재무자동화 솔루션",
                     "subject": f"[PortOne] {company_name} 담당자님께 전달 부탁드립니다",
-                    "body": f"안녕하세요 {company_name} 담당자님,\n\n귀사의 다채널 커머스 운영에 깊은 인상을 받았습니다.\n\n현재 네이버스마트스토어, 카카오스타일, 카페24 등 채널별 재무마감에 월 수십 시간을 소비하고 계신가요? PortOne의 재무자동화 솔루션으로 90% 이상 단축하고 100% 데이터 정합성을 확보할 수 있습니다.\n\n브랜드별/채널별 매출보고서와 부가세신고자료까지 자동화로 제공해드립니다.\n\n감사합니다.\nPortOne 팀",
+                    "body": f"안녕하세요 {company_name} 담당자님,\n\n{company_name}의 다채널 커머스 운영에 깊은 인상을 받았습니다.\n\n현재 네이버스마트스토어, 카카오스타일, 카페24 등 채널별 재무마감에 월 수십 시간을 소비하고 계신가요? PortOne의 재무자동화 솔루션으로 90% 이상 단축하고 100% 데이터 정합성을 확보할 수 있습니다.\n\n브랜드별/채널별 매출보고서와 부가세신고자료까지 자동화로 제공해드립니다.\n\n감사합니다.\nPortOne 팀",
                     "cta": "미팅 요청하기",
                     "tone": "전문적이고 신뢰감 있는 톤",
                     "personalization_score": 8
@@ -2936,7 +3031,7 @@ https://www.portone.io
             elements.append(f"- 인사말에 '{position_title}' 호칭 사용 ('{ceo_name}' 기반)")
         
         if website:
-            elements.append(f"- 웹사이트({website})를 통해 귀사의 비즈니스 방향성을 확인했습니다")
+            elements.append(f"- 웹사이트({website})를 통해 {company_name}의 비즈니스 방향성을 확인했습니다")
             elements.append(f"- '우연히 {company_name}의 온라인 스토어를 방문했다가, 깊은 인상을 받았습니다' 접근 가능")
         
         # 조사 데이터에서 개인화 요소 추출
@@ -3715,23 +3810,23 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             # 🆕 복수 서비스 통합 문안
             service_names_kr = []
             if 'opi' in detected_services:
-                service_names_kr.append('OPI(해외결제)')
+                service_names_kr.append('통합 결제 인프라')
             if 'recon' in detected_services:
-                service_names_kr.append('Recon(재무자동화)')
+                service_names_kr.append('재무자동화 솔루션')
             if 'prism' in detected_services:
-                service_names_kr.append('Prism(오픈마켓 정산)')
+                service_names_kr.append('멀티 오픈마켓 정산 통합')
             if 'ps' in detected_services:
-                service_names_kr.append('PS(플랫폼 정산)')
-            
+                service_names_kr.append('플랫폼 정산 자동화')
+
             service_focus = f"{' + '.join(service_names_kr)} 통합 솔루션을 자연스럽게 연결하여 제안하는 2개의"
             logger.info(f"📧 복수 서비스 문안 초점: {service_focus}")
         elif len(services_to_generate) == 2:
             if 'opi' in services_to_generate[0]:
-                service_focus = "One Payment Infra (OPI) 서비스에 집중한 2개의"
+                service_focus = "통합 결제 인프라 서비스에 집중한 2개의"
             elif 'prism' in services_to_generate[0]:
-                service_focus = "멀티 오픈마켓 정산 통합 솔루션 (Prism)에 집중한 2개의"
+                service_focus = "멀티 오픈마켓 정산 통합 솔루션에 집중한 2개의"
             elif 'ps' in services_to_generate[0]:
-                service_focus = "플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행)에 집중한 2개의"
+                service_focus = "플랫폼 정산 자동화 솔루션에 집중한 2개의"
             else:
                 service_focus = "재무자동화 솔루션에 집중한 2개의"
         else:
@@ -3960,13 +4055,14 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
 
 **이메일 유형 (요청된 서비스에 따라 선택적 생성):**
 
-1. **One Payment Infra - 전문적 톤**: 
+1. **One Payment Infra - 전문적 톤**:
 {opi_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'OPI'라는 약어는 사용하지 말고, '통합 결제 인프라' 또는 완전한 서비스명 사용
    - **필수**: 뉴스 내용을 직접 인용. 예: "최근 기사에서 '{company_name}가 XX억원 투자 유치'라고 봤습니다"
    - 구체적 뉴스 → 결제 시스템 확장 필요성 자연스럽게 연결
-   - **OPI 참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 수치/기능만 사용하세요
+   - **참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 수치/기능만 사용하세요
    - **결제 수단 언급 시**: 신용카드, 간편결제, 해외는 각국의 간편결제 수단 등 (100+ 결제 수단) ❌ **계좌이체는 언급 금지**
-   - **🎯 OPI 핵심 가치 제안 (최우선 강조 - 반드시 포함)**:
+   - **🎯 핵심 가치 제안 (최우선 강조 - 반드시 포함)**:
      * **💰 PG 수수료 절감 (15-30%)**: 3000개 고객사 규모와 PG사들과의 파트너십을 통해 최적의 수수료를 제공하는 PG사를 제안
      * **🛡️ 스마트 라우팅 = 리스크 매니지먼트**: PG사 장애/오류 발생 시 자동으로 다른 PG로 전환하여 결제 성공률 15% 향상 및 매출 손실 방지
    - **🎯 회사 비즈니스 모델별 추가 기능 제안** (위 핵심 가치 다음에 언급):
@@ -3975,11 +4071,12 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
      * **고거래량 커머스** → 개발 리소스 85% 절감, 2주 내 구축
    - **블렛 포인트 필수 사용**: 핵심 가치부터 블렛으로 제시 (예: PG 수수료 15-30% 절감 → 스마트 라우팅 리스크 관리 → 비즈니스 특화 기능)
    - **구체적 수치 활용**: "이미 국내 3,000여개 기업이 포트원으로..." / "연 12조원 규모의 거래를 안정적으로..."
-   - **블로그 정보 활용**: 위 OPI 참고 정보의 수치/트렌드를 자연스럽게 녹여서 설득력 강화
+   - **블로그 정보 활용**: 위 참고 정보의 수치/트렌드를 자연스럽게 녹여서 설득력 강화
    - **경쟁사가 있다면**: "{competitor_name}도 비슷한 성장 과정에서<br>PortOne으로 결제 수수료를 대폭 절감하고 안정성을 확보했습니다"
 
-2. **One Payment Infra - 호기심 유발형**: 
+2. **One Payment Infra - 호기심 유발형**:
 {opi_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'OPI'라는 약어는 사용하지 말고, '통합 결제 인프라' 또는 완전한 서비스명 사용
    - **필수**: 뉴스를 직접 언급한 질문으로 시작 (초반 1회만). 예: "'{company_name}의 매출 150% 증가' 소식을 봤는데, 결제량 증가는 어떻게 처리하고 계신가요?"
    - 급성장에 따른 결제 시스템 병목 현상 공감 표현
    - **🎯 질문 후 바로 해결책 제시 (설명 형식으로 전환)**:
@@ -3991,30 +4088,32 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
      * **고거래량 커머스** → 개발 리소스를 85% 절감하고 2주 내 구축 가능합니다
    - **블렛 포인트 필수 사용**: 핵심 해결책을 블렛으로 명확하게 제시
    - **구체적 수치 활용**: "이미 국내 3,000여개 기업이..." 같이 구체적 수치로 신뢰도 강화
-   - **블로그 정보 활용**: 위 OPI 참고 정보의 업계 사례를 자연스럽게 인용
+   - **블로그 정보 활용**: 위 참고 정보의 업계 사례를 자연스럽게 인용
    - **경쟁사가 있다면**: "실제로 {competitor_name}도 급성장할 때 이 방식으로 수수료 부담을 해결했습니다" (설명 형식)
    - 마지막에 간단한 CTA: "미팅을 통해 상세히 안내드리겠습니다"
 
-3. **재무자동화 솔루션 (Recon) - 전문적 톤**: 
+3. **재무자동화 솔루션 - 전문적 톤**:
 {recon_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'Recon'이라는 약어는 사용하지 말고, '재무자동화 솔루션' 또는 완전한 서비스명 사용
    - **필수**: 성장/확장 뉴스를 구체적으로 인용. 예: "'{company_name}가 신사업 부문 진출'이라는 소식을 들었습니다"
    - 사업 다각화 → 복잡해지는 재무 관리 자연스럽게 연결
-   - **Recon 참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 기능/채널만 사용하세요
+   - **참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 기능/채널만 사용하세요
    - **🎯 회사 비즈니스 모델 파악 후 맞춤 가치 제안**:
      * **다중 PG 사용** → {pg_count} PG사의 서로 다른 정산 데이터 자동 통합
      * **다채널 운영** → 모든 판매 채널의 재무 데이터 한 곳에서 관리
      * **해외 진출** → 다국가 재무 데이터 실시간 통합 및 ERP 연동
    - **블렛 포인트 필수 사용**: 핵심 기능을 블렛으로 제시 (예: 자동 통합, ERP 연동, 90% 단축)
    - **구체적 수치 활용**: "국내 3,000여개 기업의 재무 데이터를 관리하는..." / "연 12조원 규모 거래의 정산을..."
-   - **블로그 정보 활용**: 위 Recon 참고 정보의 통계/효과를 근거로 제시하며 설득력 강화
+   - **블로그 정보 활용**: 위 참고 정보의 통계/효과를 근거로 제시하며 설득력 강화
    - **경쟁사가 있다면**: "{competitor_name}도 사업 확장 시<br>재무 자동화로 90% 시간 절약했습니다"
 
-4. **재무자동화 솔루션 (Recon) - 호기심 유발형**: 
+4. **재무자동화 솔루션 - 호기심 유발형**:
 {recon_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'Recon'이라는 약어는 사용하지 말고, '재무자동화 솔루션' 또는 완전한 서비스명 사용
    - **필수**: 구체적 뉴스로 시작하는 질문 (초반 1회만). 예: "'{company_name} 해외 진출' 뉴스를 봤는데, 다국가 재무 관리는 어떻게 하실 계획인가요?"
    - 확장에 따른 재무 복잡성 증가 공감 표현
    - **🎯 질문 후 바로 해결책 제시 (설명 형식으로 전환)**:
-     * **다중 PG 사용** → PortOne Recon은 {pg_count} PG사의 서로 다른 정산 데이터를 자동으로 통합합니다
+     * **다중 PG 사용** → PortOne의 재무자동화 솔루션은 {pg_count} PG사의 서로 다른 정산 데이터를 자동으로 통합합니다
      * **다채널 운영** → 모든 판매 채널의 재무 데이터를 한 곳에서 관리하고 ERP 연동으로 **90% 업무를 자동화**합니다
    - **블렛 포인트 필수 사용**: 핵심 해결책을 블렛으로 명확하게 제시
    - **구체적 수치 활용**: "국내 3,000여개 기업이 이미..." 같이 명확한 숫자로 신뢰도 제공
@@ -4022,35 +4121,38 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
    - **경쟁사가 있다면**: "{competitor_name}도 글로벌 진출 시 이 방식으로 재무 마감을 90% 단축했습니다" (설명 형식)
    - 마지막에 간단한 CTA: "미팅을 통해 상세히 안내드리겠습니다"
 
-5. **멀티 오픈마켓 정산 통합 솔루션 (Prism) - 전문적 톤**: 
+5. **멀티 오픈마켓 정산 통합 솔루션 - 전문적 톤**:
 {prism_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'Prism'이라는 약어는 사용하지 말고, '멀티 오픈마켓 정산 통합 솔루션' 또는 완전한 서비스명 사용
    - **필수**: 오픈마켓 확장/매출 증가 뉴스를 구체적으로 인용. 예: "'{company_name}가 쿠팡/11번가 입점 확대'라는 소식을 들었습니다"
    - 다중 오픈마켓 운영 → 각 플랫폼마다 다른 정산 기준과 데이터 형식으로 인한 복잡한 정산 관리/현금흐름 파악 어려움 자연스럽게 연결
-   - **Prism 참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 채널/기능만 사용하세요
+   - **참고 정보에 명시된 기능만 언급**: 위 참고 정보에서 확인된 채널/기능만 사용하세요
    - **🎯 오픈마켓 다중 채널 운영사에 특화된 가치 제안**:
      * 네이버/쿠팡/11번가 등 각 채널의 서로 다른 정산 기준/주기 자동 통합
      * 실시간 현금흐름 및 미수금 파악
      * 월 수십 시간의 엑셀 수작업 자동화
    - **블렛 포인트 필수 사용**: 핵심 기능을 블렛으로 명확하게 제시 (예: 자동 통합, 실시간 파악, 90% 단축)
    - **구체적 수치 활용**: "재무 마감 시간 **90% 이상 단축**" / "**높은 데이터 정합성** 확보"
-   - **블로그 정보 활용**: 위 Prism 참고 정보의 통계/효과를 근거로 제시하며 설득력 강화
-   - **경쟁사가 있다면**: "{competitor_name}도 다중 채널 운영 시<br>Prism으로 재무팀 업무를 90% 자동화했습니다"
+   - **블로그 정보 활용**: 위 참고 정보의 통계/효과를 근거로 제시하며 설득력 강화
+   - **경쟁사가 있다면**: "{competitor_name}도 다중 채널 운영 시<br>멀티 오픈마켓 정산 통합 솔루션으로 재무팀 업무를 90% 자동화했습니다"
 
-6. **멀티 오픈마켓 정산 통합 솔루션 (Prism) - 호기심 유발형**: 
+6. **멀티 오픈마켓 정산 통합 솔루션 - 호기심 유발형**:
 {prism_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'Prism'이라는 약어는 사용하지 말고, '멀티 오픈마켓 정산 통합 솔루션' 또는 완전한 서비스명 사용
    - **필수**: 구체적 뉴스로 시작하는 질문 (초반 1회만). 예: "'{company_name}의 2분기 매출 150% 증가' 소식을 봤는데, 네이버/쿠팡/11번가 등 여러 오픈마켓의 서로 다른 정산 데이터는 어떻게 관리하고 계신가요?"
    - 채널 확장에 따른 재무 복잡성 증가 공감 표현
    - **🎯 질문 후 바로 해결책 제시 (설명 형식으로 전환)**:
-     * PortOne Prism은 각 오픈마켓의 서로 다른 정산 데이터를 자동으로 통합하고, **실시간으로 현금흐름을 파악**할 수 있게 합니다
+     * PortOne의 멀티 오픈마켓 정산 통합 솔루션은 각 오픈마켓의 서로 다른 정산 데이터를 자동으로 통합하고, **실시간으로 현금흐름을 파악**할 수 있게 합니다
      * 월 수십 시간의 엑셀 수작업을 자동화하고 **재무 마감을 90% 단축**합니다
    - **블렛 포인트 필수 사용**: 핵심 해결책을 블렛으로 명확하게 제시
    - **구체적 수치 활용**: "이미 국내 3,000여개 기업이..." 같이 명확한 숫자로 신뢰도 제공
-   - **블로그 정보 활용**: 위 Prism 참고 정보의 Pain Point를 자연스럽게 언급
+   - **블로그 정보 활용**: 위 참고 정보의 Pain Point를 자연스럽게 언급
    - **경쟁사가 있다면**: "{competitor_name}도 다중 채널 확장 시 이 방식으로 월말 마감을 하루로 단축했습니다" (설명 형식)
    - 마지막에 간단한 CTA: "미팅을 통해 실제 사례와 함께 상세히 안내드리겠습니다"
 
-7. **플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행) - 전문적 톤**: 
+7. **플랫폼 정산 자동화 솔루션 - 전문적 톤**:
 {ps_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'PS'라는 약어는 사용하지 말고, '플랫폼 정산 자동화 솔루션' 또는 완전한 서비스명 사용
    - **필수**: 플랫폼/마켓플레이스 확장 뉴스 인용. 예: "'{company_name}의 판매자 수 2배 증가'라는 소식을 봤는데, 파트너 정산 업무도 같이 늘어나셨을 것 같습니다"
    - **🎯 플랫폼/마켓플레이스 특화 가치 제안**:
      * **전자금융법 리스크 해소**: 포트원이 전자금융업 책임을 대신 져서 플랫폼은 등록 없이 안전하게 운영
@@ -4061,11 +4163,12 @@ PG 장애 시 자동 전환으로 **결제 성공률 15% 향상** 및 매출 손
    - **블로그 정보 활용**: 인프런 도입 사례 등 실제 고객 성과 언급
    - **경쟁사가 있다면**: "{competitor_name}도 파트너 수 증가로 정산 자동화를 도입했습니다"
 
-8. **플랫폼 정산 자동화 (파트너 정산+세금계산서+지급대행) - 호기심 유발형**: 
+8. **플랫폼 정산 자동화 솔루션 - 호기심 유발형**:
 {ps_blog_content}
+   - **⚠️ 서비스 표기**: 이메일 본문에서 'PS'라는 약어는 사용하지 말고, '플랫폼 정산 자동화 솔루션' 또는 완전한 서비스명 사용
    - **필수**: 구체적 상황으로 시작하는 질문 (초반 1회만). 예: "'{company_name}의 입점 파트너 3배 증가' 소식을 봤는데, 혹시 매달 정산하느라 월말마다 야근하고 계시진 않으신가요?"
    - **🎯 질문 후 바로 해결책 제시 (설명 형식으로 전환)**:
-     * 파트너 정산금을 직접 처리하면 전자금융업 등록이 필요하지만, **PortOne PS를 통하면 전자금융법 리스크 없이 안전하게 정산**할 수 있습니다
+     * 파트너 정산금을 직접 처리하면 전자금융업 등록이 필요하지만, **PortOne의 플랫폼 정산 자동화 솔루션을 통하면 전자금융법 리스크 없이 안전하게 정산**할 수 있습니다
      * **한 달 걸리던 정산을 이틀로 단축**할 수 있습니다 (인프런 사례)
      * 정산금 계산부터 세금계산서 일괄 발행, 365일 지급까지 **원클릭으로 자동화**됩니다
    - **블렛 포인트 필수 사용**: 핵심 해결책을 블렛으로 명확하게 제시
@@ -4106,26 +4209,26 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
 - **어색하게 부각된 제안을 하지 말 것**: "이것도 해드립니다, 저것도 해드립니다" 방식 금지
 - **스토리 기반 통합**: 고객의 성장 스토리 안에서 여러 서비스가 필요한 이유를 설명
 
-**통합 방식 예시:**
+**통합 방식 예시 (⚠️ 주의: 이메일 본문에서는 약어 대신 완전한 서비스명 사용):**
 
-**OPI + PS 조합 (해외 진출 + 플랫폼)**:
+**통합 결제 인프라 + 플랫폼 정산 자동화 조합 (해외 진출 + 플랫폼)**:
 - 시작: "해외 진출 뉴스를 봤습니다. 현지 결제 연동과 파트너 정산, 둘 다 부담되실 텐데..."
-- 연결: "**OPI로 현지 결제** 연동하면서, 동시에 **PS로 현지 파트너 정산까지** 자동화할 수 있습니다"
+- 연결: "**통합 결제 인프라로 현지 결제** 연동하면서, 동시에 **플랫폼 정산 자동화로 현지 파트너 정산까지** 자동화할 수 있습니다"
 - 가치: "글로벌 확장에 필요한 모든 재무 인프라를 한 번에 해결"
 
-**Prism + PS 조합 (커머스 + 플랫폼 정산)**:
+**멀티 오픈마켓 정산 통합 + 플랫폼 정산 자동화 조합 (커머스 + 플랫폼 정산)**:
 - 시작: "다중 오픈마켓 확장 뉴스를 봤습니다. 각 채널의 서로 다른 정산 기준과 파트너사 정산까지, 재무팀이 부담되실 것 같은데..."
-- 연결: "**Prism으로 오픈마켓 정산 통합** + **PS로 파트너 정산 자동화**로 모두 해결됩니다"
+- 연결: "**멀티 오픈마켓 정산 통합으로 오픈마켓 정산 통합** + **플랫폼 정산 자동화로 파트너 정산 자동화**로 모두 해결됩니다"
 - 가치: "월말 재무 마감을 **90% 이상 단축**하고 정확성도 확보"
 
-**OPI + Recon 조합 (해외 + 재무자동화)**:
+**통합 결제 인프라 + 재무자동화 솔루션 조합 (해외 + 재무자동화)**:
 - 시작: "글로벌 확장과 함께 다양한 PG사 데이터 통합이 복잡해지실 텐데..."
-- 연결: "**OPI로 {pg_count} PG사 통합** + **Recon으로 다국가 재무 자동화**"
+- 연결: "**통합 결제 인프라로 {pg_count} PG사 통합** + **재무자동화 솔루션으로 다국가 재무 자동화**"
 - 가치: "국내외 모든 재무 데이터를 한 곳에서 관리"
 
-**PS + Recon 조합 (플랫폼 + 재무)**:
+**플랫폼 정산 자동화 + 재무자동화 솔루션 조합 (플랫폼 + 재무)**:
 - 시작: "플랫폼 확장으로 파트너 정산과 전체 재무 관리가 복잡해지셨을 텐데..."
-- 연결: "**PS로 파트너 정산 자동화** + **Recon으로 전체 재무 통합**"
+- 연결: "**플랫폼 정산 자동화로 파트너 정산 자동화** + **재무자동화 솔루션으로 전체 재무 통합**"
 - 가치: "파트너 정산부터 ERP 연동까지 완전 자동화"
 
 **통합 문안 작성 주의사항:**
