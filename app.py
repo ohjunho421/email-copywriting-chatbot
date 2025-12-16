@@ -4541,31 +4541,58 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 }
                                 verified_variations[service_key] = hallucination_email
                         
-                        # 🔄 환각 감지된 이메일 재생성 시도 (비활성화 - 사용자가 직접 확인)
-                        # 사용자가 원본을 보고 직접 판단할 수 있도록 재생성 로직 비활성화
-                        MAX_RETRY = 0  # 재생성 비활성화
+                        # 🔄 환각 감지된 이메일 재생성 시도 (활성화)
+                        # 문제부분과 수정제안을 반영하여 재생성 후 재검증
+                        MAX_RETRY = 2  # 최대 2회 재시도
                         regeneration_log = []
                         
-                        if False and hallucinated_services and len(hallucinated_services) <= 4:  # 재생성 비활성화
+                        # 환각 감지된 이메일별 문제/수정제안 저장
+                        hallucination_feedback = {}
+                        for service_key, result in verification_results.items():
+                            if result['groundedness'] == 'notGrounded':
+                                hallucination_feedback[service_key] = {
+                                    'reason': result.get('reason', ''),
+                                    'problem_part': result.get('problem_part', ''),
+                                    'fix_suggestion': result.get('fix_suggestion', ''),
+                                    'original_email': formatted_variations[service_key]
+                                }
+                        
+                        if hallucinated_services and len(hallucinated_services) <= 4:
                             logger.info(f"🔄 환각 감지된 {len(hallucinated_services)}개 이메일 재생성 시작...")
                             
                             for retry_attempt in range(MAX_RETRY):
+                                if not hallucinated_services:
+                                    break
+                                    
                                 logger.info(f"  재시도 {retry_attempt + 1}/{MAX_RETRY}...")
                                 
                                 # 재생성할 서비스만 선택
                                 retry_services = hallucinated_services.copy()
                                 
-                                # 더 엄격한 프롬프트로 재생성
-                                strict_prompt_addition = f"""
+                                # 문제부분과 수정제안을 포함한 상세 프롬프트
+                                fix_instructions = ""
+                                for svc in retry_services:
+                                    if svc in hallucination_feedback:
+                                        fb = hallucination_feedback[svc]
+                                        fix_instructions += f"""
+**[{svc}] 수정 필요:**
+- 문제부분: {fb['problem_part']}
+- 수정제안: {fb['fix_suggestion']}
+- 이유: {fb['reason']}
+"""
                                 
-**⚠️ 환각 방지 최우선 지침 (재생성) ⚠️**
-이전 생성에서 참조 문서에 없는 정보를 사용하여 환각이 감지되었습니다.
-다음 규칙을 엄격히 준수하세요:
+                                strict_prompt_addition = f"""
 
-1. **참조 문서(Perplexity 조사 결과)에 명시된 정보만 사용**
-2. **추측하거나 일반적인 정보로 채우지 마세요**
-3. **구체적 수치나 사실은 참조 문서에 있을 때만 언급**
-4. **확실하지 않으면 일반적인 Pain Point 중심으로만 작성**
+**⚠️ 환각 수정 지침 (재생성 {retry_attempt + 1}회차) ⚠️**
+이전 생성에서 환각이 감지되었습니다. 아래 수정 지침을 반드시 따르세요:
+
+{fix_instructions}
+
+**수정 규칙:**
+1. 위에서 지적된 문제부분을 반드시 수정하세요
+2. 수정제안을 참고하여 검증된 정보만 사용하세요
+3. 포트원 서비스 소개서에 있는 공식 수치만 사용 가능 (3,000여개 기업, 50여개 PG사, 80% 단축, 90% 절감 등)
+4. 확실하지 않은 구체적 수치는 제거하고 일반적 표현 사용
 
 재생성 대상: {', '.join(retry_services)}
 """
