@@ -4583,9 +4583,9 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 }
                                 verified_variations[service_key] = hallucination_email
                         
-                        # 🔄 환각 감지된 이메일 재생성 시도 (활성화)
-                        # 문제부분과 수정제안을 반영하여 재생성 후 재검증
-                        MAX_RETRY = 2  # 최대 2회 재시도
+                        # 🔄 환각 감지된 이메일 재생성 시도 (비활성화)
+                        # 재생성 로직이 안정화될 때까지 비활성화
+                        MAX_RETRY = 0  # 재생성 비활성화
                         regeneration_log = []
                         
                         # 환각 감지된 이메일별 문제/수정제안 저장
