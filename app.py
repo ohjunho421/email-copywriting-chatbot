@@ -2636,26 +2636,35 @@ class EmailCopywriter:
         try:
             blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data)
             if blog_mention_info:
-                formatted_mention = format_blog_mention_for_email(blog_mention_info, company_name)
-                if formatted_mention:
+                blog_title = blog_mention_info.get('title', '')
+                blog_link = blog_mention_info.get('link', '')
+                blog_reason = blog_mention_info.get('match_reason', '')
+                industry_matched = blog_mention_info.get('industry_matched', False)
+                
+                # 업종 매칭이 된 경우에만 블로그 언급 (더 엄격한 기준)
+                if industry_matched or blog_reason:
                     blog_mention_instruction = f"""
-**📌 블로그 언급 지침 (매우 중요!):**
-관련성 높은 블로그가 발견되었습니다. 이메일 본문에서 "3,000여개 고객사가..." 부분 대신 또는 추가로 아래 블로그를 자연스럽게 언급해주세요.
+**📌 관련 블로그 언급 지침 (필수!):**
+타겟 회사와 관련성 높은 블로그가 발견되었습니다. 이메일 본문에 아래 블로그를 **반드시** 언급해주세요.
 
-- **블로그 제목**: {blog_mention_info.get('title', '')}
-- **블로그 링크**: {blog_mention_info.get('link', '')}
-- **관련 이유**: {blog_mention_info.get('match_reason', '')}
+🔗 **블로그 정보:**
+- 제목: {blog_title}
+- 링크: {blog_link}
+- 연관성: {blog_reason}
 
-**언급 예시 (자연스럽게 변형해서 사용):**
-"실제로 {blog_mention_info.get('match_reason', '')}를 고민하셨던 고객사에서 좋은 결과를 얻으셨는데요, 자세한 내용은 아래 글에서 확인하실 수 있습니다.
-👉 [{blog_mention_info.get('title', '')}]({blog_mention_info.get('link', '')})"
+📝 **언급 방식 (아래 형식 그대로 사용):**
+본문 중간 또는 끝부분에 다음과 같이 삽입하세요:
 
-⚠️ 주의사항:
-- 블로그 링크는 반드시 정확히 복사해서 사용하세요
-- 자연스러운 문맥에서 언급하세요 (강제로 끼워넣지 마세요)
-- "3,000여개 고객사" 문구와 함께 또는 대체해서 사용 가능
+"실제로 비슷한 고민을 하셨던 고객사의 사례가 있는데요, 아래 글에서 자세히 확인해보실 수 있습니다.
+👉 {blog_title}
+{blog_link}"
+
+⚠️ **중요:**
+- 링크 URL({blog_link})을 반드시 별도 줄에 그대로 포함하세요
+- 받는 사람이 링크를 클릭해서 블로그에 접속할 수 있어야 합니다
+- "3,000여개 고객사" 문구 대신 이 블로그 언급을 사용하세요
 """
-                    logger.info(f"📝 {company_name}: 블로그 언급 예정 - {blog_mention_info.get('title', '')[:30]}...")
+                    logger.info(f"📝 {company_name}: 블로그 언급 예정 - {blog_title[:30]}... (업종매칭: {industry_matched})")
         except Exception as blog_mention_error:
             logger.warning(f"블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
         
@@ -3540,21 +3549,13 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         if 'customized_pitch' in research_data and research_data['customized_pitch']:
             research_summary += f"\n\n## 💡 맞춤형 세일즈 포인트\n{research_data['customized_pitch']}"
         
-        # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단)
-        # CSV 컴럼 구조 디버깅
-        logger.debug(f"{company_name} CSV 컴럼들: {list(company_data.keys())}")
+        # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단) - 🆕 동적 열 매핑 사용
+        hosting = get_hosting(company_data).lower().strip()
         
-        # 다양한 호스팅사 컴럼명 지원
-        possible_hosting_columns = ['호스팅사', '호스팅', '호스팅서비스', 'hosting', 'Hosting', '웹호스팅', '호스팅업체']
-        hosting = ''
-        for col in possible_hosting_columns:
-            if col in company_data and company_data[col] and str(company_data[col]).strip():
-                hosting = str(company_data[col]).lower().strip()
-                logger.info(f"{company_name} 호스팅 정보 발견: '{col}' = '{hosting}'")
-                break
-        
-        if not hosting:
-            logger.warning(f"{company_name} 호스팅 정보 없음 - CSV에 호스팅사 컴럼이 있는지 확인하세요")
+        if hosting:
+            logger.info(f"{company_name} 호스팅 정보 발견: '{hosting}'")
+        else:
+            logger.warning(f"{company_name} 호스팅 정보 없음 - CSV에 호스팅사 컬럼이 있는지 확인하세요")
         
         # AWS, Cloudflare도 자체구축으로 간주
         is_self_hosted = ('자체' in hosting or 'self' in hosting or '직접' in hosting or 
@@ -4500,7 +4501,7 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                             csv_data_context += f"- 경쟁사: {competitor_name}\n"
                         
                         # 사용PG 정보 추가
-                        pg_info = company_data.get('사용PG', '') or company_data.get('PG', '')
+                        pg_info = get_pg_provider(company_data)
                         if pg_info:
                             csv_data_context += f"- 사용 중인 PG: {pg_info}\n"
                         

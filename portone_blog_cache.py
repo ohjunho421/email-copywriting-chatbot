@@ -467,12 +467,12 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
         logger.error(f"업종별 블로그 조회 오류: {str(e)}")
         return []
 
-def get_best_blog_for_email_mention(company_info, research_data=None, max_check=10):
+def get_best_blog_for_email_mention(company_info, research_data=None, max_check=20):
     """
     이메일 본문에 언급할 가장 적합한 블로그 1개 선택
     
     선택 기준:
-    1. 회사와 비슷한 산업/업종의 사례
+    1. 회사와 비슷한 산업/업종의 사례 (필수 - 업종이 다르면 제외)
     2. 받을 수 있는 혜택(수수료 절감, 자동화 등)과 관련된 정보
     
     Args:
@@ -491,35 +491,82 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         industry = company_info.get('industry', '') or ''
         category = company_info.get('category', '') or ''
         description = company_info.get('description', '') or ''
+        company_name = company_info.get('company_name', '') or company_info.get('회사명', '') or ''
         
-        # research_data에서 pain_points 추출
+        # research_data에서 pain_points, company_info 추출
         pain_points = ''
+        research_company_info = ''
         if research_data:
             pain_points = research_data.get('pain_points', '') or ''
+            research_company_info = research_data.get('company_info', '') or ''
         
         # 모든 텍스트 합치기
-        all_text = f"{industry} {category} {description} {pain_points}".lower()
+        all_text = f"{company_name} {industry} {category} {description} {pain_points} {research_company_info}".lower()
         
-        # 산업 키워드 매칭
+        # 🆕 확장된 산업 키워드 매칭 (더 세분화)
         industry_keywords = {
-            '게임': ['게임', 'game', '인앱결제', 'd2c'],
-            '이커머스': ['이커머스', 'e커머스', '쇼핑몰', '커머스', '온라인몰', '마켓플레이스'],
-            '여행': ['여행', 'travel', '항공', '호텔', '숙박', '예약'],
-            '교육': ['교육', 'education', '에듀테크', '학원', '강의'],
-            '금융': ['금융', 'fintech', '핀테크', '보험', '대출'],
-            'SaaS': ['saas', '구독', 'subscription', '소프트웨어'],
-            '미디어': ['미디어', 'media', '콘텐츠', 'ott', '스트리밍'],
-            '물류': ['물류', 'logistics', '배송', '배달'],
-            '플랫폼': ['플랫폼', 'platform', '중개', '마켓']
+            # IT/테크
+            '게임': ['게임', 'game', '인앱결제', 'd2c', '웹상점', '앱스토어', '구글플레이', '스팀'],
+            'SaaS': ['saas', 'b2b', '소프트웨어', '클라우드', '솔루션', '플랫폼서비스'],
+            'IT서비스': ['it', '테크', 'tech', '소프트웨어', '개발', '스타트업'],
+            
+            # 커머스
+            '이커머스': ['이커머스', 'e커머스', '쇼핑몰', '커머스', '온라인몰', '마켓플레이스', '온라인쇼핑'],
+            '리셀/중고': ['리셀', '중고', '세컨핸드', '빈티지', '번개장터', '당근'],
+            '패션': ['패션', 'fashion', '의류', '브랜드', '옷', '신발', '액세서리'],
+            '뷰티': ['뷰티', '화장품', '코스메틱', 'beauty', '스킨케어', '메이크업'],
+            
+            # 여행/숙박
+            '여행': ['여행', 'travel', '항공', '호텔', '숙박', '예약', 'ota', '투어'],
+            
+            # 교육
+            '교육': ['교육', 'education', '에듀테크', '학원', '강의', '온라인강의', '이러닝'],
+            
+            # 금융
+            '금융': ['금융', 'fintech', '핀테크', '보험', '대출', '투자', '증권', '은행'],
+            
+            # 미디어/콘텐츠
+            '미디어': ['미디어', 'media', '콘텐츠', 'ott', '스트리밍', '영상', '뉴스'],
+            '엔터테인먼트': ['엔터', '연예', '공연', '티켓', '콘서트', '영화'],
+            
+            # 물류/배송
+            '물류': ['물류', 'logistics', '배송', '배달', '풀필먼트', '택배'],
+            '푸드': ['음식', 'food', '식품', 'f&b', '레스토랑', '배달', '식자재'],
+            
+            # 플랫폼
+            '플랫폼': ['플랫폼', 'platform', '중개', '마켓', '파트너정산'],
+            
+            # 제조/산업
+            '자동차': ['자동차', '차량', 'automotive', '모빌리티', '카', '오토'],
+            '제조': ['제조', 'manufacturing', '공장', '생산', '부품'],
+            
+            # 헬스케어
+            '헬스케어': ['의료', '병원', '헬스', '건강', '제약', '바이오'],
+            
+            # 부동산
+            '부동산': ['부동산', '건물', '임대', '분양', '중개'],
+            
+            # 글로벌
+            '글로벌': ['해외', '글로벌', 'global', '수출', '해외진출', '크로스보더']
         }
+        
+        # 🆕 상호 배타적 업종 그룹 (이 그룹 내 다른 업종 블로그는 추천 안함)
+        exclusive_groups = [
+            ['자동차', '제조'],  # 제조업
+            ['뷰티', '패션'],     # 소비재
+            ['헬스케어'],         # 의료
+            ['부동산'],           # 부동산
+            ['금융'],             # 금융
+        ]
         
         # 혜택 키워드 매칭
         benefit_keywords = {
-            '수수료절감': ['수수료', '비용', '절감', '할인', '저렴'],
+            '수수료절감': ['수수료', '비용', '절감', '할인', '저렴', '15%', '30%'],
             '자동화': ['자동화', '자동', '효율', '리소스', '시간절약'],
-            '정산': ['정산', '매출', '재무', '회계'],
-            '글로벌': ['해외', '글로벌', 'global', '해외결제'],
-            '안정성': ['안정', '장애', '리스크', '백업', '라우팅']
+            '정산': ['정산', '매출', '재무', '회계', '대사'],
+            '글로벌': ['해외', '글로벌', 'global', '해외결제', '환율', '크로스보더'],
+            '안정성': ['안정', '장애', '리스크', '백업', '라우팅'],
+            '개발효율': ['개발', 'api', 'sdk', '연동', '2주']
         }
         
         # 회사에 해당하는 산업 찾기
@@ -538,7 +585,14 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                     matched_benefits.append(benefit)
                     break
         
-        logger.info(f"🎯 블로그 선택 - 매칭된 산업: {matched_industries}, 혜택: {matched_benefits}")
+        logger.info(f"🎯 블로그 선택 - 회사: {company_name}, 매칭된 산업: {matched_industries}, 혜택: {matched_benefits}")
+        
+        # 🆕 회사의 배타적 그룹 찾기
+        company_exclusive_group = None
+        for group in exclusive_groups:
+            if any(ind in matched_industries for ind in group):
+                company_exclusive_group = group
+                break
         
         from sqlalchemy import or_
         
@@ -552,53 +606,92 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         best_match = None
         best_score = 0
         best_reason = ''
+        industry_matched = False
         
         for post in all_posts:
             score = 0
             reasons = []
+            this_industry_matched = False
             
             post_text = f"{post.title} {post.summary} {post.content} {post.industry_tags} {post.keywords}".lower()
             
+            # 🆕 블로그의 업종 파악
+            blog_industries = []
+            for ind, keywords in industry_keywords.items():
+                for kw in keywords:
+                    if kw in post_text:
+                        blog_industries.append(ind)
+                        break
+            
+            # 🆕 배타적 그룹 체크 - 회사가 자동차인데 블로그가 뷰티면 제외
+            if company_exclusive_group:
+                blog_in_exclusive = False
+                for group in exclusive_groups:
+                    if any(ind in blog_industries for ind in group):
+                        if group != company_exclusive_group:
+                            # 다른 배타적 그룹의 블로그는 스킵
+                            blog_in_exclusive = True
+                            break
+                if blog_in_exclusive:
+                    continue
+            
             # 산업 매칭 점수 (높은 가중치)
             for ind in matched_industries:
-                for kw in industry_keywords.get(ind, []):
-                    if kw in post_text:
-                        score += 10
-                        if ind not in reasons:
-                            reasons.append(f"{ind} 업종 사례")
-                        break
+                if ind in blog_industries:
+                    score += 15  # 정확히 같은 업종
+                    this_industry_matched = True
+                    if f"{ind} 업종" not in [r for r in reasons]:
+                        reasons.append(f"{ind} 업종 사례")
+                else:
+                    # 키워드로 부분 매칭
+                    for kw in industry_keywords.get(ind, []):
+                        if kw in post_text:
+                            score += 5
+                            this_industry_matched = True
+                            if f"{ind}" not in str(reasons):
+                                reasons.append(f"{ind} 관련")
+                            break
             
             # 혜택 매칭 점수
             for benefit in matched_benefits:
                 for kw in benefit_keywords.get(benefit, []):
                     if kw in post_text:
                         score += 5
-                        if benefit not in reasons:
-                            reasons.append(f"{benefit} 관련")
+                        if benefit not in str(reasons):
+                            reasons.append(f"{benefit}")
                         break
             
             # 일반 혜택 키워드 (회사 매칭 없어도)
             general_benefits = ['수수료', '절감', '자동화', '효율', '성공사례', '도입사례']
             for gb in general_benefits:
                 if gb in post_text:
-                    score += 2
+                    score += 1
             
-            # URL이 유효한지 확인 (선택적)
+            # 🆕 업종 매칭이 있는 블로그 우선 (업종 매칭 없으면 점수 감점)
+            if not this_industry_matched and matched_industries:
+                score = score // 2  # 업종 불일치 시 점수 반감
+            
+            # URL이 유효한지 확인
             if score > best_score and post.link:
                 best_score = score
                 best_match = post
-                best_reason = ', '.join(reasons[:2]) if reasons else '포트원 혜택 정보'
+                best_reason = ', '.join(reasons[:2]) if reasons else '포트원 도입 효과'
+                industry_matched = this_industry_matched
         
-        if best_match and best_score >= 5:  # 최소 점수 기준
-            logger.info(f"✅ 블로그 선택: {best_match.title[:40]}... (점수: {best_score}, 이유: {best_reason})")
+        # 🆕 최소 점수 기준 강화: 업종 매칭이 있으면 10점, 없으면 15점 이상
+        min_score = 10 if industry_matched else 15
+        
+        if best_match and best_score >= min_score:
+            logger.info(f"✅ 블로그 선택: {best_match.title[:40]}... (점수: {best_score}, 이유: {best_reason}, 업종매칭: {industry_matched})")
             return {
                 'title': best_match.title,
                 'link': best_match.link,
                 'summary': best_match.summary[:200] if best_match.summary else '',
-                'match_reason': best_reason
+                'match_reason': best_reason,
+                'industry_matched': industry_matched
             }
         else:
-            logger.info(f"📝 적합한 블로그 없음 (최고 점수: {best_score})")
+            logger.info(f"📝 적합한 블로그 없음 (최고 점수: {best_score}, 최소 기준: {min_score})")
             return None
             
     except Exception as e:
