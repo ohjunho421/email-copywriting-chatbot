@@ -3729,6 +3729,58 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             ps_blog_content = get_service_knowledge(service_type='PS')
             logger.info(f"📚 [플랫폼 정산] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
+        # 🆕 이메일 본문에 언급할 최적의 블로그 1개 선택 (블로그 언급 강화)
+        from portone_blog_cache import get_best_blog_for_email_mention
+        blog_mention_instruction = ""
+        try:
+            company_info_for_blog = {
+                'industry': research_data.get('industry', ''),
+                'category': research_data.get('category', ''),
+                'description': research_data.get('company_info', '')
+            }
+            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data)
+            if blog_mention_info:
+                blog_title = blog_mention_info.get('title', '')
+                blog_link = blog_mention_info.get('link', '')
+                blog_reason = blog_mention_info.get('match_reason', '')
+                industry_matched = blog_mention_info.get('industry_matched', False)
+                
+                # 업종 매칭이 된 경우에만 블로그 언급
+                if industry_matched or blog_reason:
+                    blog_summary = blog_mention_info.get('summary', '')
+                    blog_case_company = blog_mention_info.get('case_company', '')
+                    
+                    # 🆕 의사결정자 관점의 구체적 정보 포함
+                    blog_mention_instruction = f"""
+**📌 관련 블로그 - 의사결정에 도움되는 사례 (필수 활용!):**
+
+🔗 **블로그 정보:**
+- 제목: {blog_title}
+- 링크: {blog_link}
+- 연관성: {blog_reason}
+{f'- 사례 고객사: {blog_case_company}' if blog_case_company else ''}
+{f'- 핵심 내용: {blog_summary[:150]}...' if blog_summary else ''}
+
+💡 **의사결정자가 관심 가질 정보 활용법:**
+이메일에서 아래 정보를 자연스럽게 녹여서 사용하세요:
+1. **구체적 수치**: 블로그에 언급된 "X% 절감", "X억원 절감", "X주 내 구축" 등 정량적 효과
+2. **비슷한 사례**: "{blog_case_company if blog_case_company else '유사 업종의 고객사'}도 같은 고민을 하셨는데..."
+3. **리스크 감소**: "단일 PG 의존 리스크", "정산 오류 리스크" 등 해결 사례
+
+📝 **권장 언급 방식:**
+본문에서 사례를 언급한 후, 끝부분에:
+"실제로 비슷한 고민을 하셨던 고객사 사례가 있는데요:
+👉 {blog_title}
+{blog_link}"
+
+⚠️ **중요:**
+- 블로그 링크를 반드시 별도 줄에 그대로 포함
+- 블로그의 구체적 수치/효과를 이메일 본문에서 먼저 언급하면 더 설득력 있음
+"""
+                    logger.info(f"📝 {company_name}: 블로그 언급 예정 - {blog_title[:30]}... (업종매칭: {industry_matched})")
+        except Exception as blog_mention_error:
+            logger.warning(f"블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
+        
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
         
@@ -3862,6 +3914,8 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 - "'{company_name}의 3분기 매출이 전년 대비 150% 증가했다'는 소식을 들었습니다. 급속한 성장에 따른 재무 관리 부담이 늘어나고 계시지 않나요?"
 - "'{company_name}가 일본 시장에 진출한다'는 뉴스를 봤습니다. 해외 진출 시 현지 결제 시스템 연동이 복잡하실 텐데..."
 
+{blog_mention_instruction}
+
 """
 
         # 생성할 서비스에 따른 프롬프트 조정
@@ -3918,7 +3972,11 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
    → "구체적이고 관련성이 높다" 평가 확보
 6. PortOne 이용 경쟁사가 있다면 반드시 해당 기업 사례를 언급
    → "시의적절하고 필요한 제안" 인식 강화
-7. "비슷한 고민을 가진 다른 고객사도..." 식의 사례 암시
+7. **🆕 블로그 사례 활용 (의사결정자 설득에 핵심!):**
+   - 위에 제공된 블로그 정보가 있다면, 블로그의 **구체적 수치와 사례**를 본문에 녹여서 언급
+   - 예: "유사 업종의 고객사는 포트원 도입 후 수수료 15% 절감, 정산 업무 90% 자동화를 달성했습니다"
+   - 예: "비슷한 고민을 하셨던 [블로그 사례 고객사]도 이 문제를 해결했는데요..."
+   - **단순히 링크만 던지지 말고, 핵심 수치/효과를 먼저 언급 후 "자세한 내용은 아래 글에서"**
 8. **즉시 답장하고 싶게 만드는 요소 포함**:
    - 시급성: "지금 겪고 계실" 문제 언급
    - 관련성: "{company_name}만의 구체적 상황" 정확히 지적
