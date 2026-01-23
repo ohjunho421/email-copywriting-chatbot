@@ -29,6 +29,15 @@ from upstage_groundedness import get_groundedness_checker
 # 🆕 비즈니스 모델 분석 모듈 임포트
 from business_model_analyzer import BusinessModelAnalyzer
 
+# 🆕 CSV 열 이름 동적 매핑 모듈 임포트
+from column_mapper import (
+    get_company_name, get_business_number, get_contact_name, get_email,
+    get_homepage, get_phone, get_news_url, get_sales_point, get_revenue,
+    get_hosting, get_pg_provider, get_competitor, get_industry, get_company_size,
+    get_email_salutation, get_sales_item, get_service_type, get_customer_type,
+    get_contact_position, get_additional_info, get_column_value
+)
+
 # .env 파일 로드
 load_dotenv()
 
@@ -2528,11 +2537,12 @@ class EmailCopywriter:
         logger.info("📧 이메일 생성 프로세스 시작")
         logger.info("=" * 60)
         
-        company_name = company_data.get('회사명', '귀하의 회사')
-        ceo_name = company_data.get('대표자명', '담당자님')
-        contact_position = company_data.get('직책', '') or company_data.get('직급', '')
-        website = company_data.get('홈페이지링크', '')
-        sales_point = company_data.get('세일즈포인트', '').lower().strip()
+        # 🆕 동적 열 매핑 사용
+        company_name = get_company_name(company_data) or '귀하의 회사'
+        ceo_name = get_contact_name(company_data) or '담당자님'
+        contact_position = get_contact_position(company_data)
+        website = get_homepage(company_data)
+        sales_point = get_sales_point(company_data).lower().strip()
         
         logger.info(f"🏢 회사 정보:")
         logger.info(f"   - 회사명: {company_name}")
@@ -3013,9 +3023,10 @@ https://www.portone.io
         """회사 데이터에서 개인화 요소 추출 (한국어 템플릿 패턴 기반)"""
         elements = []
         
-        company_name = company_data.get('회사명', '')
-        ceo_name = company_data.get('대표자명', '담당자님')
-        website = company_data.get('홈페이지링크', '')
+        # 🆕 동적 열 매핑 사용
+        company_name = get_company_name(company_data)
+        ceo_name = get_contact_name(company_data) or '담당자님'
+        website = get_homepage(company_data)
         
         # 직급별 맞춤 인사말 결정
         position_title = '담당자님'
@@ -3402,24 +3413,21 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             else:
                 logger.warning(f"⚠️  current_user 인증 안 됨 - 기본값 사용")
         
-        # 회사 정보 요약
-        company_name = company_data.get('회사명', 'Unknown')
+        # 회사 정보 요약 - 🆕 동적 열 매핑 사용
+        company_name = get_company_name(company_data) or 'Unknown'
         
         # sales_item 열 확인 (서비스별 문안 생성 결정)
-        sales_item = company_data.get('sales_item', '').lower().strip()
+        sales_item = get_sales_item(company_data).lower().strip()
         logger.info(f"Sales item 확인: '{sales_item}' for {company_name}")
         
-        # 담당자 정보 추출
-        # N열(14번째 열)의 호칭 포함 담당자명을 우선 참조 (이미 완성된 호칭)
-        column_keys = list(company_data.keys())
-        email_name = ''
-        if len(column_keys) >= 14:
-            email_name = company_data.get(column_keys[13], '').strip()  # N열 (0-based index 13)
+        # 담당자 정보 추출 - 🆕 동적 열 매핑 사용
+        # 이메일 호칭 열을 우선 참조 (이미 완성된 호칭)
+        email_name = get_email_salutation(company_data)
         
-        # N열이 비어있거나 없으면 기존 로직 사용
+        # 이메일 호칭이 비어있으면 기존 로직 사용
         if not email_name:
-            contact_name = company_data.get('담당자명', '') or company_data.get('대표자명', '') or company_data.get('이름', '')
-            contact_position = company_data.get('직책', '') or company_data.get('직급', '')
+            contact_name = get_contact_name(company_data)
+            contact_position = get_contact_position(company_data)
             
             # 담당자명과 직책 처리 (기본값 설정)
             if not contact_name or contact_name == '담당자':
@@ -3444,25 +3452,27 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
                     else:
                         email_name = f'{contact_name} 담당자님'
         
-        # 경쟁사 정보 추출 (PortOne 이용 기업)
-        competitor_name = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '')
+        # 경쟁사 정보 추출 (PortOne 이용 기업) - 🆕 동적 열 매핑 사용
+        competitor_name = get_competitor(company_data)
         
         company_info = f"회사명: {company_name}\n담당자: {email_name}"
         if competitor_name:
             company_info += f"\nPortOne 이용 경쟁사: {competitor_name}"
         
-        # 사용PG 정보 추가 (우선 표시)
-        pg_info = company_data.get('사용PG', '') or company_data.get('PG', '')
+        # 사용PG 정보 추가 (우선 표시) - 🆕 동적 열 매핑 사용
+        pg_info = get_pg_provider(company_data)
         if pg_info:
             company_info += f"\n💳 현재 사용 중인 PG: {pg_info}"
         
         # 추가 회사 정보가 있다면 포함
+        # 🆕 중복 방지를 위한 제외 키 목록 확장
+        excluded_keys = [
+            '회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사', 
+            '사용PG', 'PG', '이메일 호칭', '이메일호칭', '대표이메일', '이메일', 'sales_item',
+            '홈페이지', '홈페이지링크', '사업자등록번호', '사업자번호'
+        ]
         for key, value in company_data.items():
-            # N열 담당자명도 제외 목록에 추가 (중복 방지)
-            excluded_keys = ['회사명', '대표자명', '담당자명', '이름', '직책', '직급', '경쟁사명', '경쟁사', '사용PG', 'PG']
-            if len(column_keys) >= 14:
-                excluded_keys.append(column_keys[13])  # N열 키도 제외
-            if key not in excluded_keys and value:
+            if key not in excluded_keys and value and not key.startswith('_'):
                 company_info += f"\n{key}: {value}"
         
         # 조사 정보 및 Pain Point 요약
@@ -4822,17 +4832,15 @@ def generate_email_with_user_template(company_data, research_data, user_template
             else:
                 logger.warning(f"⚠️  [사용자문안] current_user 인증 안 됨 - 기본값 사용")
         
-        company_name = company_data.get('회사명', 'Unknown')
+        # 🆕 동적 열 매핑 사용
+        company_name = get_company_name(company_data) or 'Unknown'
         
-        # 담당자 정보 추출 (generate_email_with_gemini와 동일)
-        column_keys = list(company_data.keys())
-        email_name = ''
-        if len(column_keys) >= 14:
-            email_name = company_data.get(column_keys[13], '').strip()
+        # 담당자 정보 추출 - 🆕 동적 열 매핑 사용
+        email_name = get_email_salutation(company_data)
         
         if not email_name:
-            contact_name = company_data.get('담당자명', '') or company_data.get('대표자명', '') or company_data.get('이름', '')
-            contact_position = company_data.get('직책', '') or company_data.get('직급', '')
+            contact_name = get_contact_name(company_data)
+            contact_position = get_contact_position(company_data)
             if not contact_name or contact_name == '담당자':
                 email_name = '담당자님'
             else:
@@ -4851,8 +4859,8 @@ def generate_email_with_user_template(company_data, research_data, user_template
                     else:
                         email_name = f'{contact_name} 담당자님'
         
-        # 경쟁사 정보
-        competitor_name = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '')
+        # 경쟁사 정보 - 🆕 동적 열 매핑 사용
+        competitor_name = get_competitor(company_data)
         
         company_info = f"회사명: {company_name}\n담당자: {email_name}"
         if competitor_name:
@@ -4861,28 +4869,20 @@ def generate_email_with_user_template(company_data, research_data, user_template
         # 조사 정보
         research_summary = research_data.get('company_info', '조사 정보 없음')
         
-        # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단)
-        # CSV 컴럼 구조 디버깅
-        logger.debug(f"[사용자문안] {company_name} CSV 컴럼들: {list(company_data.keys())}")
+        # 호스팅사 정보 확인 (OPI 제공 가능 여부 판단) - 🆕 동적 열 매핑 사용
+        hosting = get_hosting(company_data).lower().strip()
         
-        # 다양한 호스팅사 컴럼명 지원
-        possible_hosting_columns = ['호스팅사', '호스팅', '호스팅서비스', 'hosting', 'Hosting', '웹호스팅', '호스팅업체']
-        hosting = ''
-        for col in possible_hosting_columns:
-            if col in company_data and company_data[col] and str(company_data[col]).strip():
-                hosting = str(company_data[col]).lower().strip()
-                logger.info(f"[사용자문안] {company_name} 호스팅 정보 발견: '{col}' = '{hosting}'")
-                break
-        
-        if not hosting:
-            logger.warning(f"[사용자문안] {company_name} 호스팅 정보 없음 - CSV에 호스팅사 컴럼이 있는지 확인하세요")
+        if hosting:
+            logger.info(f"[사용자문안] {company_name} 호스팅 정보 발견: '{hosting}'")
+        else:
+            logger.warning(f"[사용자문안] {company_name} 호스팅 정보 없음")
         
         # AWS, Cloudflare도 자체구축으로 간주
         is_self_hosted = ('자체' in hosting or 'self' in hosting or '직접' in hosting or 
                          'aws' in hosting.lower() or 'cloudflare' in hosting.lower())
         
-        # sales_item에 따른 서비스 결정
-        sales_item = company_data.get('sales_item', '').lower().strip()
+        # sales_item에 따른 서비스 결정 - 🆕 동적 열 매핑 사용
+        sales_item = get_sales_item(company_data).lower().strip()
         services_to_generate = []
         if sales_item:
             if 'opi' in sales_item:
@@ -5423,17 +5423,18 @@ def generate_email_with_gemini_and_cases(company_data, research_data, case_examp
     Returns:
         dict: 생성된 이메일 variations
     """
-    # 사용자 입력이 있으면 모드에 따라 처리
+    # 사용자 입력이 있으면 모드에 따라 처리 - 🆕 동적 열 매핑 사용
+    company_name_for_log = get_company_name(company_data) or 'Unknown'
     if user_template:
         if user_input_mode == 'request':
-            logger.info(f"{company_data.get('회사명')}: 요청사항 모드 - 기본 생성 + 요청사항 반영")
+            logger.info(f"{company_name_for_log}: 요청사항 모드 - 기본 생성 + 요청사항 반영")
             return generate_email_with_user_request(company_data, research_data, user_template, case_examples, news_content, user_info)
         else:
-            logger.info(f"{company_data.get('회사명')}: 문안 모드 - 뉴스 후킹 + 사용자 본문")
+            logger.info(f"{company_name_for_log}: 문안 모드 - 뉴스 후킹 + 사용자 본문")
             return generate_email_with_user_template(company_data, research_data, user_template, case_examples, news_content, user_info)
     
     # 사용자 입력이 없으면 기존 SSR 방식 (4개 생성 + 사례 포함)
-    logger.info(f"{company_data.get('회사명')}: SSR 모드 - 4개 생성 + 사례 포함")
+    logger.info(f"{company_name_for_log}: SSR 모드 - 4개 생성 + 사례 포함")
     return generate_email_with_gemini(company_data, research_data, user_info)
 
 def generate_email_with_user_request(company_data, research_data, user_request, case_examples="", news_content=None, user_info=None):
@@ -5447,7 +5448,8 @@ def generate_email_with_user_request(company_data, research_data, user_request, 
         user_info: 로그인한 사용자 정보 (name, email, company_nickname, phone)
     """
     try:
-        company_name = company_data.get('회사명', 'Unknown')
+        # 🆕 동적 열 매핑 사용
+        company_name = get_company_name(company_data) or 'Unknown'
         logger.info(f"{company_name}: 요청모드 1단계 - 기본 문안 생성 시작")
         
         # 1단계: 기본 SSR 모드로 문안 생성
@@ -5525,7 +5527,8 @@ def refine_email_with_user_request(original_subject, original_body, user_request
              사용자 요청사항(톤, 강조점, 제목 스타일 등)만 반영
     """
     try:
-        company_name = company_data.get('회사명', 'Unknown')
+        # 🆕 동적 열 매핑 사용
+        company_name = get_company_name(company_data) or 'Unknown'
         
         # 사용자 정보 추출
         if user_info:
@@ -6369,10 +6372,11 @@ def process_single_company(company, index, user_template=None, user_input_mode='
     # ThreadPoolExecutor에서 실행되므로 app context 필요!
     with app.app_context():
         try:
-            company_name = company.get('회사명', '')
+            # 🆕 동적 열 매핑 사용 - 열 이름이 변경되어도 올바르게 작동
+            company_name = get_company_name(company)
             
-            # CSV에서 "관련뉴스" 열 확인
-            news_url = company.get('관련뉴스', '')
+            # CSV에서 "관련뉴스" 열 확인 (동적 매핑)
+            news_url = get_news_url(company)
             news_content = None
             
             # 뉴스 URL이 있으면 스크래핑
@@ -6384,19 +6388,15 @@ def process_single_company(company, index, user_template=None, user_input_mode='
                 else:
                     logger.warning(f"{company_name}: 뉴스 스크래핑 실패")
             
-            # 1. 회사 정보 조사 (CSV 추가 정보 활용)
-            additional_info = {
-                '사업자번호': company.get('사업자번호', ''),
-                '업종': company.get('업종', ''),
-                '세일즈포인트': company.get('세일즈포인트', ''),
-                '규모': company.get('규모', ''),
-                '대표자명': company.get('대표자명', ''),
-                '이메일': company.get('이메일', '')
-            }
+            # 1. 회사 정보 조사 (CSV 추가 정보 활용) - 🆕 동적 열 매핑 사용
+            additional_info = get_additional_info(company)
+            
+            # 홈페이지 URL 추출 (동적 매핑)
+            homepage_url = get_homepage(company)
             
             research_result = researcher.research_company(
                 company_name, 
-                company.get('홈페이지링크', ''),
+                homepage_url,
                 additional_info
             )
             
@@ -6545,10 +6545,10 @@ def batch_process():
                     results.append(result)
                     completed += 1
                     
-                    logger.info(f"진행률: {completed}/{total} ({completed/total*100:.1f}%) - {company.get('회사명', 'Unknown')}")
+                    logger.info(f"진행률: {completed}/{total} ({completed/total*100:.1f}%) - {get_company_name(company) or 'Unknown'}")
                     
                 except Exception as e:
-                    logger.error(f"회사 {company.get('회사명', 'Unknown')} 처리 실패: {str(e)}")
+                    logger.error(f"회사 {get_company_name(company) or 'Unknown'} 처리 실패: {str(e)}")
                     results.append({
                         'company': company,
                         'error': f'처리 실패: {str(e)}',
@@ -6569,8 +6569,8 @@ def batch_process():
             for result in results:
                 if 'emails' in result and result['emails'].get('success'):
                     company = result.get('company', {})
-                    company_name = company.get('회사명', 'Unknown')
-                    company_email = company.get('대표이메일', '')
+                    company_name = get_company_name(company) or 'Unknown'
+                    company_email = get_email(company)
                     
                     # 생성된 각 이메일 타입 기록
                     variations = result['emails'].get('variations', {})
@@ -6638,8 +6638,8 @@ def refine_email():
                     'error': '회사 데이터가 없습니다. 먼저 회사 조사를 진행해주세요.'
                 }), 400
             
-            # 전체 프로세스 재실행
-            logger.info(f"회사명: {company_data.get('회사명')} - 전체 문안 재생성 시작")
+            # 전체 프로세스 재실행 - 🆕 동적 열 매핑 사용
+            logger.info(f"회사명: {get_company_name(company_data) or 'Unknown'} - 전체 문안 재생성 시작")
             
             # generate_email_with_gemini_and_cases 함수 호출
             result = generate_email_with_gemini_and_cases(
