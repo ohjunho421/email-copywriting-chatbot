@@ -2557,7 +2557,7 @@ class EmailCopywriter:
         personalization_elements = self._extract_personalization_elements(company_data, research_data)
         
         # 블로그 콘텐츠 가져오기 (RAG 방식)
-        from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email, load_blog_cache
+        from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email, load_blog_cache, get_best_blog_for_email_mention, format_blog_mention_for_email
         
         blog_content_opi = ""
         blog_content_recon = ""
@@ -2630,6 +2630,35 @@ class EmailCopywriter:
                 blog_content_recon = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
                 logger.info(f"📰 [Recon] {company_name}: Pain Point 매칭 블로그 {len(recon_blogs)}개 조회")
         
+        # 🆕 이메일 본문에 언급할 최적의 블로그 1개 선택
+        blog_mention_info = None
+        blog_mention_instruction = ""
+        try:
+            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data)
+            if blog_mention_info:
+                formatted_mention = format_blog_mention_for_email(blog_mention_info, company_name)
+                if formatted_mention:
+                    blog_mention_instruction = f"""
+**📌 블로그 언급 지침 (매우 중요!):**
+관련성 높은 블로그가 발견되었습니다. 이메일 본문에서 "3,000여개 고객사가..." 부분 대신 또는 추가로 아래 블로그를 자연스럽게 언급해주세요.
+
+- **블로그 제목**: {blog_mention_info.get('title', '')}
+- **블로그 링크**: {blog_mention_info.get('link', '')}
+- **관련 이유**: {blog_mention_info.get('match_reason', '')}
+
+**언급 예시 (자연스럽게 변형해서 사용):**
+"실제로 {blog_mention_info.get('match_reason', '')}를 고민하셨던 고객사에서 좋은 결과를 얻으셨는데요, 자세한 내용은 아래 글에서 확인하실 수 있습니다.
+👉 [{blog_mention_info.get('title', '')}]({blog_mention_info.get('link', '')})"
+
+⚠️ 주의사항:
+- 블로그 링크는 반드시 정확히 복사해서 사용하세요
+- 자연스러운 문맥에서 언급하세요 (강제로 끼워넣지 마세요)
+- "3,000여개 고객사" 문구와 함께 또는 대체해서 사용 가능
+"""
+                    logger.info(f"📝 {company_name}: 블로그 언급 예정 - {blog_mention_info.get('title', '')[:30]}...")
+        except Exception as blog_mention_error:
+            logger.warning(f"블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
+        
         # 세일즈포인트에 따라 생성할 이메일 유형 결정
         email_definitions = {
             "opi_professional": {
@@ -2685,6 +2714,8 @@ class EmailCopywriter:
 {blog_content_opi}
 
 {blog_content_recon}
+
+{blog_mention_instruction}
 
 **검증된 성과 좋은 한국어 이메일 템플릿 참고용 (스타일과 톤 참고):**
 
@@ -6794,10 +6825,10 @@ def scrape_article_content(url):
 
 def scrape_portone_blog_category(category_url, category_name, max_pages=5):
     """
-    포트원 블로그 카테고리별 스크래핑
+    포트원 블로그 카테고리별 스크래핑 (2025년 HTML 기반 구조)
     
     Args:
-        category_url: 카테고리 URL
+        category_url: 카테고리 URL (예: https://blog.portone.io/?filter=국내%20결제)
         category_name: 카테고리명 (OPI, Recon 등)
         max_pages: 최대 페이지 수
     
@@ -6807,73 +6838,91 @@ def scrape_portone_blog_category(category_url, category_name, max_pages=5):
     try:
         import requests
         from bs4 import BeautifulSoup
+        import time
         
         logger.info(f"📰 [{category_name}] 스크래핑 시작: {category_url}")
         
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
         
         all_posts = []
+        seen_links = set()
         
         for page in range(1, max_pages + 1):
             # 페이지 URL 구성
-            page_url = f"{category_url}&page={page}"
+            if page == 1:
+                page_url = category_url
+            else:
+                separator = '&' if '?' in category_url else '?'
+                page_url = f"{category_url}{separator}page={page}"
+            
             logger.info(f"   페이지 {page}/{max_pages} 스크래핑...")
             
             try:
                 response = requests.get(page_url, headers=headers, timeout=15)
                 response.raise_for_status()
                 
-                soup = BeautifulSoup(response.content, 'html.parser')
+                soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # h3 태그로 제목과 링크 추출
-                h3_tags = soup.find_all('h3', class_='group-hover:text-[#FC6B2D]')
+                # a 태그에서 블로그 링크 추출
+                links = soup.find_all('a', href=True)
+                page_posts_count = 0
                 
-                if not h3_tags:
-                    logger.info(f"   페이지 {page}에 더 이상 글이 없습니다.")
-                    break
-                
-                for h3 in h3_tags:
+                for link_elem in links:
                     try:
-                        title = h3.get_text(strip=True)
+                        href = link_elem.get('href', '')
                         
-                        # 링크 찾기 (h3의 부모나 형제 요소에서)
-                        link_elem = h3.find_parent('a') or h3.find('a')
-                        if not link_elem:
-                            # 형제 요소에서 링크 찾기
-                            parent = h3.find_parent()
-                            link_elem = parent.find('a') if parent else None
-                        
-                        if link_elem and link_elem.get('href'):
-                            link = link_elem['href']
-                            # 상대 경로면 절대 경로로 변환
-                            if not link.startswith('http'):
-                                link = 'https://blog.portone.io' + link
+                        # 블로그 포스트 링크 패턴 (예: /opi_business-am/)
+                        if (href.startswith('/') and 
+                            not href.startswith('/?') and 
+                            not href.startswith('/category') and 
+                            href.endswith('/') and 
+                            len(href) > 3 and
+                            href not in seen_links):
                             
-                            logger.info(f"      ✅ {title[:40]}...")
+                            # 제목 찾기
+                            title_elem = link_elem.find(['h3', 'h2', 'span', 'p'])
+                            title = title_elem.get_text(strip=True) if title_elem else ''
+                            if not title:
+                                title = link_elem.get_text(strip=True)
                             
-                            # 상세 내용 스크래핑
-                            content = scrape_article_content(link)
-                            
-                            # 요약은 content의 앞부분
-                            summary = content[:200] if content else ''
-                            
-                            all_posts.append({
-                                'title': title,
-                                'link': link,
-                                'summary': summary,
-                                'content': content,
-                                'category': category_name
-                            })
-                            
-                            # 과도한 요청 방지
-                            import time
-                            time.sleep(0.5)
-                            
+                            # 유효한 제목인지 확인
+                            if title and len(title) > 10:
+                                full_link = f"https://blog.portone.io{href}"
+                                seen_links.add(href)
+                                
+                                logger.info(f"      ✅ {title[:40]}...")
+                                
+                                # 상세 내용 스크래핑
+                                content = ''
+                                try:
+                                    content = scrape_article_content(full_link)
+                                except:
+                                    pass
+                                
+                                summary = content[:200] if content else title
+                                
+                                all_posts.append({
+                                    'title': title,
+                                    'link': full_link,
+                                    'summary': summary,
+                                    'content': content,
+                                    'category': category_name
+                                })
+                                page_posts_count += 1
+                                
+                                # 과도한 요청 방지
+                                time.sleep(0.3)
+                                
                     except Exception as e:
-                        logger.error(f"      글 파싱 오류: {str(e)}")
                         continue
+                
+                logger.info(f"   페이지 {page}: {page_posts_count}개 글 발견")
+                
+                # 더 이상 글이 없으면 중단
+                if page_posts_count == 0:
+                    break
                 
             except Exception as e:
                 logger.error(f"   페이지 {page} 스크래핑 오류: {str(e)}")

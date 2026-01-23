@@ -217,7 +217,7 @@ def get_blog_cache_age():
 
 def extract_keywords_from_post(post):
     """
-    블로그 글에서 키워드 추출
+    블로그 글에서 키워드 추출 (규칙 기반 + AI 요약)
     
     Args:
         post: 블로그 포스트 dict
@@ -237,45 +237,108 @@ def extract_keywords_from_post(post):
         industry_tags = []
         
         # 제목과 내용에서 주요 키워드 찾기
-        text_lower = (title + ' ' + content[:500]).lower()
+        text_lower = (title + ' ' + content[:2000]).lower()
         
-        # 업종 관련 키워드
-        if '게임' in text_lower or 'game' in text_lower:
-            industry_tags.append('게임')
-        if '이커머스' in text_lower or 'e커머스' in text_lower or '쇼핑몰' in text_lower or 'commerce' in text_lower:
-            industry_tags.append('이커머스')
-        if '여행' in text_lower or 'travel' in text_lower or '항공' in text_lower:
-            industry_tags.append('여행')
-        if '교육' in text_lower or 'education' in text_lower or '에듀테크' in text_lower:
-            industry_tags.append('교육')
-        if '금융' in text_lower or 'fintech' in text_lower or '핀테크' in text_lower:
-            industry_tags.append('금융')
-        if '미디어' in text_lower or 'media' in text_lower or '콘텐츠' in text_lower:
-            industry_tags.append('미디어')
-        if 'saas' in text_lower or '구독' in text_lower:
-            industry_tags.append('SaaS')
-        if '물류' in text_lower or 'logistics' in text_lower or '배송' in text_lower:
-            industry_tags.append('물류')
+        # 업종 관련 키워드 (확장)
+        industry_mapping = {
+            '게임': ['게임', 'game', '인앱결제', 'd2c', '웹상점', '앱스토어', '구글플레이'],
+            '이커머스': ['이커머스', 'e커머스', '쇼핑몰', 'commerce', '온라인몰', '마켓플레이스', '커머스', '리테일'],
+            '여행': ['여행', 'travel', '항공', '호텔', '숙박', '예약', 'ota'],
+            '교육': ['교육', 'education', '에듀테크', '학원', '강의', '온라인교육'],
+            '금융': ['금융', 'fintech', '핀테크', '보험', '대출', '투자'],
+            '미디어': ['미디어', 'media', '콘텐츠', 'ott', '스트리밍', '구독'],
+            'SaaS': ['saas', '구독서비스', 'subscription', '소프트웨어', 'b2b'],
+            '물류': ['물류', 'logistics', '배송', '배달', '풀필먼트'],
+            '플랫폼': ['플랫폼', 'platform', '중개', '마켓', '파트너정산'],
+            '패션': ['패션', 'fashion', '의류', '브랜드', '리셀'],
+            '푸드': ['음식', 'food', '식품', 'f&b', '레스토랑', '배달']
+        }
         
-        # 기능 관련 키워드
-        if '결제' in text_lower or 'payment' in text_lower:
-            keywords.append('결제')
-        if '정산' in text_lower or '매출' in text_lower or 'reconciliation' in text_lower:
-            keywords.append('매출관리')
-        if '자동화' in text_lower or 'automation' in text_lower:
-            keywords.append('자동화')
-        if 'pg' in text_lower or '간편결제' in text_lower:
-            keywords.append('PG')
-        if '해외' in text_lower or 'global' in text_lower or '글로벌' in text_lower:
-            keywords.append('글로벌')
-        if '정기결제' in text_lower or 'subscription' in text_lower:
-            keywords.append('정기결제')
+        for industry, keywords_list in industry_mapping.items():
+            if any(kw in text_lower for kw in keywords_list):
+                industry_tags.append(industry)
+        
+        # 기능/혜택 관련 키워드 (확장)
+        benefit_mapping = {
+            '수수료절감': ['수수료', '비용절감', '절감', '할인', '저렴', '15%', '30%'],
+            '결제연동': ['결제', 'payment', 'pg연동', 'api', 'sdk'],
+            '정산자동화': ['정산', '매출', '대사', '자동화', '재무', '마감'],
+            'PG통합': ['pg', '간편결제', '멀티pg', '복수pg', '25개'],
+            '글로벌': ['해외', 'global', '글로벌', '해외결제', '환율'],
+            '정기결제': ['정기결제', 'subscription', '빌링키', '구독결제'],
+            '리스크관리': ['장애', '백업', '라우팅', '리스크', '안정성'],
+            '개발효율': ['개발', '리소스', '2주', '85%', '효율']
+        }
+        
+        for benefit, keywords_list in benefit_mapping.items():
+            if any(kw in text_lower for kw in keywords_list):
+                keywords.append(benefit)
+        
+        # 고객사례 여부 확인
+        if any(kw in text_lower for kw in ['고객사', '도입사례', '성공사례', '인터뷰', '케이스']):
+            keywords.append('고객사례')
+        
+        # 구체적 수치 포함 여부
+        import re
+        if re.search(r'\d+%|\d+억|\d+만원|\d+배', text_lower):
+            keywords.append('정량적효과')
         
         return ','.join(keywords), ','.join(industry_tags)
         
     except Exception as e:
         logger.error(f"키워드 추출 오류: {str(e)}")
         return '', ''
+
+
+def analyze_blog_with_ai(post, gemini_model=None):
+    """
+    Gemini AI로 블로그 내용 심층 분석 (선택적 사용)
+    
+    Args:
+        post: 블로그 포스트 dict
+        gemini_model: Gemini 모델 객체
+    
+    Returns:
+        dict: 분석 결과 (target_industry, benefits, case_company, summary)
+    """
+    if not gemini_model:
+        return None
+    
+    try:
+        content = post.get('content', '')[:3000]
+        title = post.get('title', '')
+        
+        prompt = f"""다음 포트원 블로그 글을 분석해서 JSON으로 응답해주세요.
+
+제목: {title}
+내용: {content}
+
+분석 항목:
+1. target_industry: 이 글이 타겟으로 하는 업종 (게임, 이커머스, 여행, 교육, 금융, SaaS, 물류, 플랫폼, 일반 중 택1)
+2. main_benefit: 주요 혜택/가치 (수수료절감, 개발효율, 정산자동화, 글로벌진출, 안정성 중 택1)
+3. case_company: 언급된 고객사 이름 (없으면 빈 문자열)
+4. one_line_summary: 한 줄 요약 (30자 이내)
+5. quantitative_results: 정량적 성과 수치 (예: "수수료 15% 절감", 없으면 빈 문자열)
+
+JSON 형식으로만 응답:
+{{"target_industry": "", "main_benefit": "", "case_company": "", "one_line_summary": "", "quantitative_results": ""}}
+"""
+        
+        response = gemini_model.generate_content(prompt)
+        result = response.text.strip()
+        
+        # JSON 파싱
+        import json
+        if result.startswith('```'):
+            result = result.split('```')[1]
+            if result.startswith('json'):
+                result = result[4:]
+        
+        return json.loads(result)
+        
+    except Exception as e:
+        logger.error(f"AI 블로그 분석 오류: {str(e)}")
+        return None
 
 def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=None, pain_points=None):
     """
@@ -403,6 +466,185 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
     except Exception as e:
         logger.error(f"업종별 블로그 조회 오류: {str(e)}")
         return []
+
+def get_best_blog_for_email_mention(company_info, research_data=None, max_check=10):
+    """
+    이메일 본문에 언급할 가장 적합한 블로그 1개 선택
+    
+    선택 기준:
+    1. 회사와 비슷한 산업/업종의 사례
+    2. 받을 수 있는 혜택(수수료 절감, 자동화 등)과 관련된 정보
+    
+    Args:
+        company_info: 회사 정보 딕셔너리
+        research_data: 조사 결과 딕셔너리 (pain_points 등)
+        max_check: 확인할 최대 블로그 수
+    
+    Returns:
+        dict or None: 선택된 블로그 정보 (title, link, summary, match_reason)
+    """
+    try:
+        db = get_db()
+        BlogPost = get_blog_post_model()
+        
+        # 회사 정보에서 검색 키워드 추출
+        industry = company_info.get('industry', '') or ''
+        category = company_info.get('category', '') or ''
+        description = company_info.get('description', '') or ''
+        
+        # research_data에서 pain_points 추출
+        pain_points = ''
+        if research_data:
+            pain_points = research_data.get('pain_points', '') or ''
+        
+        # 모든 텍스트 합치기
+        all_text = f"{industry} {category} {description} {pain_points}".lower()
+        
+        # 산업 키워드 매칭
+        industry_keywords = {
+            '게임': ['게임', 'game', '인앱결제', 'd2c'],
+            '이커머스': ['이커머스', 'e커머스', '쇼핑몰', '커머스', '온라인몰', '마켓플레이스'],
+            '여행': ['여행', 'travel', '항공', '호텔', '숙박', '예약'],
+            '교육': ['교육', 'education', '에듀테크', '학원', '강의'],
+            '금융': ['금융', 'fintech', '핀테크', '보험', '대출'],
+            'SaaS': ['saas', '구독', 'subscription', '소프트웨어'],
+            '미디어': ['미디어', 'media', '콘텐츠', 'ott', '스트리밍'],
+            '물류': ['물류', 'logistics', '배송', '배달'],
+            '플랫폼': ['플랫폼', 'platform', '중개', '마켓']
+        }
+        
+        # 혜택 키워드 매칭
+        benefit_keywords = {
+            '수수료절감': ['수수료', '비용', '절감', '할인', '저렴'],
+            '자동화': ['자동화', '자동', '효율', '리소스', '시간절약'],
+            '정산': ['정산', '매출', '재무', '회계'],
+            '글로벌': ['해외', '글로벌', 'global', '해외결제'],
+            '안정성': ['안정', '장애', '리스크', '백업', '라우팅']
+        }
+        
+        # 회사에 해당하는 산업 찾기
+        matched_industries = []
+        for ind, keywords in industry_keywords.items():
+            for kw in keywords:
+                if kw in all_text:
+                    matched_industries.append(ind)
+                    break
+        
+        # 관심 혜택 찾기
+        matched_benefits = []
+        for benefit, keywords in benefit_keywords.items():
+            for kw in keywords:
+                if kw in all_text:
+                    matched_benefits.append(benefit)
+                    break
+        
+        logger.info(f"🎯 블로그 선택 - 매칭된 산업: {matched_industries}, 혜택: {matched_benefits}")
+        
+        from sqlalchemy import or_
+        
+        # 블로그 검색 (최신순)
+        all_posts = db.session.query(BlogPost).order_by(BlogPost.created_at.desc()).limit(max_check).all()
+        
+        if not all_posts:
+            logger.info("📝 블로그 DB에 데이터 없음")
+            return None
+        
+        best_match = None
+        best_score = 0
+        best_reason = ''
+        
+        for post in all_posts:
+            score = 0
+            reasons = []
+            
+            post_text = f"{post.title} {post.summary} {post.content} {post.industry_tags} {post.keywords}".lower()
+            
+            # 산업 매칭 점수 (높은 가중치)
+            for ind in matched_industries:
+                for kw in industry_keywords.get(ind, []):
+                    if kw in post_text:
+                        score += 10
+                        if ind not in reasons:
+                            reasons.append(f"{ind} 업종 사례")
+                        break
+            
+            # 혜택 매칭 점수
+            for benefit in matched_benefits:
+                for kw in benefit_keywords.get(benefit, []):
+                    if kw in post_text:
+                        score += 5
+                        if benefit not in reasons:
+                            reasons.append(f"{benefit} 관련")
+                        break
+            
+            # 일반 혜택 키워드 (회사 매칭 없어도)
+            general_benefits = ['수수료', '절감', '자동화', '효율', '성공사례', '도입사례']
+            for gb in general_benefits:
+                if gb in post_text:
+                    score += 2
+            
+            # URL이 유효한지 확인 (선택적)
+            if score > best_score and post.link:
+                best_score = score
+                best_match = post
+                best_reason = ', '.join(reasons[:2]) if reasons else '포트원 혜택 정보'
+        
+        if best_match and best_score >= 5:  # 최소 점수 기준
+            logger.info(f"✅ 블로그 선택: {best_match.title[:40]}... (점수: {best_score}, 이유: {best_reason})")
+            return {
+                'title': best_match.title,
+                'link': best_match.link,
+                'summary': best_match.summary[:200] if best_match.summary else '',
+                'match_reason': best_reason
+            }
+        else:
+            logger.info(f"📝 적합한 블로그 없음 (최고 점수: {best_score})")
+            return None
+            
+    except Exception as e:
+        logger.error(f"블로그 선택 오류: {str(e)}")
+        return None
+
+
+def format_blog_mention_for_email(blog_info, company_name=''):
+    """
+    이메일에 삽입할 블로그 언급 문구 생성
+    
+    "3,000여개 고객사가..." 대신 사용할 수 있는 문구
+    
+    Args:
+        blog_info: get_best_blog_for_email_mention() 결과
+        company_name: 회사명
+    
+    Returns:
+        dict: {
+            'mention_text': 본문에 삽입할 텍스트,
+            'blog_link': 블로그 링크,
+            'blog_title': 블로그 제목
+        }
+    """
+    if not blog_info:
+        return None
+    
+    title = blog_info.get('title', '')
+    link = blog_info.get('link', '')
+    reason = blog_info.get('match_reason', '')
+    
+    # 본문에 자연스럽게 삽입할 문구
+    mention_text = f"""
+실제로 {reason}를 고민하셨던 고객사에서 포트원 도입 후 좋은 결과를 얻으셨는데요,
+자세한 내용은 아래 글에서 확인해보실 수 있습니다.
+
+👉 [{title}]({link})
+"""
+    
+    return {
+        'mention_text': mention_text.strip(),
+        'blog_link': link,
+        'blog_title': title,
+        'match_reason': reason
+    }
+
 
 def format_relevant_blog_for_email(blog_posts, company_name='', service_type=''):
     """
