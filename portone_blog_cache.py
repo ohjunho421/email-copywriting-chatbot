@@ -215,9 +215,94 @@ def get_blog_cache_age():
         logger.error(f"캐시 시간 확인 오류: {str(e)}")
         return None
 
+# 🆕 알려진 고객사 → 업종 매핑 (블로그 사례에서 추출)
+KNOWN_CUSTOMER_INDUSTRIES = {
+    # 게임
+    '넥슨': '게임', '엔씨소프트': '게임', 'nc': '게임', '넷마블': '게임', '크래프톤': '게임',
+    '카카오게임즈': '게임', '스마일게이트': '게임', '펄어비스': '게임', '컴투스': '게임',
+    '데브시스터즈': '게임', '쿠키런': '게임', '슈퍼셀': '게임', '라이엇': '게임',
+    
+    # 이커머스/쇼핑
+    '무신사': '패션', '29cm': '패션', 'w컨셉': '패션', '지그재그': '패션', '에이블리': '패션',
+    '브랜디': '패션', '하이버': '패션', '오늘의집': '이커머스', '마켓컬리': '푸드', '컬리': '푸드',
+    '쿠팡': '이커머스', '11번가': '이커머스', 'ssg': '이커머스', '롯데온': '이커머스',
+    '티몬': '이커머스', '위메프': '이커머스', '인터파크': '이커머스',
+    
+    # 뷰티
+    '올리브영': '뷰티', '아모레퍼시픽': '뷰티', 'lg생활건강': '뷰티', '이니스프리': '뷰티',
+    '에뛰드': '뷰티', '토니모리': '뷰티', '미샤': '뷰티', '더페이스샵': '뷰티',
+    '화해': '뷰티', '글로우픽': '뷰티',
+    
+    # 자동차/모빌리티
+    '현대자동차': '자동차', '기아': '자동차', '현대차': '자동차', '제네시스': '자동차',
+    '쏘카': '자동차', '타다': '자동차', '카카오모빌리티': '자동차', '티맵모빌리티': '자동차',
+    
+    # 여행
+    '야놀자': '여행', '여기어때': '여행', '마이리얼트립': '여행', '클룩': '여행',
+    '인터파크투어': '여행', '하나투어': '여행', '모두투어': '여행', '트립닷컴': '여행',
+    '아고다': '여행', '에어비앤비': '여행', '익스피디아': '여행',
+    
+    # 교육
+    '메가스터디': '교육', '대성마이맥': '교육', '에듀윌': '교육', '클래스101': '교육',
+    '탈잉': '교육', '크몽': '교육', '패스트캠퍼스': '교육', '인프런': '교육',
+    '노마드코더': '교육', '코드잇': '교육',
+    
+    # 금융
+    '토스': '금융', '카카오뱅크': '금융', '케이뱅크': '금융', '뱅크샐러드': '금융',
+    '핀다': '금융', '렌딧': '금융', '8퍼센트': '금융', '피플펀드': '금융',
+    
+    # 미디어/콘텐츠
+    '왓챠': '미디어', '웨이브': '미디어', '티빙': '미디어', '시즌': '미디어',
+    '멜론': '미디어', '지니뮤직': '미디어', '플로': '미디어', '밀리의서재': '미디어',
+    '리디북스': '미디어', '리디': '미디어',
+    
+    # SaaS/B2B
+    '토스페이먼츠': 'SaaS', '채널톡': 'SaaS', '센드버드': 'SaaS', '스티비': 'SaaS',
+    '노션': 'SaaS', '슬랙': 'SaaS', '잔디': 'SaaS', '플렉스': 'SaaS', '시프티': 'SaaS',
+    
+    # 물류/배달
+    '배달의민족': '푸드', '요기요': '푸드', '쿠팡이츠': '푸드',
+    'cj대한통운': '물류', '한진': '물류', '롯데택배': '물류', '로젠택배': '물류',
+    
+    # 플랫폼
+    '카카오': '플랫폼', '네이버': '플랫폼', '라인': '플랫폼', '당근마켓': '플랫폼',
+    '번개장터': '리셀', '중고나라': '리셀', '크림': '리셀',
+    
+    # 헬스케어
+    '굿닥': '헬스케어', '똑닥': '헬스케어', '닥터나우': '헬스케어', '휴레이포지티브': '헬스케어',
+    
+    # 부동산
+    '직방': '부동산', '다방': '부동산', '호갱노노': '부동산', '집토스': '부동산',
+}
+
+
+def extract_case_companies_from_blog(content, title=''):
+    """
+    블로그 내용에서 고객사례로 언급된 회사명과 업종을 추출
+    
+    Args:
+        content: 블로그 본문
+        title: 블로그 제목
+        
+    Returns:
+        list: [{'company': '회사명', 'industry': '업종'}, ...]
+    """
+    found_companies = []
+    text = (title + ' ' + content).lower()
+    
+    for company, industry in KNOWN_CUSTOMER_INDUSTRIES.items():
+        if company.lower() in text:
+            found_companies.append({
+                'company': company,
+                'industry': industry
+            })
+    
+    return found_companies
+
+
 def extract_keywords_from_post(post):
     """
-    블로그 글에서 키워드 추출 (규칙 기반 + AI 요약)
+    블로그 글에서 키워드 추출 (규칙 기반 + 고객사례 분석)
     
     Args:
         post: 블로그 포스트 dict
@@ -239,6 +324,15 @@ def extract_keywords_from_post(post):
         # 제목과 내용에서 주요 키워드 찾기
         text_lower = (title + ' ' + content[:2000]).lower()
         
+        # 🆕 고객사례에서 회사명 추출 → 업종 파악
+        case_companies = extract_case_companies_from_blog(content, title)
+        if case_companies:
+            keywords.append('고객사례')
+            for case in case_companies:
+                if case['industry'] not in industry_tags:
+                    industry_tags.append(case['industry'])
+            logger.debug(f"블로그에서 고객사 발견: {[c['company'] for c in case_companies]}")
+        
         # 업종 관련 키워드 (확장)
         industry_mapping = {
             '게임': ['게임', 'game', '인앱결제', 'd2c', '웹상점', '앱스토어', '구글플레이'],
@@ -251,12 +345,18 @@ def extract_keywords_from_post(post):
             '물류': ['물류', 'logistics', '배송', '배달', '풀필먼트'],
             '플랫폼': ['플랫폼', 'platform', '중개', '마켓', '파트너정산'],
             '패션': ['패션', 'fashion', '의류', '브랜드', '리셀'],
-            '푸드': ['음식', 'food', '식품', 'f&b', '레스토랑', '배달']
+            '푸드': ['음식', 'food', '식품', 'f&b', '레스토랑', '배달'],
+            '자동차': ['자동차', '차량', 'automotive', '모빌리티'],
+            '뷰티': ['뷰티', '화장품', '코스메틱', 'beauty', '스킨케어'],
+            '헬스케어': ['의료', '병원', '헬스', '건강', '제약'],
+            '부동산': ['부동산', '건물', '임대', '분양'],
+            '리셀': ['리셀', '중고', '세컨핸드', '빈티지']
         }
         
         for industry, keywords_list in industry_mapping.items():
             if any(kw in text_lower for kw in keywords_list):
-                industry_tags.append(industry)
+                if industry not in industry_tags:
+                    industry_tags.append(industry)
         
         # 기능/혜택 관련 키워드 (확장)
         benefit_mapping = {
@@ -274,9 +374,10 @@ def extract_keywords_from_post(post):
             if any(kw in text_lower for kw in keywords_list):
                 keywords.append(benefit)
         
-        # 고객사례 여부 확인
-        if any(kw in text_lower for kw in ['고객사', '도입사례', '성공사례', '인터뷰', '케이스']):
-            keywords.append('고객사례')
+        # 고객사례 여부 확인 (이미 위에서 체크했지만, 키워드 기반도 추가)
+        if '고객사례' not in keywords:
+            if any(kw in text_lower for kw in ['고객사', '도입사례', '성공사례', '인터뷰', '케이스']):
+                keywords.append('고객사례')
         
         # 구체적 수치 포함 여부
         import re
@@ -607,20 +708,32 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         best_score = 0
         best_reason = ''
         industry_matched = False
+        best_case_company = None  # 블로그에 언급된 고객사명
         
         for post in all_posts:
             score = 0
             reasons = []
             this_industry_matched = False
+            case_company_name = None  # 블로그에 언급된 고객사명
             
             post_text = f"{post.title} {post.summary} {post.content} {post.industry_tags} {post.keywords}".lower()
             
-            # 🆕 블로그의 업종 파악
+            # 🆕 블로그에서 고객사례 회사 추출 → 업종 파악 (가장 정확)
+            case_companies = extract_case_companies_from_blog(post.content or '', post.title or '')
             blog_industries = []
+            
+            if case_companies:
+                for case in case_companies:
+                    if case['industry'] not in blog_industries:
+                        blog_industries.append(case['industry'])
+                case_company_name = case_companies[0]['company']  # 첫 번째 고객사명 저장
+            
+            # 키워드 기반 업종도 추가
             for ind, keywords in industry_keywords.items():
                 for kw in keywords:
                     if kw in post_text:
-                        blog_industries.append(ind)
+                        if ind not in blog_industries:
+                            blog_industries.append(ind)
                         break
             
             # 🆕 배타적 그룹 체크 - 회사가 자동차인데 블로그가 뷰티면 제외
@@ -640,7 +753,10 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                 if ind in blog_industries:
                     score += 15  # 정확히 같은 업종
                     this_industry_matched = True
-                    if f"{ind} 업종" not in [r for r in reasons]:
+                    # 🆕 고객사명이 있으면 더 구체적인 이유 표시
+                    if case_company_name and f"{ind}" not in str(reasons):
+                        reasons.append(f"{case_company_name}({ind})")
+                    elif f"{ind} 업종" not in [r for r in reasons]:
                         reasons.append(f"{ind} 업종 사례")
                 else:
                     # 키워드로 부분 매칭
@@ -677,18 +793,20 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                 best_match = post
                 best_reason = ', '.join(reasons[:2]) if reasons else '포트원 도입 효과'
                 industry_matched = this_industry_matched
+                best_case_company = case_company_name  # 고객사명 저장
         
         # 🆕 최소 점수 기준 강화: 업종 매칭이 있으면 10점, 없으면 15점 이상
         min_score = 10 if industry_matched else 15
         
         if best_match and best_score >= min_score:
-            logger.info(f"✅ 블로그 선택: {best_match.title[:40]}... (점수: {best_score}, 이유: {best_reason}, 업종매칭: {industry_matched})")
+            logger.info(f"✅ 블로그 선택: {best_match.title[:40]}... (점수: {best_score}, 이유: {best_reason}, 업종매칭: {industry_matched}, 고객사: {best_case_company})")
             return {
                 'title': best_match.title,
                 'link': best_match.link,
                 'summary': best_match.summary[:200] if best_match.summary else '',
                 'match_reason': best_reason,
-                'industry_matched': industry_matched
+                'industry_matched': industry_matched,
+                'case_company': best_case_company  # 블로그에 언급된 고객사명
             }
         else:
             logger.info(f"📝 적합한 블로그 없음 (최고 점수: {best_score}, 최소 기준: {min_score})")
