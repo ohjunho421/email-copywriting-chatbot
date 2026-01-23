@@ -795,8 +795,9 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                 industry_matched = this_industry_matched
                 best_case_company = case_company_name  # 고객사명 저장
         
-        # 🆕 최소 점수 기준 강화: 업종 매칭이 있으면 10점, 없으면 15점 이상
-        min_score = 10 if industry_matched else 15
+        # 🆕 최소 점수 기준 완화: 블로그 언급을 더 적극적으로 하기 위해
+        # 업종 매칭 있으면 3점, 없으면 5점 이상이면 OK
+        min_score = 3 if industry_matched else 5
         
         if best_match and best_score >= min_score:
             logger.info(f"✅ 블로그 선택: {best_match.title[:40]}... (점수: {best_score}, 이유: {best_reason}, 업종매칭: {industry_matched}, 고객사: {best_case_company})")
