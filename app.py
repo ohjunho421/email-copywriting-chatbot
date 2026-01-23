@@ -3499,10 +3499,17 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         if competitor_name:
             company_info += f"\nPortOne 이용 경쟁사: {competitor_name}"
         
+        # 🆕 호스팅 정보 명시적 추가 (PG와 혼동 방지)
+        hosting_info = get_hosting(company_data)
+        if hosting_info:
+            company_info += f"\n🏠 호스팅사 (웹사이트 호스팅, 결제와 무관): {hosting_info}"
+        
         # 사용PG 정보 추가 (우선 표시) - 🆕 동적 열 매핑 사용
         pg_info = get_pg_provider(company_data)
         if pg_info:
-            company_info += f"\n💳 현재 사용 중인 PG: {pg_info}"
+            company_info += f"\n💳 현재 사용 중인 PG (결제 서비스): {pg_info}"
+        else:
+            company_info += f"\n💳 현재 사용 중인 PG: 정보 없음 (PG 관련 내용 언급 금지)"
         
         # 추가 회사 정보가 있다면 포함
         # 🆕 중복 방지를 위한 제외 키 목록 확장
@@ -3827,21 +3834,23 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 
 **💳 사용PG 정보 활용 가이드 (중요!):**
 
-**🚨 호스팅사 vs PG 구분 (매우 중요 - 절대 혼동 금지!):**
-- **호스팅사**: 웹사이트를 호스팅하는 서비스 (예: Web Hosting, Vercel, AWS, Cloudflare, Cafe24, 자체구축 등)
-- **PG(Payment Gateway)**: 결제를 처리하는 서비스 (예: 네이버페이, 토스페이먼츠, KG이니시스, 나이스페이 등)
-- **호스팅사는 결제 서비스가 아닙니다! "Web Hosting"이나 "Vercel"을 PG처럼 언급하면 절대 안 됩니다!**
-- 회사 정보에 "💳 현재 사용 중인 PG" 표시가 있을 때만 PG 관련 내용을 언급하세요
+**🚨🚨🚨 호스팅사 vs PG 구분 - 최우선 규칙 (위반 시 이메일 무효!) 🚨🚨🚨**
 
-- 타겟 회사가 이미 특정 PG를 사용 중이라면 (위 회사 정보에 "💳 현재 사용 중인 PG" 표시됨), 이를 OPI의 필요성과 자연스럽게 연결하세요
-- **단일 PG 사용 시 (네이버페이, 토스 등 실제 결제 서비스만 해당):**
-  • "현재 [사용PG]를 사용하고 계신데, 단일 PG 의존으로 인한 리스크(장애 시 전체 결제 중단, 높은 수수료, PG사와의 협상력 부족)를 OPI의 멀티 PG 전략으로 해결할 수 있습니다"
-  • "현재 [사용PG] 한 곳만 사용 중이시라면, OPI의 스마트 라우팅으로 결제 성공률을 15% 높이고 수수료도 15-30% 절감할 수 있습니다"
-  • "현재 [사용PG]를 메인으로 쓰시면서 OPI로 백업 PG를 추가하면, 장애 시에도 결제가 중단되지 않아 매출 손실을 방지할 수 있습니다"
-- **여러 PG 사용 시:**
-  • "현재 [사용PG]를 사용하고 계신데, 각 PG사 콘솔을 따로 들어가서 정산 데이터를 확인하시느라 불편하지 않으신가요? PortOne 대시보드 하나로 모든 PG의 거래 내역과 정산 데이터를 통합 관리할 수 있습니다"
-  • "여러 PG사를 개별적으로 관리하시는 것보다, PortOne 콘솔 하나에서 모든 결제 데이터를 실시간으로 확인하고 정산 관리를 자동화할 수 있습니다"
-- **PG 정보가 없는 경우 (💳 표시가 없으면)**: PG 이름을 언급하지 말고, 일반적인 결제 최적화의 장점만 언급
+위 회사 정보에서 두 가지 정보를 반드시 구분하세요:
+- **🏠 호스팅사**: "웹사이트 호스팅, 결제와 무관"이라고 명시됨 → 이것은 **절대로 PG가 아님!**
+  - 예: Web Hosting, Vercel, AWS, Cloudflare, Cafe24, 자체구축 등
+  - ❌ 절대 금지: "현재 Web Hosting을 사용하고 계신데, 단일 PG 의존으로..." (이건 완전히 틀린 문장!)
+  - ❌ 절대 금지: "현재 Vercel을 사용하고 계신데..." (호스팅을 PG처럼 언급)
+  
+- **💳 현재 사용 중인 PG**: "결제 서비스"라고 명시됨 → 이것만 PG 관련 언급에 사용
+  - 예: 네이버페이, 토스페이먼츠, KG이니시스, 나이스페이, 카카오페이 등
+  - ✅ 올바른 예: "현재 네이버페이를 사용하고 계신데, 단일 PG 의존으로..."
+
+**PG 정보 활용 규칙:**
+- **💳 PG 정보가 있는 경우에만** (예: "💳 현재 사용 중인 PG (결제 서비스): 네이버페이"):
+  - 단일 PG: "현재 [PG명]을 사용하고 계신데, 단일 PG 의존 리스크를 OPI로 해결..."
+  - 여러 PG: "여러 PG사를 개별 관리하시는 것보다 PortOne 콘솔 하나로..."
+- **💳 PG 정보가 "정보 없음"인 경우**: PG 이름을 절대 언급하지 말고, 일반적인 결제 최적화만 언급
 
 **🔥 회사 조사 결과 (이메일에 반드시 활용해야 함):**
 {research_summary}
@@ -4905,6 +4914,18 @@ def generate_email_with_user_template(company_data, research_data, user_template
         company_info = f"회사명: {company_name}\n담당자: {email_name}"
         if competitor_name:
             company_info += f"\nPortOne 이용 경쟁사: {competitor_name}"
+        
+        # 🆕 호스팅 정보 명시적 추가 (PG와 혼동 방지)
+        hosting_info = get_hosting(company_data)
+        if hosting_info:
+            company_info += f"\n🏠 호스팅사 (웹사이트 호스팅, 결제와 무관): {hosting_info}"
+        
+        # 🆕 사용PG 정보 추가 (결제 서비스 명시)
+        pg_info = get_pg_provider(company_data)
+        if pg_info:
+            company_info += f"\n💳 현재 사용 중인 PG (결제 서비스): {pg_info}"
+        else:
+            company_info += f"\n💳 현재 사용 중인 PG: 정보 없음 (PG 관련 내용 언급 금지)"
         
         # 조사 정보
         research_summary = research_data.get('company_info', '조사 정보 없음')
