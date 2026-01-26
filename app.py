@@ -7156,6 +7156,39 @@ def scrape_portone_blog_initial():
                 post['keywords'] = keywords
                 post['industry_tags'] = industry_tags
             
+            # 🆕 AI 요약 생성 (블로그 매칭 정확도 향상)
+            from portone_blog_cache import generate_blog_ai_summary
+            logger.info("🤖 블로그 AI 요약 생성 중... (시간이 걸릴 수 있습니다)")
+            ai_summary_count = 0
+            for i, post in enumerate(all_posts):
+                try:
+                    ai_result = generate_blog_ai_summary(
+                        post.get('title', ''),
+                        post.get('content', ''),
+                        post.get('link', '')
+                    )
+                    if ai_result:
+                        post['ai_summary'] = ai_result.get('ai_summary', '')
+                        post['target_audience'] = ai_result.get('target_audience', '')
+                        post['key_benefits'] = ai_result.get('key_benefits', '')
+                        post['pain_points_addressed'] = ai_result.get('pain_points_addressed', '')
+                        post['case_company'] = ai_result.get('case_company') or ''
+                        post['case_industry'] = ai_result.get('case_industry') or ''
+                        ai_summary_count += 1
+                    
+                    # 진행 상황 로그 (10개마다)
+                    if (i + 1) % 10 == 0:
+                        logger.info(f"   AI 요약 진행: {i + 1}/{len(all_posts)}")
+                    
+                    # API 과부하 방지
+                    import time
+                    time.sleep(0.5)
+                except Exception as e:
+                    logger.warning(f"⚠️ AI 요약 실패: {post.get('title', '')[:30]}... - {str(e)}")
+                    continue
+            
+            logger.info(f"✅ AI 요약 생성 완료: {ai_summary_count}/{len(all_posts)}개")
+            
             # DB에 저장 (기존 블로그 유지하고 새 블로그 추가)
             if all_posts:
                 save_blog_cache(all_posts, replace_all=False)
@@ -7823,6 +7856,37 @@ def scrape_blog_initial():
             
     except Exception as e:
         logger.error(f"초기 스크래핑 오류: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/generate-blog-ai-summaries', methods=['POST'])
+def generate_blog_ai_summaries():
+    """
+    기존 블로그에 AI 요약 일괄 생성
+    
+    AI 요약이 없는 블로그들에 대해 요약 생성
+    """
+    try:
+        from portone_blog_cache import generate_ai_summaries_for_existing_blogs
+        
+        data = request.get_json() or {}
+        limit = data.get('limit', 50)
+        
+        logger.info(f"🤖 블로그 AI 요약 일괄 생성 요청 (limit: {limit})")
+        
+        updated_count = generate_ai_summaries_for_existing_blogs(limit=limit)
+        
+        return jsonify({
+            'success': True,
+            'message': f'AI 요약 생성 완료',
+            'updated_count': updated_count,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"AI 요약 생성 오류: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

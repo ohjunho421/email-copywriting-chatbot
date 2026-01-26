@@ -63,6 +63,71 @@ def init_db():
     logger.info("✅ 블로그 데이터베이스 초기화 완료 (PostgreSQL)")
     return True
 
+def generate_blog_ai_summary(title, content, link):
+    """
+    블로그 본문을 AI로 분석하여 구조화된 요약 생성
+    
+    Returns:
+        dict: {
+            'ai_summary': 핵심 요약 (2-3문장),
+            'target_audience': 타겟 고객 유형,
+            'key_benefits': 핵심 효과/수치,
+            'pain_points_addressed': 해결하는 문제점들,
+            'case_company': 사례 고객사명,
+            'case_industry': 사례 고객사 업종
+        }
+    """
+    import os
+    
+    # 본문이 없거나 너무 짧으면 스킵
+    if not content or len(content) < 100:
+        return None
+    
+    try:
+        import google.generativeai as genai
+        
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            return None
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        prompt = f"""다음 포트원(PortOne) 블로그 글을 분석해서 JSON 형식으로 요약해주세요.
+
+**블로그 제목:** {title}
+**블로그 URL:** {link}
+**블로그 본문:** {content[:3000]}
+
+다음 형식으로 반드시 JSON만 출력하세요:
+{{
+    "ai_summary": "이 블로그의 핵심 내용을 2-3문장으로 요약",
+    "target_audience": "이 블로그가 도움될 잠재고객 유형 (예: '글로벌 진출 계획 기업', 'PG 수수료 절감 고민 기업', '정산 자동화 필요 기업')",
+    "key_benefits": "블로그에 언급된 핵심 효과/수치 (예: '수수료 15% 절감', '개발 리소스 85% 절감', '정산 시간 90% 단축')",
+    "pain_points_addressed": "이 블로그가 해결하는 문제점들 (예: 'PG 복수 관리 어려움', '해외결제 연동 복잡성', '정산 수작업 부담')",
+    "case_company": "블로그에 언급된 사례 고객사명 (없으면 null)",
+    "case_industry": "사례 고객사 업종 (예: '이커머스', '게임', '자동차', '패션' 등. 없으면 null)"
+}}
+
+JSON만 출력하세요. 다른 텍스트 없이."""
+
+        response = model.generate_content(prompt)
+        result_text = response.text.strip()
+        
+        # JSON 파싱
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', result_text)
+        if json_match:
+            result = json.loads(json_match.group())
+            logger.debug(f"✅ AI 요약 생성: {title[:30]}...")
+            return result
+        
+        return None
+        
+    except Exception as e:
+        logger.warning(f"⚠️ AI 요약 생성 실패: {title[:30]}... - {str(e)}")
+        return None
+
 def save_blog_cache(blog_posts, replace_all=True):
     """
     블로그 포스트를 PostgreSQL 데이터베이스에 저장
@@ -104,6 +169,13 @@ def save_blog_cache(blog_posts, replace_all=True):
                 existing_post.category = post.get('category', '')
                 existing_post.keywords = post.get('keywords', '')
                 existing_post.industry_tags = post.get('industry_tags', '')
+                # 🆕 AI 요약 컬럼 업데이트
+                existing_post.ai_summary = post.get('ai_summary', '')
+                existing_post.target_audience = post.get('target_audience', '')
+                existing_post.key_benefits = post.get('key_benefits', '')
+                existing_post.pain_points_addressed = post.get('pain_points_addressed', '')
+                existing_post.case_company = post.get('case_company', '')
+                existing_post.case_industry = post.get('case_industry', '')
                 existing_post.updated_at = datetime.utcnow()
                 updated_count += 1
             else:
@@ -116,6 +188,13 @@ def save_blog_cache(blog_posts, replace_all=True):
                     category=post.get('category', ''),
                     keywords=post.get('keywords', ''),
                     industry_tags=post.get('industry_tags', ''),
+                    # 🆕 AI 요약 컬럼
+                    ai_summary=post.get('ai_summary', ''),
+                    target_audience=post.get('target_audience', ''),
+                    key_benefits=post.get('key_benefits', ''),
+                    pain_points_addressed=post.get('pain_points_addressed', ''),
+                    case_company=post.get('case_company', ''),
+                    case_industry=post.get('case_industry', ''),
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()
                 )
@@ -152,6 +231,72 @@ def save_blog_cache(blog_posts, replace_all=True):
         except:
             pass
         return False
+
+def generate_ai_summaries_for_existing_blogs(limit=50):
+    """
+    기존 블로그에 AI 요약이 없는 것들에 대해 일괄 생성
+    
+    Args:
+        limit: 한 번에 처리할 최대 개수
+    
+    Returns:
+        int: 업데이트된 블로그 개수
+    """
+    try:
+        db = get_db()
+        BlogPost = get_blog_post_model()
+        
+        # AI 요약이 없는 블로그만 조회
+        posts_without_summary = db.session.query(BlogPost).filter(
+            (BlogPost.ai_summary == None) | (BlogPost.ai_summary == '')
+        ).limit(limit).all()
+        
+        if not posts_without_summary:
+            logger.info("✅ 모든 블로그에 AI 요약이 있습니다")
+            return 0
+        
+        logger.info(f"🤖 AI 요약 생성 시작: {len(posts_without_summary)}개 블로그")
+        
+        updated_count = 0
+        import time
+        
+        for i, post in enumerate(posts_without_summary):
+            try:
+                ai_result = generate_blog_ai_summary(
+                    post.title,
+                    post.content,
+                    post.link
+                )
+                
+                if ai_result:
+                    post.ai_summary = ai_result.get('ai_summary', '')
+                    post.target_audience = ai_result.get('target_audience', '')
+                    post.key_benefits = ai_result.get('key_benefits', '')
+                    post.pain_points_addressed = ai_result.get('pain_points_addressed', '')
+                    post.case_company = ai_result.get('case_company') or ''
+                    post.case_industry = ai_result.get('case_industry') or ''
+                    post.updated_at = datetime.utcnow()
+                    updated_count += 1
+                    logger.info(f"   ✅ {i+1}/{len(posts_without_summary)}: {post.title[:40]}...")
+                
+                # API 과부하 방지
+                time.sleep(0.5)
+                
+            except Exception as e:
+                logger.warning(f"   ⚠️ 실패: {post.title[:30]}... - {str(e)}")
+                continue
+        
+        db.session.commit()
+        logger.info(f"✅ AI 요약 일괄 생성 완료: {updated_count}개 업데이트")
+        return updated_count
+        
+    except Exception as e:
+        logger.error(f"AI 요약 일괄 생성 오류: {str(e)}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return 0
 
 def load_blog_cache():
     """
@@ -864,7 +1009,13 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             
             post_text = f"{post.title} {post.summary} {post.content} {post.industry_tags} {post.keywords}".lower()
             
+            # 🆕 AI 요약 필드도 매칭에 활용
+            ai_summary_text = f"{post.ai_summary or ''} {post.target_audience or ''} {post.pain_points_addressed or ''} {post.key_benefits or ''}".lower()
+            full_text = f"{post_text} {ai_summary_text}"
+            
             # 🆕 블로그에서 고객사례 회사 추출 → 업종 파악 (가장 정확)
+            # DB에 저장된 case_company가 있으면 우선 사용
+            case_company_name = post.case_company or None
             case_companies = extract_case_companies_from_blog(post.content or '', post.title or '')
             blog_industries = []
             
@@ -942,7 +1093,39 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                     score += intent_score // 2
                     reasons.insert(0, f"{intent_name} 관련")
             
-            # 🏆 경쟁사 매칭 (최고 점수 - 가장 설득력 있음!)
+            # � AI 요약 기반 타겟 고객 매칭 (정확도 향상!)
+            target_audience = (post.target_audience or '').lower()
+            pain_points = (post.pain_points_addressed or '').lower()
+            
+            # 의도 키워드와 target_audience 매칭
+            for intent_name in detected_intents:
+                intent_info = intent_scenarios.get(intent_name, {})
+                intent_keywords = intent_info.get('keywords', [])
+                
+                # target_audience에 의도 키워드가 있으면 추가 점수
+                if any(kw in target_audience for kw in intent_keywords):
+                    score += 30
+                    if f"타겟매칭" not in str(reasons):
+                        reasons.append(f"🎯 타겟매칭: {intent_name}")
+                    break
+            
+            # 회사의 pain point와 블로그의 해결 문제 매칭
+            company_pain_keywords = []
+            for pain, kws in {
+                'pg관리': ['pg', '복수', '멀티', '관리'],
+                '수수료': ['수수료', '비용', '절감'],
+                '정산': ['정산', '대사', '마감'],
+                '글로벌': ['해외', '글로벌', '환율', '크로스보더'],
+            }.items():
+                if any(kw in all_text for kw in kws):
+                    company_pain_keywords.extend(kws)
+            
+            if company_pain_keywords and any(kw in pain_points for kw in company_pain_keywords):
+                score += 20
+                if "문제해결매칭" not in str(reasons):
+                    reasons.append("💡 문제해결매칭")
+            
+            # �� 경쟁사 매칭 (최고 점수 - 가장 설득력 있음!)
             competitor_matched = False
             if competitor_list:
                 for comp in competitor_list:

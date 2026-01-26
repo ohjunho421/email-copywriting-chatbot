@@ -139,6 +139,14 @@ class BlogPost(db.Model):
     keywords = db.Column(db.Text, nullable=True)  # JSON 문자열
     industry_tags = db.Column(db.Text, nullable=True)  # JSON 문자열
     
+    # 🆕 AI 요약 컬럼 - 블로그 매칭 정확도 향상
+    ai_summary = db.Column(db.Text, nullable=True)  # AI가 생성한 핵심 요약
+    target_audience = db.Column(db.Text, nullable=True)  # 타겟 고객 (예: "글로벌 진출 계획 기업", "PG 수수료 고민 기업")
+    key_benefits = db.Column(db.Text, nullable=True)  # 핵심 효과 (예: "수수료 15% 절감", "개발 리소스 85% 절감")
+    pain_points_addressed = db.Column(db.Text, nullable=True)  # 해결하는 문제점들
+    case_company = db.Column(db.String(100), nullable=True)  # 사례 고객사명 (예: "핏펫", "혼다코리아")
+    case_industry = db.Column(db.String(50), nullable=True)  # 사례 고객사 업종
+    
     # 메타데이터
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -156,6 +164,12 @@ class BlogPost(db.Model):
             'category': self.category,
             'keywords': self.keywords,
             'industry_tags': self.industry_tags,
+            'ai_summary': self.ai_summary,
+            'target_audience': self.target_audience,
+            'key_benefits': self.key_benefits,
+            'pain_points_addressed': self.pain_points_addressed,
+            'case_company': self.case_company,
+            'case_industry': self.case_industry,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
