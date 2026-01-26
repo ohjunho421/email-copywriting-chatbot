@@ -793,6 +793,29 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         description = company_info.get('description', '') or ''
         company_name = company_info.get('company_name', '') or company_info.get('회사명', '') or ''
         
+        # 🆕 BM 분석 결과에서 업종 정보 추출 (Perplexity 조사 결과 - 가장 정확)
+        bm_analysis = company_info.get('business_model', {})
+        bm_primary = bm_analysis.get('primary_model_kr', '')  # 예: '이커머스/쇼핑몰'
+        bm_detected = bm_analysis.get('detected_models', [])  # 예: ['ecommerce', 'overseas']
+        
+        # BM 분석 결과를 업종 리스트로 변환
+        bm_industries = []
+        bm_to_industry_map = {
+            'ecommerce': '이커머스',
+            'subscription': 'SaaS',
+            'mobile_app': '게임',
+            'platform': '플랫폼',
+            'overseas': '글로벌',
+            'b2b': 'B2B',
+            'content': '미디어'
+        }
+        for bm in bm_detected:
+            if bm in bm_to_industry_map:
+                bm_industries.append(bm_to_industry_map[bm])
+        
+        if bm_primary:
+            logger.info(f"📊 BM 분석 기반 업종: {bm_primary} → {bm_industries}")
+        
         # research_data에서 pain_points, company_info 추출
         pain_points = ''
         research_company_info = ''
@@ -891,7 +914,7 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             '플랫폼': ['플랫폼', 'platform', '중개', '마켓', '파트너정산'],
             
             # 제조/산업
-            '자동차': ['자동차', '차량', 'automotive', '모빌리티', '카', '오토'],
+            '자동차': ['자동차', '차량', 'automotive', '모빌리티', '카쉐어', '자동차보험'],  # '카', '오토'는 너무 광범위해서 제외
             '제조': ['제조', 'manufacturing', '공장', '생산', '부품'],
             
             # 헬스케어
@@ -935,13 +958,22 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             '개발효율': ['개발', 'api', 'sdk', '연동', '2주', '85%', '구축']
         }
         
-        # 회사에 해당하는 산업 찾기
+        # 🆕 회사에 해당하는 산업 찾기 - BM 분석 결과 우선 사용!
         matched_industries = []
-        for ind, keywords in industry_keywords.items():
-            for kw in keywords:
-                if kw in all_text:
-                    matched_industries.append(ind)
-                    break
+        
+        # 1순위: BM 분석 결과 (Perplexity가 파악한 업종 - 가장 정확)
+        if bm_industries:
+            matched_industries = bm_industries.copy()
+            logger.info(f"✅ BM 분석 기반 업종 사용: {matched_industries}")
+        else:
+            # 2순위: 키워드 기반 매칭 (폴백)
+            for ind, keywords in industry_keywords.items():
+                for kw in keywords:
+                    if kw in all_text:
+                        matched_industries.append(ind)
+                        break
+            if matched_industries:
+                logger.info(f"⚠️ BM 분석 없음 - 키워드 기반 폴백: {matched_industries}")
         
         # 관심 혜택 찾기
         matched_benefits = []

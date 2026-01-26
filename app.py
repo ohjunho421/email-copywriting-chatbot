@@ -2603,11 +2603,17 @@ class EmailCopywriter:
                 logger.error(f"❌ 블로그 스크래핑 오류: {str(blog_error)}")
         
         # 회사 정보 구조화 (업종별 블로그 필터링용)
+        # 🆕 Perplexity BM 분석 결과에서 업종 정보 추출 (키워드 기반보다 정확)
+        bm_analysis = research_data.get('business_model', {})
+        detected_industry = bm_analysis.get('primary_model_kr', '')  # 예: '이커머스/쇼핑몰'
+        
         company_info_for_blog = {
-            'industry': research_data.get('industry', ''),
+            'industry': detected_industry or research_data.get('industry', ''),
             'category': research_data.get('category', ''),
-            'description': research_data.get('company_info', '')
+            'description': research_data.get('company_info', ''),
+            'business_model': bm_analysis  # 🆕 BM 분석 전체 정보 전달
         }
+        logger.info(f"📊 {company_name} 업종 파악: {detected_industry or '미파악 - 키워드 기반 폴백'}")
         
         # Pain Point 키워드 추출 (Perplexity 조사 결과에서)
         pain_point_keywords = []
