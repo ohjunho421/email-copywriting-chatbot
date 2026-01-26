@@ -7091,6 +7091,11 @@ def scrape_portone_blog_initial():
                 save_blog_cache(all_posts, replace_all=False)
                 logger.info(f"✅ 블로그 데이터 스크래핑 완료: {len(all_posts)}개 추가/업데이트 (PostgreSQL)")
                 
+                # 🆕 기존 블로그 업종태그 재분석 (새 스크래핑 후 전체 태그 정규화)
+                from portone_blog_cache import reanalyze_all_blog_tags
+                updated_count = reanalyze_all_blog_tags()
+                logger.info(f"🏷️ 블로그 업종태그 재분석 완료: {updated_count}개 업데이트")
+                
                 # 전체 블로그 개수 확인
                 from portone_blog_cache import load_blog_cache
                 total_cached = load_blog_cache()
@@ -7179,6 +7184,11 @@ def scrape_portone_blog_incremental():
             if new_posts:
                 save_blog_cache(new_posts, replace_all=False)
                 logger.info(f"✅ 증분 스크래핑 완료: {len(new_posts)}개 새 글 추가")
+                
+                # 🆕 기존 블로그 업종태그 재분석
+                from portone_blog_cache import reanalyze_all_blog_tags
+                updated_count = reanalyze_all_blog_tags()
+                logger.info(f"🏷️ 블로그 업종태그 재분석 완료: {updated_count}개 업데이트")
             
             return new_posts
             
@@ -8996,6 +9006,18 @@ if __name__ == '__main__':
     
     if not os.getenv('GEMINI_API_KEY'):
         logger.warning("GEMINI_API_KEY가 설정되지 않았습니다.")
+    
+    # 🆕 서버 시작 시 블로그 업종태그 자동 재분석 (배포 후 자동 업데이트)
+    try:
+        with app.app_context():
+            from portone_blog_cache import reanalyze_all_blog_tags, load_blog_cache
+            cached = load_blog_cache()
+            if cached:
+                logger.info(f"🏷️ 서버 시작 - 블로그 {len(cached)}개 태그 재분석 중...")
+                updated = reanalyze_all_blog_tags()
+                logger.info(f"✅ 블로그 업종태그 재분석 완료: {updated}개 업데이트")
+    except Exception as e:
+        logger.warning(f"⚠️ 블로그 태그 재분석 스킵: {str(e)}")
     
     logger.info("🚀 이메일 생성 챗봇 서버 시작")
     logger.info("사용 가능한 엔드포인트:")

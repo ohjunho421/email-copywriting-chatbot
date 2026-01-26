@@ -441,6 +441,56 @@ JSON 형식으로만 응답:
         logger.error(f"AI 블로그 분석 오류: {str(e)}")
         return None
 
+
+def reanalyze_all_blog_tags():
+    """
+    기존 블로그 데이터의 업종태그와 키워드를 재분석하여 업데이트
+    업종태그가 비어있는 블로그에 대해 내용 기반으로 태그 추출
+    """
+    try:
+        db = get_db()
+        BlogPost = get_blog_post_model()
+        
+        all_posts = db.session.query(BlogPost).all()
+        updated_count = 0
+        
+        for post in all_posts:
+            # 현재 데이터로 재분석
+            post_data = {
+                'title': post.title or '',
+                'content': post.content or '',
+                'summary': post.summary or ''
+            }
+            
+            # 키워드와 업종태그 재추출
+            new_keywords, new_industry_tags = extract_keywords_from_post(post_data)
+            
+            # 업데이트가 필요한 경우에만 업데이트
+            needs_update = False
+            
+            # 업종태그가 비어있는데 새로 추출된 태그가 있으면 업데이트
+            if not post.industry_tags and new_industry_tags:
+                post.industry_tags = new_industry_tags
+                needs_update = True
+            
+            # 키워드가 비어있거나 더 풍부해지면 업데이트
+            if new_keywords and (not post.keywords or len(new_keywords) > len(post.keywords or '')):
+                post.keywords = new_keywords
+                needs_update = True
+            
+            if needs_update:
+                updated_count += 1
+                logger.info(f"📝 블로그 태그 업데이트: {post.title[:30]}... → 업종: {post.industry_tags}, 키워드: {post.keywords}")
+        
+        db.session.commit()
+        logger.info(f"✅ 블로그 태그 재분석 완료: {updated_count}/{len(all_posts)}개 업데이트됨")
+        return updated_count
+        
+    except Exception as e:
+        logger.error(f"블로그 태그 재분석 오류: {str(e)}")
+        return 0
+
+
 def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=None, pain_points=None):
     """
     회사 정보와 Pain Point를 기반으로 관련 블로그 글 조회 (PostgreSQL)
@@ -568,7 +618,7 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
         logger.error(f"업종별 블로그 조회 오류: {str(e)}")
         return []
 
-def get_best_blog_for_email_mention(company_info, research_data=None, max_check=20, competitors=None):
+def get_best_blog_for_email_mention(company_info, research_data=None, max_check=50, competitors=None):
     """
     이메일 본문에 언급할 가장 적합한 블로그 1개 선택
     
