@@ -3808,23 +3808,70 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             ps_blog_content = get_service_knowledge(service_type='PS')
             logger.info(f"📚 [플랫폼 정산] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
-        # 🆕 이메일 본문에 언급할 최적의 블로그 1개 선택 (PS 메일 전용 - OPI/Recon은 generate_email_variations에서 처리)
+        # 🆕 이메일 본문에 언급할 블로그 선택 (OPI/Recon/PS 각각)
         from portone_blog_cache import get_best_blog_for_email_mention
-        blog_mention_instruction = ""
+        blog_mention_instruction_opi = ""
+        blog_mention_instruction_recon = ""
+        blog_mention_instruction_ps = ""
         
-        # PS 메일 생성할 때만 블로그 선택 (OPI/Recon은 이미 앞에서 선택됨)
+        # BM 분석 결과에서 업종 정보 추출
+        bm_analysis = research_data.get('business_model', {})
+        detected_industry = bm_analysis.get('primary_model_kr', '')
+        
+        company_info_for_blog = {
+            'industry': detected_industry or research_data.get('industry', ''),
+            'category': research_data.get('category', ''),
+            'description': research_data.get('company_info', ''),
+            'business_model': bm_analysis
+        }
+        logger.info(f"📊 {company_name} 업종 파악: {detected_industry or '미파악 - 키워드 기반 폴백'}")
+        
+        competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
+        
+        # OPI 블로그 선택
+        is_opi_email = any('opi' in s for s in services_to_generate)
+        if is_opi_email:
+            try:
+                blog_opi = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='OPI')
+                if blog_opi and blog_opi.get('match_reason'):
+                    blog_mention_instruction_opi = f"""
+**📌 [OPI 이메일] 블로그 필수 언급:**
+🔗 제목: {blog_opi['title']}
+📎 링크: {blog_opi['link']}
+💡 이유: {blog_opi['match_reason']}
+
+📝 언급 방식: "비슷한 고민을 하셨던 고객사 사례가 있어요:
+👉 {blog_opi['title']}
+{blog_opi['link']}"
+"""
+                    logger.info(f"📝 {company_name}: OPI 블로그 선택 - {blog_opi['title'][:30]}...")
+            except Exception as e:
+                logger.warning(f"OPI 블로그 선택 오류: {e}")
+        
+        # Recon 블로그 선택
+        is_recon_email = any('finance' in s for s in services_to_generate)
+        if is_recon_email:
+            try:
+                blog_recon = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='Recon')
+                if blog_recon and blog_recon.get('match_reason'):
+                    blog_mention_instruction_recon = f"""
+**📌 [Finance 이메일] 블로그 필수 언급:**
+🔗 제목: {blog_recon['title']}
+📎 링크: {blog_recon['link']}
+💡 이유: {blog_recon['match_reason']}
+
+📝 언급 방식: "비슷한 고민을 하셨던 고객사 사례가 있어요:
+👉 {blog_recon['title']}
+{blog_recon['link']}"
+"""
+                    logger.info(f"📝 {company_name}: Recon 블로그 선택 - {blog_recon['title'][:30]}...")
+            except Exception as e:
+                logger.warning(f"Recon 블로그 선택 오류: {e}")
+        
+        # PS 블로그 선택
         is_ps_email = any('ps' in s for s in services_to_generate) or (is_multi_service and 'ps' in detected_services)
-        
         if is_ps_email:
             try:
-                company_info_for_blog = {
-                    'industry': research_data.get('industry', ''),
-                    'category': research_data.get('category', ''),
-                    'description': research_data.get('company_info', '')
-                }
-                # 경쟁사 정보 추출 (CSV에서)
-                competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
-                # PS 메일에는 PS 블로그만 매칭
                 blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PS')
                 if blog_mention_info:
                     blog_title = blog_mention_info.get('title', '')
@@ -3838,35 +3885,29 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
                         blog_case_company = blog_mention_info.get('case_company', '')
                         
                         # 🆕 의사결정자 관점의 구체적 정보 포함
-                        blog_mention_instruction = f"""
-**📌 관련 블로그 - 의사결정에 도움되는 사례 (필수 활용!):**
+                        blog_mention_instruction_ps = f"""
+**📌 [PS 이메일] 블로그 필수 언급:**
+🔗 제목: {blog_title}
+📎 링크: {blog_link}
+💡 이유: {blog_reason}
 
-🔗 **블로그 정보:**
-- 제목: {blog_title}
-- 링크: {blog_link}
-- 연관성: {blog_reason}
-{f'- 사례 고객사: {blog_case_company}' if blog_case_company else ''}
-{f'- 핵심 내용: {blog_summary[:150]}...' if blog_summary else ''}
-
-💡 **의사결정자가 관심 가질 정보 활용법:**
-이메일에서 아래 정보를 자연스럽게 녹여서 사용하세요:
-1. **구체적 수치**: 블로그에 언급된 "X% 절감", "X억원 절감", "X주 내 구축" 등 정량적 효과
-2. **비슷한 사례**: "{blog_case_company if blog_case_company else '유사 업종의 고객사'}도 같은 고민을 하셨는데..."
-3. **리스크 감소**: "단일 PG 의존 리스크", "정산 오류 리스크" 등 해결 사례
-
-📝 **권장 언급 방식:**
-본문에서 사례를 언급한 후, 끝부분에:
-"실제로 비슷한 고민을 하셨던 고객사 사례가 있는데요:
+📝 언급 방식: "비슷한 고민을 하셨던 고객사 사례가 있어요:
 👉 {blog_title}
 {blog_link}"
-
-⚠️ **중요:**
-- 블로그 링크를 반드시 별도 줄에 그대로 포함
-- 블로그의 구체적 수치/효과를 이메일 본문에서 먼저 언급하면 더 설득력 있음
 """
                         logger.info(f"📝 {company_name}: PS 블로그 언급 예정 - {blog_title[:30]}... (업종매칭: {industry_matched})")
             except Exception as blog_mention_error:
                 logger.warning(f"PS 블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
+        
+        # 🆕 OPI/Recon/PS 블로그 지침 통합
+        blog_mention_instruction = ""
+        if blog_mention_instruction_opi or blog_mention_instruction_recon or blog_mention_instruction_ps:
+            blog_mention_instruction = f"""
+**⚠️ 중요: 이메일 유형별 블로그 필수 언급!**
+{blog_mention_instruction_opi}
+{blog_mention_instruction_recon}
+{blog_mention_instruction_ps}
+"""
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
@@ -4746,13 +4787,47 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 if result.get('fix_suggestion'):
                                     logger.info(f"  └ 수정제안: {result['fix_suggestion']}")
                                 
+                                # 🆕 수정제안 자동 반영 시도
+                                auto_fixed = False
+                                fixed_email = formatted_variations[service_key].copy()
+                                
+                                if result.get('problem_part') and result.get('fix_suggestion'):
+                                    problem = result['problem_part']
+                                    suggestion = result['fix_suggestion']
+                                    original_body = fixed_email.get('body', '')
+                                    
+                                    # 문제부분에서 따옴표 안의 텍스트 추출
+                                    import re
+                                    problem_matches = re.findall(r'["\']([^"\']+)["\']', problem)
+                                    
+                                    for problem_text in problem_matches:
+                                        if problem_text in original_body:
+                                            # 수정제안에서 대체 텍스트 추출
+                                            suggestion_matches = re.findall(r'["\']([^"\']+)["\']', suggestion)
+                                            if suggestion_matches:
+                                                replacement = suggestion_matches[0]
+                                                fixed_email['body'] = original_body.replace(problem_text, replacement)
+                                                auto_fixed = True
+                                                logger.info(f"  └ ✅ 자동 수정 완료: '{problem_text[:30]}...' → '{replacement[:30]}...'")
+                                                break
+                                            elif '제거' in suggestion or '삭제' in suggestion:
+                                                # 해당 문장 전체 제거
+                                                fixed_email['body'] = original_body.replace(problem_text, '')
+                                                auto_fixed = True
+                                                logger.info(f"  └ ✅ 자동 제거 완료: '{problem_text[:30]}...'")
+                                                break
+                                
                                 # 원본에 상세한 피드백 추가
-                                hallucination_email = formatted_variations[service_key].copy()
+                                hallucination_email = fixed_email
                                 hallucination_email['type'] = service_key
-                                hallucination_email['hallucination_warning'] = True
+                                hallucination_email['hallucination_warning'] = not auto_fixed  # 자동 수정 시 경고 제거
+                                hallucination_email['auto_fixed'] = auto_fixed
                                 
                                 # 사용자를 위한 수정 가이드 생성
-                                feedback_message = f"⚠️ 환각 가능성 감지됨"
+                                if auto_fixed:
+                                    feedback_message = f"✅ 환각 감지 후 자동 수정됨"
+                                else:
+                                    feedback_message = f"⚠️ 환각 가능성 감지됨"
                                 if result.get('reason'):
                                     feedback_message += f"\n📌 이유: {result['reason']}"
                                 if result.get('problem_part'):
@@ -4764,7 +4839,8 @@ Detected Services: {', '.join(detected_services) if is_multi_service else 'N/A'}
                                 hallucination_email['hallucination_details'] = {
                                     'reason': result.get('reason'),
                                     'problem_part': result.get('problem_part'),
-                                    'fix_suggestion': result.get('fix_suggestion')
+                                    'fix_suggestion': result.get('fix_suggestion'),
+                                    'auto_fixed': auto_fixed
                                 }
                                 verified_variations[service_key] = hallucination_email
                         
