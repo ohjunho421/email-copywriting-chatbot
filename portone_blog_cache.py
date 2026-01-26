@@ -882,13 +882,30 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                             blog_industries.append(ind)
                         break
             
+            # 🚫 특정 블로그는 특정 업종에만 매칭 (혼다 = 자동차/제조만)
+            restricted_blogs = {
+                'hondakorea': ['자동차', '제조', '물류'],  # 혼다는 자동차/제조 업종에만
+                'honda': ['자동차', '제조', '물류'],
+            }
+            
+            blog_link_lower = (post.link or '').lower()
+            is_restricted_blog = False
+            for restricted_key, allowed_industries in restricted_blogs.items():
+                if restricted_key in blog_link_lower:
+                    is_restricted_blog = True
+                    # 회사 업종이 허용 업종에 없으면 스킵
+                    if not any(ind in matched_industries for ind in allowed_industries):
+                        logger.info(f"🚫 제한된 블로그 스킵: {post.title[:30]}... (혼다는 자동차/제조 업종만)")
+                        score -= 200  # 완전히 제외
+                    break
+            
             # 🆕 업종 유사도 체크 - 회사와 블로그 업종이 너무 다르면 큰 페널티
             # 예: 뷰티 회사 → 자동차 블로그는 신빙성 없음
             industry_compatible = False
             
-            # 블로그가 범용적 업종(플랫폼, 글로벌, 이커머스)이면 모두와 호환
+            # 블로그가 범용적 업종(플랫폼, 글로벌, 이커머스)이면 모두와 호환 (단, 제한된 블로그 제외)
             universal_industries = ['플랫폼', '글로벌', '이커머스']
-            if any(ind in blog_industries for ind in universal_industries):
+            if not is_restricted_blog and any(ind in blog_industries for ind in universal_industries):
                 industry_compatible = True
             
             # 회사 업종 그룹과 블로그 업종이 같은 그룹에 있으면 호환
