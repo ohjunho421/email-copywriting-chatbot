@@ -1007,6 +1007,22 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             this_industry_matched = False
             case_company_name = None  # 블로그에 언급된 고객사명
             
+            post_title_lower = (post.title or '').lower()
+            blog_link_lower = (post.link or '').lower()
+            
+            # 🚫 OPI 메일에 PS(플랫폼 정산) 블로그 절대 포함 금지
+            if service_type and service_type.upper() == 'OPI':
+                ps_keywords = ['플랫폼 정산', '파트너 정산', '파트너정산', 'ps_', '정산 자동화']
+                if any(pk in post_title_lower or pk in blog_link_lower for pk in ps_keywords):
+                    logger.info(f"🚫 OPI 메일에 PS 블로그 제외: {post.title[:40]}...")
+                    continue  # 완전히 스킵
+            
+            # 🚫 혼다 블로그는 자동차/제조 업종에만 (완전 스킵)
+            if 'honda' in blog_link_lower:
+                if not any(ind in matched_industries for ind in ['자동차', '제조', '물류']):
+                    logger.info(f"🚫 혼다 블로그 스킵: {post.title[:30]}... (자동차/제조 업종만)")
+                    continue  # 완전히 스킵
+            
             post_text = f"{post.title} {post.summary} {post.content} {post.industry_tags} {post.keywords}".lower()
             
             # 🆕 AI 요약 필드도 매칭에 활용
@@ -1033,22 +1049,7 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                             blog_industries.append(ind)
                         break
             
-            # 🚫 특정 블로그는 특정 업종에만 매칭 (혼다 = 자동차/제조만)
-            restricted_blogs = {
-                'hondakorea': ['자동차', '제조', '물류'],  # 혼다는 자동차/제조 업종에만
-                'honda': ['자동차', '제조', '물류'],
-            }
-            
-            blog_link_lower = (post.link or '').lower()
-            is_restricted_blog = False
-            for restricted_key, allowed_industries in restricted_blogs.items():
-                if restricted_key in blog_link_lower:
-                    is_restricted_blog = True
-                    # 회사 업종이 허용 업종에 없으면 스킵
-                    if not any(ind in matched_industries for ind in allowed_industries):
-                        logger.info(f"🚫 제한된 블로그 스킵: {post.title[:30]}... (혼다는 자동차/제조 업종만)")
-                        score -= 200  # 완전히 제외
-                    break
+            is_restricted_blog = 'honda' in blog_link_lower
             
             # 🆕 업종 유사도 체크 - 회사와 블로그 업종이 너무 다르면 큰 페널티
             # 예: 뷰티 회사 → 자동차 블로그는 신빙성 없음
