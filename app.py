@@ -3886,8 +3886,34 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 ⚠️ **절대 금지**: "최근 뉴스를 확인했는데..." 같은 거짓 표현 사용 금지
 ✅ **권장**: 위 조사 결과의 업종, 규모, Pain Point 정보를 활용한 자연스러운 공감 """ 
         
+        # 🆕 서비스별 분리 지침 생성
+        service_separation_warning = ""
+        if any('opi' in s for s in services_to_generate):
+            service_separation_warning += """
+**🚨🚨🚨 [OPI 이메일 작성 시 절대 금지 사항] 🚨🚨🚨**
+- ❌ **파트너 정산**, **전자금융법**, **세금계산서**, **지급대행** 언급 절대 금지 (이건 PS 서비스!)
+- ❌ **정산 자동화**, **정산금 계산**, **365일 지급** 언급 절대 금지 (이건 PS 서비스!)
+- ❌ **오픈마켓 정산 통합**, **Prism** 언급 절대 금지 (이건 Prism 서비스!)
+- ✅ OPI에서 말할 수 있는 것: PG 수수료 절감, 스마트 라우팅, 결제 성공률 향상, 글로벌 결제 수단 연동, 개발 리소스 절감, API 통합
+"""
+        if any('finance' in s for s in services_to_generate):
+            service_separation_warning += """
+**🚨🚨🚨 [Recon/Finance 이메일 작성 시 절대 금지 사항] 🚨🚨🚨**
+- ❌ **파트너 정산**, **전자금융법**, **세금계산서**, **지급대행** 언급 절대 금지 (이건 PS 서비스!)
+- ❌ **PG 수수료 절감**, **스마트 라우팅** 언급 절대 금지 (이건 OPI 서비스!)
+- ✅ Recon에서 말할 수 있는 것: PG 정산 데이터 통합, 재무 마감 자동화, ERP 연동, 매출 대사, 90% 업무 단축
+"""
+        if any('ps' in s for s in services_to_generate):
+            service_separation_warning += """
+**🚨🚨🚨 [PS 이메일 작성 시 절대 금지 사항] 🚨🚨🚨**
+- ❌ **PG 수수료 절감**, **스마트 라우팅**, **결제 성공률** 언급 절대 금지 (이건 OPI 서비스!)
+- ✅ PS에서 말할 수 있는 것: 파트너 정산, 전자금융법 리스크 해소, 세금계산서 자동 발행, 365일 지급 자동화
+"""
+        
         context = f"""
 당신은 포트원(PortOne) 전문 세일즈 카피라이터로, 실제 검증된 한국어 영업 이메일 패턴을 완벽히 숙지하고 있습니다.
+
+{service_separation_warning}
 
 **🚨 중요: 서비스 소개서와 블로그 기반 제약 사항 🚨**
 - 아래 제공된 OPI/Recon 참고 정보(서비스 소개서 + 블로그)에 명시된 기능과 수치만 언급하세요
