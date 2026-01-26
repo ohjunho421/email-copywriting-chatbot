@@ -1061,25 +1061,36 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             ai_summary_text = f"{post.ai_summary or ''} {post.target_audience or ''} {post.pain_points_addressed or ''} {post.key_benefits or ''}".lower()
             full_text = f"{post_text} {ai_summary_text}"
             
-            # 🆕 블로그에서 고객사례 회사 추출 → 업종 파악 (가장 정확)
-            # DB에 저장된 case_company가 있으면 우선 사용
+            # 🆕 블로그 업종 파악 - DB에 저장된 AI 요약 정보 우선 사용!
             case_company_name = post.case_company or None
-            case_companies = extract_case_companies_from_blog(post.content or '', post.title or '')
             blog_industries = []
             
-            if case_companies:
-                for case in case_companies:
-                    if case['industry'] not in blog_industries:
-                        blog_industries.append(case['industry'])
-                case_company_name = case_companies[0]['company']  # 첫 번째 고객사명 저장
+            # 1순위: DB에 저장된 case_industry (AI가 분석한 업종 - 가장 정확)
+            if post.case_industry:
+                # 여러 업종이 쉼표로 구분되어 있을 수 있음
+                for ind in post.case_industry.split(','):
+                    ind = ind.strip()
+                    if ind and ind not in blog_industries:
+                        blog_industries.append(ind)
+                logger.debug(f"✅ DB case_industry 사용: {post.title[:20]}... → {blog_industries}")
             
-            # 키워드 기반 업종도 추가
-            for ind, keywords in industry_keywords.items():
-                for kw in keywords:
-                    if kw in post_text:
-                        if ind not in blog_industries:
-                            blog_industries.append(ind)
-                        break
+            # 2순위: 블로그 본문에서 고객사례 추출
+            if not blog_industries:
+                case_companies = extract_case_companies_from_blog(post.content or '', post.title or '')
+                if case_companies:
+                    for case in case_companies:
+                        if case['industry'] not in blog_industries:
+                            blog_industries.append(case['industry'])
+                    case_company_name = case_companies[0]['company']
+            
+            # 3순위: 키워드 기반 (폴백)
+            if not blog_industries:
+                for ind, keywords in industry_keywords.items():
+                    for kw in keywords:
+                        if kw in post_text:
+                            if ind not in blog_industries:
+                                blog_industries.append(ind)
+                            break
             
             is_restricted_blog = 'honda' in blog_link_lower
             
