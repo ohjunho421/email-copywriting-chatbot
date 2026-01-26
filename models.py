@@ -111,6 +111,8 @@ class EmailGeneration(db.Model):
     # 회사 정보
     company_name = db.Column(db.String(200), nullable=False)
     company_email = db.Column(db.String(120), nullable=True)
+    case_company = db.Column(db.String(200), nullable=True)
+    case_industry = db.Column(db.String(200), nullable=True)
     
     # 생성된 이메일 정보
     email_type = db.Column(db.String(50), nullable=False)  # opi_professional, finance_curiosity 등
@@ -144,8 +146,8 @@ class BlogPost(db.Model):
     target_audience = db.Column(db.Text, nullable=True)  # 타겟 고객 (예: "글로벌 진출 계획 기업", "PG 수수료 고민 기업")
     key_benefits = db.Column(db.Text, nullable=True)  # 핵심 효과 (예: "수수료 15% 절감", "개발 리소스 85% 절감")
     pain_points_addressed = db.Column(db.Text, nullable=True)  # 해결하는 문제점들
-    case_company = db.Column(db.String(100), nullable=True)  # 사례 고객사명 (예: "핏펫", "혼다코리아")
-    case_industry = db.Column(db.String(50), nullable=True)  # 사례 고객사 업종
+    case_company = db.Column(db.String(200), nullable=True)  # 사례 고객사명 (예: "핏펫", "혼다코리아")
+    case_industry = db.Column(db.String(200), nullable=True)  # 사례 고객사 업종 (여러 업종 가능)
     
     # 메타데이터
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)

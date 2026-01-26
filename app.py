@@ -134,8 +134,8 @@ with app.app_context():
             ('target_audience', 'TEXT'),
             ('key_benefits', 'TEXT'),
             ('pain_points_addressed', 'TEXT'),
-            ('case_company', 'VARCHAR(100)'),
-            ('case_industry', 'VARCHAR(50)')
+            ('case_company', 'VARCHAR(200)'),
+            ('case_industry', 'VARCHAR(200)')
         ]
         for col_name, col_type in blog_ai_columns:
             try:
@@ -143,6 +143,15 @@ with app.app_context():
             except Exception as e:
                 if 'already exists' not in str(e).lower():
                     logger.debug(f"{col_name} 컬럼 추가 건너뛰기: {e}")
+        
+        # 기존 컬럼 크기 확장 (case_company, case_industry)
+        try:
+            db.session.execute(text('ALTER TABLE blog_posts ALTER COLUMN case_company TYPE VARCHAR(200)'))
+            db.session.execute(text('ALTER TABLE blog_posts ALTER COLUMN case_industry TYPE VARCHAR(200)'))
+            logger.info("✅ blog_posts case_company/case_industry 컬럼 크기 확장 완료")
+        except Exception as e:
+            logger.debug(f"컬럼 크기 확장 건너뛰기: {e}")
+        
         logger.info("✅ blog_posts AI 요약 컬럼 추가 완료")
         
         db.session.commit()
