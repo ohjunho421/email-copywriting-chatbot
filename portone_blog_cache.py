@@ -759,13 +759,20 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             '글로벌': ['해외', '글로벌', 'global', '수출', '해외진출', '크로스보더']
         }
         
-        # 🆕 상호 배타적 업종 그룹 (이 그룹 내 다른 업종 블로그는 추천 안함)
-        exclusive_groups = [
-            ['자동차', '제조'],  # 제조업
-            ['뷰티', '패션'],     # 소비재
-            ['헬스케어'],         # 의료
-            ['부동산'],           # 부동산
-            ['금융'],             # 금융
+        # 🆕 업종 유사도 그룹 (같은 그룹 내 업종은 연관성 있음, 다른 그룹은 너무 다름)
+        # 예: 뷰티 회사 → 이커머스/패션 블로그 OK, 자동차 블로그 NO
+        similar_industry_groups = [
+            ['이커머스', '뷰티', '패션', '리셀/중고'],  # 커머스/소비재 그룹
+            ['자동차', '제조', '물류'],                # 제조/산업 그룹  
+            ['게임', '엔터테인먼트', '미디어'],        # 콘텐츠/엔터 그룹
+            ['SaaS', 'IT서비스'],                     # IT/테크 그룹
+            ['여행', '푸드'],                         # 서비스업 그룹
+            ['금융'],                                 # 금융 그룹 (독립적)
+            ['헬스케어'],                             # 의료 그룹 (독립적)
+            ['부동산'],                               # 부동산 그룹 (독립적)
+            ['교육'],                                 # 교육 그룹
+            ['플랫폼'],                               # 플랫폼 (범용적)
+            ['글로벌'],                               # 글로벌 (범용적 - 모든 업종과 호환)
         ]
         
         # 혜택 키워드 매칭 (세일즈 시나리오별 강화)
@@ -801,12 +808,17 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         
         logger.info(f"🎯 블로그 선택 - 회사: {company_name}, 매칭된 산업: {matched_industries}, 혜택: {matched_benefits}")
         
-        # 🆕 회사의 배타적 그룹 찾기
-        company_exclusive_group = None
-        for group in exclusive_groups:
+        # 🆕 회사의 업종 유사도 그룹 찾기
+        company_similar_groups = []
+        for group in similar_industry_groups:
             if any(ind in matched_industries for ind in group):
-                company_exclusive_group = group
-                break
+                company_similar_groups.append(group)
+        
+        # 업종이 없으면 범용적 그룹(플랫폼, 글로벌)과 호환
+        if not company_similar_groups:
+            company_similar_groups = [['플랫폼'], ['글로벌'], ['이커머스']]  # 기본 호환 그룹
+        
+        logger.info(f"🏭 회사 업종 그룹: {company_similar_groups}")
         
         from sqlalchemy import or_
         
@@ -870,17 +882,30 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                             blog_industries.append(ind)
                         break
             
-            # 🆕 배타적 그룹 체크 - 회사가 자동차인데 블로그가 뷰티면 제외
-            if company_exclusive_group:
-                blog_in_exclusive = False
-                for group in exclusive_groups:
-                    if any(ind in blog_industries for ind in group):
-                        if group != company_exclusive_group:
-                            # 다른 배타적 그룹의 블로그는 스킵
-                            blog_in_exclusive = True
-                            break
-                if blog_in_exclusive:
-                    continue
+            # 🆕 업종 유사도 체크 - 회사와 블로그 업종이 너무 다르면 큰 페널티
+            # 예: 뷰티 회사 → 자동차 블로그는 신빙성 없음
+            industry_compatible = False
+            
+            # 블로그가 범용적 업종(플랫폼, 글로벌, 이커머스)이면 모두와 호환
+            universal_industries = ['플랫폼', '글로벌', '이커머스']
+            if any(ind in blog_industries for ind in universal_industries):
+                industry_compatible = True
+            
+            # 회사 업종 그룹과 블로그 업종이 같은 그룹에 있으면 호환
+            if not industry_compatible and company_similar_groups:
+                for company_group in company_similar_groups:
+                    if any(ind in blog_industries for ind in company_group):
+                        industry_compatible = True
+                        break
+            
+            # 블로그 업종이 파악 안 되면 일단 호환으로 처리
+            if not blog_industries:
+                industry_compatible = True
+            
+            # 업종이 너무 다르면 -50점 페널티 (의도 매칭 100점도 무력화)
+            if not industry_compatible and blog_industries:
+                score -= 50
+                logger.debug(f"⚠️ 업종 불일치 페널티: {post.title[:30]}... (회사: {matched_industries}, 블로그: {blog_industries})")
             
             # 🎯 뉴스 기사에서 파악된 의도와 블로그 매칭 (최우선!)
             title_lower = (post.title or '').lower()
