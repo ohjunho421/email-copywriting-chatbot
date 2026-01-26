@@ -2683,17 +2683,21 @@ class EmailCopywriter:
                 if opi_matched or opi_reason:
                     blog_mention_instruction_opi = f"""
 **📌 [OPI 이메일 전용] 관련 블로그 언급 지침:**
-opi_professional, opi_curiosity 이메일에만 아래 블로그를 언급하세요.
+⚠️ opi_professional, opi_curiosity 이메일에만 아래 OPI 관련 블로그를 언급하세요.
+⚠️ 정산, 플랫폼정산, 파트너정산 관련 블로그는 절대 OPI 이메일에 언급하지 마세요!
 
 🔗 **블로그 정보:**
 - 제목: {opi_title}
 - 링크: {opi_link}
-- 연관성: {opi_reason}
+- 선택 이유: {opi_reason}
 
-📝 **언급 방식:**
+📝 **언급 방식 (출처 링크 필수!):**
+본문에서 사례를 언급한 후, 반드시 아래 형식으로 출처를 표시하세요:
 "실제로 비슷한 고민을 하셨던 고객사의 사례가 있는데요, 아래 글에서 자세히 확인해보실 수 있습니다.
 👉 {opi_title}
 {opi_link}"
+
+⚠️ 블로그 링크({opi_link})는 반드시 별도 줄에 그대로 포함하세요!
 """
                     logger.info(f"📝 {company_name}: OPI 블로그 선택 - {opi_title[:30]}...")
             
@@ -2708,17 +2712,21 @@ opi_professional, opi_curiosity 이메일에만 아래 블로그를 언급하세
                 if recon_matched or recon_reason:
                     blog_mention_instruction_recon = f"""
 **📌 [Recon/Finance 이메일 전용] 관련 블로그 언급 지침:**
-finance_professional, finance_curiosity 이메일에만 아래 블로그를 언급하세요.
+⚠️ finance_professional, finance_curiosity 이메일에만 아래 정산/재무 관련 블로그를 언급하세요.
+⚠️ 결제 연동, PG 통합 관련 블로그는 절대 Finance 이메일에 언급하지 마세요!
 
 🔗 **블로그 정보:**
 - 제목: {recon_title}
 - 링크: {recon_link}
-- 연관성: {recon_reason}
+- 선택 이유: {recon_reason}
 
-📝 **언급 방식:**
+📝 **언급 방식 (출처 링크 필수!):**
+본문에서 사례를 언급한 후, 반드시 아래 형식으로 출처를 표시하세요:
 "실제로 비슷한 고민을 하셨던 고객사의 사례가 있는데요, 아래 글에서 자세히 확인해보실 수 있습니다.
 👉 {recon_title}
 {recon_link}"
+
+⚠️ 블로그 링크({recon_link})는 반드시 별도 줄에 그대로 포함하세요!
 """
                     logger.info(f"📝 {company_name}: Recon 블로그 선택 - {recon_title[:30]}...")
                     
