@@ -814,8 +814,9 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         # PS: 플랫폼 정산 (파트너 정산) - /ps_ 경로
         # Recon: 매출 마감/정산 조회 - /co- 경로 (Company 사례)
         service_url_patterns = {
-            'OPI': ['/opi_', '/payment_', '/pgcompare', '/onboarding', '/easypayment', '/billing-pay', '/case_', '/fitpet', '/v2-open', '/multi-pg', '/blue-garage', '/game'],
-            'PS': ['/ps_'],  # 플랫폼 정산 전용 (ps_odin, ps_news, ps_tech-lead)
+            # OPI: 결제 연동/PG 관련 + 글로벌 결제
+            'OPI': ['/opi_', '/payment_', '/pgcompare', '/onboarding', '/easypayment', '/billing-pay', '/case_', '/fitpet', '/v2-open', '/multi-pg', '/blue-garage', '/game', '/codemshop', '/global', '/woocommerce'],
+            'PS': ['/ps_'],  # 플랫폼 정산 전용 (ps_odin, ps_news, ps_tech-lead) - ⚠️ 절대 OPI 메일에 넣지 말것
             'Recon': ['/co-', '/recon_', '/analytics']  # 매출 마감 (co-sabang, co-drg, co-skin1004)
         }
         

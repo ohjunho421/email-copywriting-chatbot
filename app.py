@@ -2630,51 +2630,82 @@ class EmailCopywriter:
                 blog_content_recon = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
                 logger.info(f"📰 [Recon] {company_name}: Pain Point 매칭 블로그 {len(recon_blogs)}개 조회")
         
-        # 🆕 이메일 본문에 언급할 최적의 블로그 1개 선택 (경쟁사 사례 우선)
-        blog_mention_info = None
-        blog_mention_instruction = ""
+        # 🆕 이메일 유형별로 최적의 블로그 1개씩 선택 (OPI/Recon 분리)
+        blog_mention_opi = None
+        blog_mention_recon = None
+        blog_mention_instruction_opi = ""
+        blog_mention_instruction_recon = ""
+        
         try:
             # 경쟁사 정보 추출 (CSV에서)
             competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
-            # 🆕 sales_point에 따라 해당 서비스 블로그만 매칭
-            blog_service_type = 'OPI'  # 기본값
-            if sales_point == 'recon':
-                blog_service_type = 'Recon'
-            elif sales_point == 'ps' or '플랫폼정산' in sales_point:
-                blog_service_type = 'PS'
-            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type=blog_service_type)
-            if blog_mention_info:
-                blog_title = blog_mention_info.get('title', '')
-                blog_link = blog_mention_info.get('link', '')
-                blog_reason = blog_mention_info.get('match_reason', '')
-                industry_matched = blog_mention_info.get('industry_matched', False)
+            
+            # OPI용 블로그 선택 (결제 인프라 관련)
+            blog_mention_opi = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='OPI')
+            if blog_mention_opi:
+                opi_title = blog_mention_opi.get('title', '')
+                opi_link = blog_mention_opi.get('link', '')
+                opi_reason = blog_mention_opi.get('match_reason', '')
+                opi_matched = blog_mention_opi.get('industry_matched', False)
                 
-                # 업종 매칭이 된 경우에만 블로그 언급 (더 엄격한 기준)
-                if industry_matched or blog_reason:
-                    blog_mention_instruction = f"""
-**📌 관련 블로그 언급 지침 (필수!):**
-타겟 회사와 관련성 높은 블로그가 발견되었습니다. 이메일 본문에 아래 블로그를 **반드시** 언급해주세요.
+                if opi_matched or opi_reason:
+                    blog_mention_instruction_opi = f"""
+**📌 [OPI 이메일 전용] 관련 블로그 언급 지침:**
+opi_professional, opi_curiosity 이메일에만 아래 블로그를 언급하세요.
 
 🔗 **블로그 정보:**
-- 제목: {blog_title}
-- 링크: {blog_link}
-- 연관성: {blog_reason}
+- 제목: {opi_title}
+- 링크: {opi_link}
+- 연관성: {opi_reason}
 
-📝 **언급 방식 (아래 형식 그대로 사용):**
-본문 중간 또는 끝부분에 다음과 같이 삽입하세요:
-
+📝 **언급 방식:**
 "실제로 비슷한 고민을 하셨던 고객사의 사례가 있는데요, 아래 글에서 자세히 확인해보실 수 있습니다.
-👉 {blog_title}
-{blog_link}"
-
-⚠️ **중요:**
-- 링크 URL({blog_link})을 반드시 별도 줄에 그대로 포함하세요
-- 받는 사람이 링크를 클릭해서 블로그에 접속할 수 있어야 합니다
-- "3,000여개 고객사" 문구 대신 이 블로그 언급을 사용하세요
+👉 {opi_title}
+{opi_link}"
 """
-                    logger.info(f"📝 {company_name}: 블로그 언급 예정 - {blog_title[:30]}... (업종매칭: {industry_matched})")
+                    logger.info(f"📝 {company_name}: OPI 블로그 선택 - {opi_title[:30]}...")
+            
+            # Recon/finance용 블로그 선택 (재무자동화/정산 관련)
+            blog_mention_recon = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='Recon')
+            if blog_mention_recon:
+                recon_title = blog_mention_recon.get('title', '')
+                recon_link = blog_mention_recon.get('link', '')
+                recon_reason = blog_mention_recon.get('match_reason', '')
+                recon_matched = blog_mention_recon.get('industry_matched', False)
+                
+                if recon_matched or recon_reason:
+                    blog_mention_instruction_recon = f"""
+**📌 [Recon/Finance 이메일 전용] 관련 블로그 언급 지침:**
+finance_professional, finance_curiosity 이메일에만 아래 블로그를 언급하세요.
+
+🔗 **블로그 정보:**
+- 제목: {recon_title}
+- 링크: {recon_link}
+- 연관성: {recon_reason}
+
+📝 **언급 방식:**
+"실제로 비슷한 고민을 하셨던 고객사의 사례가 있는데요, 아래 글에서 자세히 확인해보실 수 있습니다.
+👉 {recon_title}
+{recon_link}"
+"""
+                    logger.info(f"📝 {company_name}: Recon 블로그 선택 - {recon_title[:30]}...")
+                    
         except Exception as blog_mention_error:
             logger.warning(f"블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
+        
+        # 통합 블로그 지침 생성 (각 이메일 유형에 맞는 블로그만 사용하도록 명시)
+        blog_mention_instruction = ""
+        if blog_mention_instruction_opi or blog_mention_instruction_recon:
+            blog_mention_instruction = f"""
+**⚠️ 중요: 이메일 유형별 블로그 매칭 규칙**
+- OPI 이메일(opi_professional, opi_curiosity)에는 OPI 관련 블로그만 언급
+- Finance 이메일(finance_professional, finance_curiosity)에는 Recon/정산 관련 블로그만 언급
+- 다른 서비스의 블로그를 잘못 언급하지 마세요!
+
+{blog_mention_instruction_opi}
+
+{blog_mention_instruction_recon}
+"""
         
         # 세일즈포인트에 따라 생성할 이메일 유형 결정
         email_definitions = {
