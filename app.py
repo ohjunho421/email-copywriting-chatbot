@@ -128,6 +128,23 @@ with app.app_context():
             if 'already exists' not in str(e).lower():
                 logger.warning(f"sendgrid_api_key 컬럼 추가 건너뛰기: {e}")
         
+        # 🆕 blog_posts 테이블에 AI 요약 컬럼 추가
+        blog_ai_columns = [
+            ('ai_summary', 'TEXT'),
+            ('target_audience', 'TEXT'),
+            ('key_benefits', 'TEXT'),
+            ('pain_points_addressed', 'TEXT'),
+            ('case_company', 'VARCHAR(100)'),
+            ('case_industry', 'VARCHAR(50)')
+        ]
+        for col_name, col_type in blog_ai_columns:
+            try:
+                db.session.execute(text(f'ALTER TABLE blog_posts ADD COLUMN IF NOT EXISTS {col_name} {col_type}'))
+            except Exception as e:
+                if 'already exists' not in str(e).lower():
+                    logger.debug(f"{col_name} 컬럼 추가 건너뛰기: {e}")
+        logger.info("✅ blog_posts AI 요약 컬럼 추가 완료")
+        
         db.session.commit()
         logger.info("🔄 데이터베이스 마이그레이션 완료")
         
