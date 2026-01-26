@@ -568,18 +568,21 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
         logger.error(f"업종별 블로그 조회 오류: {str(e)}")
         return []
 
-def get_best_blog_for_email_mention(company_info, research_data=None, max_check=20):
+def get_best_blog_for_email_mention(company_info, research_data=None, max_check=20, competitors=None):
     """
     이메일 본문에 언급할 가장 적합한 블로그 1개 선택
     
-    선택 기준:
-    1. 회사와 비슷한 산업/업종의 사례 (필수 - 업종이 다르면 제외)
-    2. 받을 수 있는 혜택(수수료 절감, 자동화 등)과 관련된 정보
+    선택 기준 (우선순위):
+    1. 경쟁사 사례 블로그 (가장 설득력 있음)
+    2. 동일 업종의 유사 기업 사례
+    3. 관련 산업의 해결 사례
+    4. 받을 수 있는 혜택(수수료 절감, 자동화 등)과 관련된 정보
     
     Args:
         company_info: 회사 정보 딕셔너리
         research_data: 조사 결과 딕셔너리 (pain_points 등)
         max_check: 확인할 최대 블로그 수
+        competitors: 경쟁사 리스트 (문자열 또는 리스트)
     
     Returns:
         dict or None: 선택된 블로그 정보 (title, link, summary, match_reason)
@@ -600,6 +603,18 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         if research_data:
             pain_points = research_data.get('pain_points', '') or ''
             research_company_info = research_data.get('company_info', '') or ''
+        
+        # 경쟁사 리스트 처리
+        competitor_list = []
+        if competitors:
+            if isinstance(competitors, str):
+                # 쉼표, 슬래시, 공백으로 분리
+                import re
+                competitor_list = [c.strip().lower() for c in re.split(r'[,/\s]+', competitors) if c.strip() and len(c.strip()) > 1]
+            elif isinstance(competitors, list):
+                competitor_list = [c.lower() for c in competitors if c and len(c) > 1]
+        
+        logger.info(f"🔍 블로그 매칭 - 경쟁사 리스트: {competitor_list}")
         
         # 모든 텍스트 합치기
         all_text = f"{company_name} {industry} {category} {description} {pain_points} {research_company_info}".lower()
@@ -660,14 +675,19 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             ['금융'],             # 금융
         ]
         
-        # 혜택 키워드 매칭
+        # 혜택 키워드 매칭 (세일즈 시나리오별 강화)
         benefit_keywords = {
-            '수수료절감': ['수수료', '비용', '절감', '할인', '저렴', '15%', '30%'],
-            '자동화': ['자동화', '자동', '효율', '리소스', '시간절약'],
-            '정산': ['정산', '매출', '재무', '회계', '대사'],
-            '글로벌': ['해외', '글로벌', 'global', '해외결제', '환율', '크로스보더'],
-            '안정성': ['안정', '장애', '리스크', '백업', '라우팅'],
-            '개발효율': ['개발', 'api', 'sdk', '연동', '2주']
+            # 🌏 글로벌 진출 시나리오
+            '글로벌': ['해외', '글로벌', 'global', '해외결제', '환율', '크로스보더', '일본', '동남아', '미국', '중국', 'paypay', 'alipay', '진출', '수출'],
+            # 🔄 구독 서비스 시나리오
+            '구독': ['구독', 'saas', '멤버십', '정기결제', '빌링키', '빌링', 'ott', '정기배송', '월정액', '연간구독'],
+            # 1️⃣ 단일/복수 PG 시나리오
+            '수수료절감': ['수수료', '비용', '절감', '할인', '저렴', '15%', '30%', '단일pg', '멀티pg', '복수pg'],
+            '정산': ['정산', '매출', '재무', '회계', '대사', '대시보드', '통합관리', '자동대사'],
+            # 공통
+            '자동화': ['자동화', '자동', '효율', '리소스', '시간절약', '90%', '단축'],
+            '안정성': ['안정', '장애', '리스크', '백업', '라우팅', '스마트라우팅', '자동전환', '이탈률'],
+            '개발효율': ['개발', 'api', 'sdk', '연동', '2주', '85%', '구축']
         }
         
         # 회사에 해당하는 산업 찾기
@@ -747,6 +767,28 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                             break
                 if blog_in_exclusive:
                     continue
+            
+            # 🏆 경쟁사 매칭 (최고 점수 - 가장 설득력 있음!)
+            competitor_matched = False
+            if competitor_list:
+                for comp in competitor_list:
+                    if comp in post_text:
+                        score += 25  # 경쟁사 언급 시 최고 점수
+                        competitor_matched = True
+                        reasons.insert(0, f"경쟁사 '{comp}' 사례")
+                        logger.info(f"🏆 경쟁사 매칭! '{comp}' in blog: {post.title[:30]}...")
+                        break
+                    # 블로그에서 추출한 고객사가 경쟁사인 경우
+                    if case_companies:
+                        for case in case_companies:
+                            if comp in case['company'].lower():
+                                score += 25
+                                competitor_matched = True
+                                reasons.insert(0, f"경쟁사 '{case['company']}' 사례")
+                                case_company_name = case['company']
+                                break
+                        if competitor_matched:
+                            break
             
             # 산업 매칭 점수 (높은 가중치)
             for ind in matched_industries:
