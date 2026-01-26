@@ -672,31 +672,32 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         all_text = f"{company_name} {industry} {category} {description} {pain_points} {research_company_info} {news_content}".lower()
         
         # 🆕 뉴스 기사에서 회사의 '의도/계획' 파악 → 시나리오 매칭
+        # ⚠️ 의도 매칭은 최우선! 점수를 크게 높여 확실히 선택되도록 함
         intent_scenarios = {
             '글로벌진출': {
-                'keywords': ['해외진출', '일본진출', '글로벌', '해외시장', '수출', '미국진출', '동남아', '중국진출', '크로스보더', '현지화', '해외매출', '글로벌확장'],
-                'blog_keywords': ['글로벌', '해외', 'global', '일본', '크로스보더'],
-                'score': 35  # 의도 매칭은 최고 점수
+                'keywords': ['해외진출', '일본진출', '글로벌', '해외시장', '수출', '미국진출', '동남아', '중국진출', '크로스보더', '현지화', '해외매출', '글로벌확장', 'uae', '베트남', '태국', '인도네시아', '싱가포르', '해외', '다국가'],
+                'blog_keywords': ['글로벌', '해외', 'global', '일본', '크로스보더', '우커머스', 'woocommerce'],
+                'score': 100  # 🔥 의도 매칭은 최우선 (다른 매칭보다 확실히 높게)
             },
             '구독서비스': {
                 'keywords': ['구독', '정기결제', '멤버십', 'saas', 'ott', '월정액', '구독모델', '정기배송', '구독경제'],
                 'blog_keywords': ['빌링키', '구독', '정기결제', 'subscription'],
-                'score': 35
+                'score': 100
             },
             '정산개선': {
                 'keywords': ['정산', '매출관리', '재무', '회계', '대사', '마감', 'erp', '자동화', '효율화'],
                 'blog_keywords': ['정산', '매출', '자동화', '대사', '마감'],
-                'score': 35
+                'score': 100
             },
             '결제연동': {
                 'keywords': ['결제도입', 'pg연동', '결제시스템', '결제수단', '간편결제', '페이', '결제솔루션'],
                 'blog_keywords': ['결제', 'pg', '연동', 'api'],
-                'score': 30
+                'score': 80
             },
             '비용절감': {
                 'keywords': ['수수료', '비용절감', '원가', '효율', '인앱결제', '수수료인하'],
                 'blog_keywords': ['수수료', '절감', '30%', '비용'],
-                'score': 30
+                'score': 80
             }
         }
         
