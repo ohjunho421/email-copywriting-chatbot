@@ -3794,32 +3794,37 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             ps_blog_content = get_service_knowledge(service_type='PS')
             logger.info(f"📚 [플랫폼 정산] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
-        # 🆕 이메일 본문에 언급할 최적의 블로그 1개 선택 (경쟁사/관련기업 사례 우선)
+        # 🆕 이메일 본문에 언급할 최적의 블로그 1개 선택 (PS 메일 전용 - OPI/Recon은 generate_email_variations에서 처리)
         from portone_blog_cache import get_best_blog_for_email_mention
         blog_mention_instruction = ""
-        try:
-            company_info_for_blog = {
-                'industry': research_data.get('industry', ''),
-                'category': research_data.get('category', ''),
-                'description': research_data.get('company_info', '')
-            }
-            # 경쟁사 정보 추출 (CSV에서)
-            competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
-            # 🆕 PS 메일에는 PS 블로그만 매칭
-            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PS')
-            if blog_mention_info:
-                blog_title = blog_mention_info.get('title', '')
-                blog_link = blog_mention_info.get('link', '')
-                blog_reason = blog_mention_info.get('match_reason', '')
-                industry_matched = blog_mention_info.get('industry_matched', False)
-                
-                # 업종 매칭이 된 경우에만 블로그 언급
-                if industry_matched or blog_reason:
-                    blog_summary = blog_mention_info.get('summary', '')
-                    blog_case_company = blog_mention_info.get('case_company', '')
+        
+        # PS 메일 생성할 때만 블로그 선택 (OPI/Recon은 이미 앞에서 선택됨)
+        is_ps_email = any('ps' in s for s in services_to_generate) or (is_multi_service and 'ps' in detected_services)
+        
+        if is_ps_email:
+            try:
+                company_info_for_blog = {
+                    'industry': research_data.get('industry', ''),
+                    'category': research_data.get('category', ''),
+                    'description': research_data.get('company_info', '')
+                }
+                # 경쟁사 정보 추출 (CSV에서)
+                competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
+                # PS 메일에는 PS 블로그만 매칭
+                blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PS')
+                if blog_mention_info:
+                    blog_title = blog_mention_info.get('title', '')
+                    blog_link = blog_mention_info.get('link', '')
+                    blog_reason = blog_mention_info.get('match_reason', '')
+                    industry_matched = blog_mention_info.get('industry_matched', False)
                     
-                    # 🆕 의사결정자 관점의 구체적 정보 포함
-                    blog_mention_instruction = f"""
+                    # 업종 매칭이 된 경우에만 블로그 언급
+                    if industry_matched or blog_reason:
+                        blog_summary = blog_mention_info.get('summary', '')
+                        blog_case_company = blog_mention_info.get('case_company', '')
+                        
+                        # 🆕 의사결정자 관점의 구체적 정보 포함
+                        blog_mention_instruction = f"""
 **📌 관련 블로그 - 의사결정에 도움되는 사례 (필수 활용!):**
 
 🔗 **블로그 정보:**
@@ -3845,9 +3850,9 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 - 블로그 링크를 반드시 별도 줄에 그대로 포함
 - 블로그의 구체적 수치/효과를 이메일 본문에서 먼저 언급하면 더 설득력 있음
 """
-                    logger.info(f"📝 {company_name}: 블로그 언급 예정 - {blog_title[:30]}... (업종매칭: {industry_matched})")
-        except Exception as blog_mention_error:
-            logger.warning(f"블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
+                        logger.info(f"📝 {company_name}: PS 블로그 언급 예정 - {blog_title[:30]}... (업종매칭: {industry_matched})")
+            except Exception as blog_mention_error:
+                logger.warning(f"PS 블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
         
         # CSV 뉴스 제공 여부 확인
         has_csv_news = "## 📰 관련 뉴스 기사 (CSV 제공)" in research_summary
