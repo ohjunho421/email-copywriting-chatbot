@@ -618,7 +618,7 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
         logger.error(f"업종별 블로그 조회 오류: {str(e)}")
         return []
 
-def get_best_blog_for_email_mention(company_info, research_data=None, max_check=50, competitors=None):
+def get_best_blog_for_email_mention(company_info, research_data=None, max_check=50, competitors=None, service_type=None):
     """
     이메일 본문에 언급할 가장 적합한 블로그 1개 선택
     
@@ -633,6 +633,7 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         research_data: 조사 결과 딕셔너리 (pain_points 등)
         max_check: 확인할 최대 블로그 수
         competitors: 경쟁사 리스트 (문자열 또는 리스트)
+        service_type: 서비스 유형 ('OPI', 'PS', 'Recon' 등) - 해당 카테고리 블로그만 매칭
     
     Returns:
         dict or None: 선택된 블로그 정보 (title, link, summary, match_reason)
@@ -666,8 +667,49 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         
         logger.info(f"🔍 블로그 매칭 - 경쟁사 리스트: {competitor_list}")
         
-        # 모든 텍스트 합치기
-        all_text = f"{company_name} {industry} {category} {description} {pain_points} {research_company_info}".lower()
+        # 모든 텍스트 합치기 (뉴스 기사 포함)
+        news_content = research_data.get('news_summary', '') or research_data.get('news', '') or '' if research_data else ''
+        all_text = f"{company_name} {industry} {category} {description} {pain_points} {research_company_info} {news_content}".lower()
+        
+        # 🆕 뉴스 기사에서 회사의 '의도/계획' 파악 → 시나리오 매칭
+        intent_scenarios = {
+            '글로벌진출': {
+                'keywords': ['해외진출', '일본진출', '글로벌', '해외시장', '수출', '미국진출', '동남아', '중국진출', '크로스보더', '현지화', '해외매출', '글로벌확장'],
+                'blog_keywords': ['글로벌', '해외', 'global', '일본', '크로스보더'],
+                'score': 35  # 의도 매칭은 최고 점수
+            },
+            '구독서비스': {
+                'keywords': ['구독', '정기결제', '멤버십', 'saas', 'ott', '월정액', '구독모델', '정기배송', '구독경제'],
+                'blog_keywords': ['빌링키', '구독', '정기결제', 'subscription'],
+                'score': 35
+            },
+            '정산개선': {
+                'keywords': ['정산', '매출관리', '재무', '회계', '대사', '마감', 'erp', '자동화', '효율화'],
+                'blog_keywords': ['정산', '매출', '자동화', '대사', '마감'],
+                'score': 35
+            },
+            '결제연동': {
+                'keywords': ['결제도입', 'pg연동', '결제시스템', '결제수단', '간편결제', '페이', '결제솔루션'],
+                'blog_keywords': ['결제', 'pg', '연동', 'api'],
+                'score': 30
+            },
+            '비용절감': {
+                'keywords': ['수수료', '비용절감', '원가', '효율', '인앱결제', '수수료인하'],
+                'blog_keywords': ['수수료', '절감', '30%', '비용'],
+                'score': 30
+            }
+        }
+        
+        # 뉴스에서 파악된 의도 찾기
+        detected_intents = []
+        for intent_name, intent_info in intent_scenarios.items():
+            for kw in intent_info['keywords']:
+                if kw in all_text:
+                    detected_intents.append(intent_name)
+                    break
+        
+        if detected_intents:
+            logger.info(f"📰 뉴스 기사에서 파악된 회사 의도: {detected_intents}")
         
         # 🆕 확장된 산업 키워드 매칭 (더 세분화)
         industry_keywords = {
@@ -767,11 +809,31 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         
         from sqlalchemy import or_
         
+        # 🆕 서비스 유형별 블로그 URL 패턴 필터링
+        # OPI: 결제 연동/PG 관련
+        # PS: 플랫폼 정산 (파트너 정산) - /ps_ 경로
+        # Recon: 매출 마감/정산 조회 - /co- 경로 (Company 사례)
+        service_url_patterns = {
+            'OPI': ['/opi_', '/payment_', '/pgcompare', '/onboarding', '/easypayment', '/billing-pay', '/case_', '/fitpet', '/v2-open', '/multi-pg', '/blue-garage', '/game'],
+            'PS': ['/ps_'],  # 플랫폼 정산 전용 (ps_odin, ps_news, ps_tech-lead)
+            'Recon': ['/co-', '/recon_', '/analytics']  # 매출 마감 (co-sabang, co-drg, co-skin1004)
+        }
+        
         # 블로그 검색 (최신순)
-        all_posts = db.session.query(BlogPost).order_by(BlogPost.created_at.desc()).limit(max_check).all()
+        query = db.session.query(BlogPost).order_by(BlogPost.created_at.desc())
+        
+        # 서비스 유형이 지정되면 해당 패턴만 필터링
+        if service_type and service_type.upper() in service_url_patterns:
+            patterns = service_url_patterns[service_type.upper()]
+            # OR 조건으로 패턴 매칭
+            pattern_filters = [BlogPost.link.like(f'%{p}%') for p in patterns]
+            query = query.filter(or_(*pattern_filters))
+            logger.info(f"🔍 {service_type} 블로그만 검색 (패턴: {patterns})")
+        
+        all_posts = query.limit(max_check).all()
         
         if not all_posts:
-            logger.info("📝 블로그 DB에 데이터 없음")
+            logger.info(f"📝 블로그 DB에 {service_type or '전체'} 데이터 없음")
             return None
         
         best_match = None
@@ -817,6 +879,24 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
                             break
                 if blog_in_exclusive:
                     continue
+            
+            # 🎯 뉴스 기사에서 파악된 의도와 블로그 매칭 (최우선!)
+            title_lower = (post.title or '').lower()
+            for intent_name in detected_intents:
+                intent_info = intent_scenarios.get(intent_name, {})
+                blog_kws = intent_info.get('blog_keywords', [])
+                intent_score = intent_info.get('score', 30)
+                
+                # 블로그 제목에 의도 관련 키워드가 있으면 최고 점수
+                if any(bk in title_lower for bk in blog_kws):
+                    score += intent_score
+                    this_industry_matched = True  # 업종 불일치 패널티 방지
+                    reasons.insert(0, f"📰 {intent_name} 관련 전문 사례")
+                    break
+                # 블로그 본문에 의도 관련 키워드가 있으면 중간 점수
+                elif any(bk in post_text for bk in blog_kws):
+                    score += intent_score // 2
+                    reasons.insert(0, f"{intent_name} 관련")
             
             # 🏆 경쟁사 매칭 (최고 점수 - 가장 설득력 있음!)
             competitor_matched = False

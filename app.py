@@ -2636,7 +2636,13 @@ class EmailCopywriter:
         try:
             # 경쟁사 정보 추출 (CSV에서)
             competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
-            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors)
+            # 🆕 sales_point에 따라 해당 서비스 블로그만 매칭
+            blog_service_type = 'OPI'  # 기본값
+            if sales_point == 'recon':
+                blog_service_type = 'Recon'
+            elif sales_point == 'ps' or '플랫폼정산' in sales_point:
+                blog_service_type = 'PS'
+            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type=blog_service_type)
             if blog_mention_info:
                 blog_title = blog_mention_info.get('title', '')
                 blog_link = blog_mention_info.get('link', '')
@@ -3742,7 +3748,8 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             }
             # 경쟁사 정보 추출 (CSV에서)
             competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
-            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors)
+            # 🆕 PS 메일에는 PS 블로그만 매칭
+            blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PS')
             if blog_mention_info:
                 blog_title = blog_mention_info.get('title', '')
                 blog_link = blog_mention_info.get('link', '')
