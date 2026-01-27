@@ -5,6 +5,140 @@ CSV 열 이름 동적 매핑 유틸리티
 유연한 매핑 시스템을 제공합니다.
 """
 
+import requests
+import logging
+import re
+
+logger = logging.getLogger(__name__)
+
+# 비정상 대표자명 필터링 패턴
+INVALID_CEO_PATTERNS = [
+    '이미지', '사진', '로고', 'logo', 'image', 'photo', 'img',
+    '대표이미지', '프로필', 'profile', 'icon', '아이콘',
+    'banner', '배너', 'thumbnail', '썸네일', 'alt', 'src',
+    'http', 'www', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'
+]
+
+
+def is_valid_ceo_name(name: str) -> bool:
+    """대표자명이 유효한지 검증"""
+    if not name or len(name.strip()) < 2:
+        return False
+    
+    name_lower = name.lower().strip()
+    
+    # 비정상 패턴 체크
+    for pattern in INVALID_CEO_PATTERNS:
+        if pattern in name_lower:
+            return False
+    
+    # 숫자만 있거나 특수문자만 있는 경우
+    if re.match(r'^[\d\s\-_\.]+$', name):
+        return False
+    
+    # 너무 긴 경우 (일반적으로 이름은 10자 이내)
+    if len(name.strip()) > 20:
+        return False
+    
+    return True
+
+
+def normalize_company_name_for_match(name: str) -> str:
+    """회사명 비교를 위한 정규화"""
+    if not name:
+        return ''
+    # 법인 유형 제거, 공백/특수문자 제거, 소문자 변환
+    normalized = re.sub(r'\([^)]*\)', '', name)  # 괄호 내용 제거
+    normalized = re.sub(r'[주식회사|유한회사|주|유]', '', normalized)
+    normalized = re.sub(r'[\s\-_\.\,]', '', normalized)
+    return normalized.lower().strip()
+
+
+def is_company_name_match(csv_name: str, bizno_name: str) -> bool:
+    """
+    CSV 회사명과 비즈노 회사명이 일치하는지 검증
+    
+    느슨한 매칭: 핵심 키워드가 포함되면 일치로 판단
+    """
+    if not csv_name or not bizno_name:
+        return False
+    
+    csv_norm = normalize_company_name_for_match(csv_name)
+    bizno_norm = normalize_company_name_for_match(bizno_name)
+    
+    # 정확히 일치
+    if csv_norm == bizno_norm:
+        return True
+    
+    # 한쪽이 다른 쪽을 포함 (부분 일치)
+    if csv_norm in bizno_norm or bizno_norm in csv_norm:
+        return True
+    
+    # 3글자 이상 공통 부분이 있으면 일치로 간주
+    min_len = min(len(csv_norm), len(bizno_norm))
+    if min_len >= 3:
+        for i in range(min_len - 2):
+            if csv_norm[i:i+3] in bizno_norm:
+                return True
+    
+    return False
+
+
+def get_ceo_name_from_bizno(business_number: str, expected_company_name: str = '') -> str:
+    """
+    비즈노 API를 통해 사업자번호로 대표자명 조회 + 회사명 역검증
+    
+    Args:
+        business_number: 사업자등록번호 (10자리 숫자)
+        expected_company_name: CSV의 회사명 (역검증용)
+    
+    Returns:
+        대표자명 또는 빈 문자열
+    """
+    if not business_number:
+        return ''
+    
+    # 사업자번호 정규화 (숫자만 추출)
+    clean_bizno = re.sub(r'[^0-9]', '', str(business_number))
+    
+    if len(clean_bizno) != 10:
+        logger.warning(f"사업자번호 형식 오류: {business_number}")
+        return ''
+    
+    try:
+        # 비즈노 API 호출
+        url = f"https://bizno.net/api/fapi?key=&gb=1&q={clean_bizno}&type=json"
+        response = requests.get(url, timeout=5)
+        
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get('items', [])
+            
+            if items and len(items) > 0:
+                ceo_name = items[0].get('repreName', '') or items[0].get('ceoNm', '')
+                bizno_company = items[0].get('corpNm', '') or items[0].get('company', '')
+                
+                # 회사명 역검증
+                if expected_company_name and bizno_company:
+                    if not is_company_name_match(expected_company_name, bizno_company):
+                        logger.warning(f"❌ 비즈노 회사명 불일치: CSV='{expected_company_name}' vs 비즈노='{bizno_company}'")
+                        return ''
+                    logger.info(f"✅ 회사명 검증 통과: '{expected_company_name}' ≈ '{bizno_company}'")
+                
+                if ceo_name and is_valid_ceo_name(ceo_name):
+                    logger.info(f"💼 비즈노 대표자명 조회 성공: {bizno_company} - {ceo_name}")
+                    return ceo_name.strip()
+        
+        logger.debug(f"비즈노 API에서 대표자명 없음: {clean_bizno}")
+        return ''
+        
+    except requests.Timeout:
+        logger.warning(f"비즈노 API 타임아웃: {clean_bizno}")
+        return ''
+    except Exception as e:
+        logger.warning(f"비즈노 API 오류: {str(e)}")
+        return ''
+
 # 표준 필드명 → 가능한 열 이름 변형들
 COLUMN_ALIASES = {
     # 회사 기본 정보
@@ -106,9 +240,74 @@ def get_business_number(company_data: dict) -> str:
     return get_column_value(company_data, 'business_number', '')
 
 
+def is_ceo_name_match(csv_name: str, bizno_name: str) -> bool:
+    """CSV 대표자명과 비즈노 대표자명이 일치하는지 검증"""
+    if not csv_name or not bizno_name:
+        return False
+    
+    csv_clean = csv_name.strip().replace(' ', '')
+    bizno_clean = bizno_name.strip().replace(' ', '')
+    
+    # 정확히 일치
+    if csv_clean == bizno_clean:
+        return True
+    
+    # 한쪽이 다른쪽을 포함 (성만 있거나, 이름 일부만 있는 경우)
+    if csv_clean in bizno_clean or bizno_clean in csv_clean:
+        return True
+    
+    # 성(첫 글자)이 같고 길이가 비슷하면 일치로 간주
+    if len(csv_clean) >= 2 and len(bizno_clean) >= 2:
+        if csv_clean[0] == bizno_clean[0]:  # 성이 같음
+            return True
+    
+    return False
+
+
 def get_contact_name(company_data: dict) -> str:
-    """담당자명/대표자명 추출"""
-    return get_column_value(company_data, 'contact_name', '')
+    """
+    담당자명/대표자명 추출 + 비즈노 역검증
+    
+    1. CSV에서 대표자명 추출
+    2. 유효성 검증 (이미지, 사진 등 비정상 값 필터링)
+    3. 사업자번호가 있으면 비즈노에서 대표자명 조회
+    4. CSV 대표자명 vs 비즈노 대표자명 역검증
+    """
+    csv_name = get_column_value(company_data, 'contact_name', '')
+    business_number = get_column_value(company_data, 'business_number', '')
+    company_name = get_column_value(company_data, 'company_name', '')
+    
+    # CSV 대표자명 유효성 검증
+    csv_valid = is_valid_ceo_name(csv_name)
+    
+    # 사업자번호가 있으면 비즈노에서 조회 (회사명 역검증 포함)
+    bizno_name = ''
+    if business_number:
+        bizno_name = get_ceo_name_from_bizno(business_number, company_name)
+    
+    # Case 1: CSV 유효 + 비즈노 있음 → 대표자명 역검증
+    if csv_valid and bizno_name:
+        if is_ceo_name_match(csv_name, bizno_name):
+            logger.info(f"✅ 대표자명 검증 통과: CSV='{csv_name}' ≈ 비즈노='{bizno_name}'")
+            return csv_name
+        else:
+            logger.warning(f"❌ 대표자명 불일치: CSV='{csv_name}' vs 비즈노='{bizno_name}' → 비즈노 값 사용")
+            return bizno_name
+    
+    # Case 2: CSV 유효 + 비즈노 없음 → CSV 사용 (검증 불가)
+    if csv_valid and not bizno_name:
+        logger.info(f"⚠️ 대표자명 검증 불가 (비즈노 조회 실패): '{csv_name}' 그대로 사용")
+        return csv_name
+    
+    # Case 3: CSV 무효 + 비즈노 있음 → 비즈노 사용
+    if not csv_valid and bizno_name:
+        logger.info(f"🔄 비정상 대표자명 '{csv_name}' → 비즈노 대표자명 '{bizno_name}' 사용")
+        return bizno_name
+    
+    # Case 4: 둘 다 없음 → 빈 문자열
+    if csv_name:
+        logger.warning(f"⚠️ 대표자명 조회 실패: CSV='{csv_name}' (비정상), 비즈노도 없음")
+    return ''
 
 
 def get_email(company_data: dict) -> str:
