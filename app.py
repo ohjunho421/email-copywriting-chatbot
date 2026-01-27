@@ -2586,7 +2586,7 @@ class EmailCopywriter:
         from portone_blog_cache import get_relevant_blog_posts_by_industry, format_relevant_blog_for_email, load_blog_cache, get_best_blog_for_email_mention, format_blog_mention_for_email
         
         blog_content_opi = ""
-        blog_content_recon = ""
+        blog_content_prism = ""
         
         # 블로그 캐시 확인 및 필요 시 스크래핑
         cached_posts = load_blog_cache()
@@ -2650,23 +2650,23 @@ class EmailCopywriter:
                 blog_content_opi = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
                 logger.info(f"📰 [OPI] {company_name}: Pain Point 매칭 블로그 {len(opi_blogs)}개 조회")
         
-        # Recon 관련 블로그 (Pain Point + 업종 필터링)
-        if cached_posts and (sales_point in ['recon', ''] or 'recon' in sales_point):
-            recon_blogs = get_relevant_blog_posts_by_industry(
+        # PRISM 관련 블로그 (Pain Point + 업종 필터링)
+        if cached_posts and (sales_point in ['prism', 'recon', ''] or 'prism' in sales_point or 'recon' in sales_point):
+            prism_blogs = get_relevant_blog_posts_by_industry(
                 company_info_for_blog,
                 max_posts=3,
-                service_type='Recon',
+                service_type='PRISM',
                 pain_points=pain_point_keywords if pain_point_keywords else None
             )
-            if recon_blogs:
-                blog_content_recon = format_relevant_blog_for_email(recon_blogs, company_name, 'Recon')
-                logger.info(f"📰 [Recon] {company_name}: Pain Point 매칭 블로그 {len(recon_blogs)}개 조회")
+            if prism_blogs:
+                blog_content_prism = format_relevant_blog_for_email(prism_blogs, company_name, 'PRISM')
+                logger.info(f"📰 [PRISM] {company_name}: Pain Point 매칭 블로그 {len(prism_blogs)}개 조회")
         
-        # 🆕 이메일 유형별로 최적의 블로그 1개씩 선택 (OPI/Recon 분리)
+        # 🆕 이메일 유형별로 최적의 블로그 1개씩 선택 (OPI/PRISM 분리)
         blog_mention_opi = None
-        blog_mention_recon = None
+        blog_mention_prism = None
         blog_mention_instruction_opi = ""
-        blog_mention_instruction_recon = ""
+        blog_mention_instruction_prism = ""
         
         try:
             # 경쟁사 정보 추출 (CSV에서)
@@ -2701,50 +2701,50 @@ class EmailCopywriter:
 """
                     logger.info(f"📝 {company_name}: OPI 블로그 선택 - {opi_title[:30]}...")
             
-            # Recon/finance용 블로그 선택 (재무자동화/정산 관련)
-            blog_mention_recon = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='Recon')
-            if blog_mention_recon:
-                recon_title = blog_mention_recon.get('title', '')
-                recon_link = blog_mention_recon.get('link', '')
-                recon_reason = blog_mention_recon.get('match_reason', '')
-                recon_matched = blog_mention_recon.get('industry_matched', False)
+            # PRISM/finance용 블로그 선택 (멀티오픈마켓 정산/매출분석 관련)
+            blog_mention_prism = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PRISM')
+            if blog_mention_prism:
+                prism_title = blog_mention_prism.get('title', '')
+                prism_link = blog_mention_prism.get('link', '')
+                prism_reason = blog_mention_prism.get('match_reason', '')
+                prism_matched = blog_mention_prism.get('industry_matched', False)
                 
-                if recon_matched or recon_reason:
-                    blog_mention_instruction_recon = f"""
-**📌 [Recon/Finance 이메일 전용] 관련 블로그 언급 지침:**
-⚠️ finance_professional, finance_curiosity 이메일에만 아래 정산/재무 관련 블로그를 언급하세요.
+                if prism_matched or prism_reason:
+                    blog_mention_instruction_prism = f"""
+**📌 [PRISM/Finance 이메일 전용] 관련 블로그 언급 지침:**
+⚠️ finance_professional, finance_curiosity 이메일에만 아래 정산/매출분석 관련 블로그를 언급하세요.
 ⚠️ 결제 연동, PG 통합 관련 블로그는 절대 Finance 이메일에 언급하지 마세요!
 
 🔗 **블로그 정보:**
-- 제목: {recon_title}
-- 링크: {recon_link}
-- 선택 이유: {recon_reason}
+- 제목: {prism_title}
+- 링크: {prism_link}
+- 선택 이유: {prism_reason}
 
 📝 **언급 방식 (출처 링크 필수!):**
 본문에서 사례를 언급한 후, 반드시 아래 형식으로 출처를 표시하세요:
 "실제로 비슷한 고민을 하셨던 고객사의 사례가 있는데요, 아래 글에서 자세히 확인해보실 수 있습니다.
-👉 {recon_title}
-{recon_link}"
+👉 {prism_title}
+{prism_link}"
 
-⚠️ 블로그 링크({recon_link})는 반드시 별도 줄에 그대로 포함하세요!
+⚠️ 블로그 링크({prism_link})는 반드시 별도 줄에 그대로 포함하세요!
 """
-                    logger.info(f"📝 {company_name}: Recon 블로그 선택 - {recon_title[:30]}...")
+                    logger.info(f"📝 {company_name}: PRISM 블로그 선택 - {prism_title[:30]}...")
                     
         except Exception as blog_mention_error:
             logger.warning(f"블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
         
         # 통합 블로그 지침 생성 (각 이메일 유형에 맞는 블로그만 사용하도록 명시)
         blog_mention_instruction = ""
-        if blog_mention_instruction_opi or blog_mention_instruction_recon:
+        if blog_mention_instruction_opi or blog_mention_instruction_prism:
             blog_mention_instruction = f"""
 **⚠️ 중요: 이메일 유형별 블로그 매칭 규칙**
 - OPI 이메일(opi_professional, opi_curiosity)에는 OPI 관련 블로그만 언급
-- Finance 이메일(finance_professional, finance_curiosity)에는 Recon/정산 관련 블로그만 언급
+- Finance 이메일(finance_professional, finance_curiosity)에는 PRISM/정산 관련 블로그만 언급
 - 다른 서비스의 블로그를 잘못 언급하지 마세요!
 
 {blog_mention_instruction_opi}
 
-{blog_mention_instruction_recon}
+{blog_mention_instruction_prism}
 """
         
         # 세일즈포인트에 따라 생성할 이메일 유형 결정
@@ -2801,7 +2801,7 @@ class EmailCopywriter:
 
 {blog_content_opi}
 
-{blog_content_recon}
+{blog_content_prism}
 
 {blog_mention_instruction}
 
@@ -2889,7 +2889,7 @@ PG사별 정산 관리 업무도 콘솔에서 통합 관리하여 월 수십 시
 - 구체적 수치와 혜택 언급 (85% 절감, 90% 자동화 등)
 - **정량적 수치와 핵심 가치 제안은 반드시 볼드 처리하세요 (예: **85% 리소스 절감**, **2주 내 구축**, **90% 자동화**, **15% 향상** 등)**
 - 자연스러운 한국어 문체 유지
-- **⚠️ 서비스 약어 사용 금지**: 이메일 본문에서 'OPI', 'Recon', 'PS' 같은 약어는 사용하지 말고, '통합 결제 인프라', '재무 자동화 솔루션', '플랫폼 정산 자동화' 등 완전한 서비스명 사용. 'PortOne' 브랜드명은 사용 가능
+- **⚠️ 서비스 약어 사용 금지**: 이메일 본문에서 'OPI', 'PRISM', 'PS' 같은 약어는 사용하지 말고, '통합 결제 인프라', '멀티오픈마켓 정산 솔루션', '플랫폼 정산 자동화' 등 완전한 서비스명 사용. 'PortOne' 브랜드명은 사용 가능
 - **⚠️ 이메일 본문에서 극단적 표현 금지**: "즉시", "100%", "완벽한", "완벽", "절대", "무조건", "반드시", "필수" 등 과장된 표현은 피하고, 현실적이고 신뢰감 있는 표현 사용 (예: "90% 이상", "빠르게", "높은 정확도로", "대폭", "크게", "효과적으로" 등)
 - **⚠️ 줄바꿈 제한**: 각 문단은 최대 3-4줄을 넘지 않도록 하고, 연속된 줄바꿈은 최대 1개만 사용
 

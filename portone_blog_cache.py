@@ -643,7 +643,7 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
     Args:
         company_info: 회사 정보 딕셔너리
         max_posts: 최대 반환 글 수
-        service_type: 서비스 타입 ('OPI', 'Recon', 'Prism', 'PS' 등)
+        service_type: 서비스 타입 ('OPI', 'PS', 'PRISM' 등)
         pain_points: Pain Point 키워드 리스트 (예: ['구독결제', 'PG관리', '정산'])
     
     Returns:
@@ -778,7 +778,7 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         research_data: 조사 결과 딕셔너리 (pain_points 등)
         max_check: 확인할 최대 블로그 수
         competitors: 경쟁사 리스트 (문자열 또는 리스트)
-        service_type: 서비스 유형 ('OPI', 'PS', 'Recon' 등) - 해당 카테고리 블로그만 매칭
+        service_type: 서비스 유형 ('OPI', 'PS', 'PRISM' 등) - 해당 카테고리 블로그만 매칭
     
     Returns:
         dict or None: 선택된 블로그 정보 (title, link, summary, match_reason)
@@ -1002,12 +1002,12 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
         # 🆕 서비스 유형별 블로그 URL 패턴 필터링
         # OPI: 결제 연동/PG 관련
         # PS: 플랫폼 정산 (파트너 정산) - /ps_ 경로
-        # Recon: 매출 마감/정산 조회 - /co- 경로 (Company 사례)
+        # PRISM: 멀티 오픈마켓 정산 통합 - /co- 경로 (Company 사례)
         service_url_patterns = {
             # OPI: 결제 연동/PG 관련 + 글로벌 결제
             'OPI': ['/opi_', '/payment_', '/pgcompare', '/onboarding', '/easypayment', '/billing-pay', '/case_', '/fitpet', '/v2-open', '/multi-pg', '/blue-garage', '/game', '/codemshop', '/global', '/woocommerce'],
             'PS': ['/ps_'],  # 플랫폼 정산 전용 (ps_odin, ps_news, ps_tech-lead) - ⚠️ 절대 OPI 메일에 넣지 말것
-            'Recon': ['/co-', '/recon_', '/analytics']  # 매출 마감 (co-sabang, co-drg, co-skin1004)
+            'PRISM': ['/co-', '/prism_', '/analytics']  # 멀티 오픈마켓 정산 (co-sabang, co-drg, co-skin1004)
         }
         
         # 블로그 검색 (최신순)
@@ -1359,7 +1359,7 @@ def get_service_knowledge(service_type=''):
     서비스 소개서와 블로그 전체 정보를 통합하여 RAG 지식베이스 생성
     
     Args:
-        service_type: 'OPI', 'Recon', 'Prism', 'PS'
+        service_type: 'OPI', 'PS', 'PRISM'
     
     Returns:
         str: 통합된 지식베이스 텍스트
@@ -1369,15 +1369,13 @@ def get_service_knowledge(service_type=''):
     # 1. 서비스 소개서 로드
     service_files = {
         'OPI': 'opi_service_info.txt',
-        'Recon': 'recon_service_info.txt',
-        'Prism': 'prism_service_info.txt',
+        'PRISM': 'prism_service_info.txt',
         'PS': 'ps_service_info.txt'
     }
     
     service_names = {
         'OPI': 'One Payment Infra (OPI)',
-        'Recon': '재무자동화 솔루션 (Recon)',
-        'Prism': '멀티 오픈마켓 정산 통합 솔루션 (Prism)',
+        'PRISM': '멀티 오픈마켓 정산 통합 솔루션 (Prism)',
         'PS': '플랫폼 정산 자동화'
     }
     
@@ -1595,7 +1593,7 @@ def analyze_news_for_blog_recommendation(news_content, company_name, industry=''
         "추천할 블로그 주제 1 (예: '글로벌 결제 성공 사례')",
         "추천할 블로그 주제 2"
     ],
-    "portone_solution": "가장 적합한 포트원 솔루션 (OPI/PS/Recon/Prism 중 선택)",
+    "portone_solution": "가장 적합한 포트원 솔루션 (OPI/PS/PRISM 중 선택)",
     "urgency_level": "high/medium/low (뉴스 내용 기반 긴급도)",
     "confidence": 0.8
 }}
@@ -1653,7 +1651,7 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
         company_info: 회사 정보 딕셔너리
         research_data: Perplexity 조사 결과
         news_analysis: analyze_news_for_blog_recommendation() 결과
-        service_type: 서비스 유형 (OPI/PS/Recon)
+        service_type: 서비스 유형 (OPI/PS/PRISM)
         max_blogs: 최대 추천 블로그 수
     
     Returns:
@@ -1711,7 +1709,7 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
         
         query = db.session.query(BlogPost).order_by(BlogPost.created_at.desc())
         
-        # 🔥 카테고리로 정확하게 필터링 (OPI/PS/Recon/Prism)
+        # 🔥 카테고리로 정확하게 필터링 (OPI/PS/PRISM)
         if effective_service:
             # category 필드로 필터링 (PostgreSQL에 저장된 분류 사용)
             query = query.filter(BlogPost.category == effective_service)
@@ -1765,8 +1763,7 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
         service_descriptions = {
             'OPI': 'One Payment Infra - 결제 인프라 통합, PG 연동, 간편결제, 해외결제',
             'PS': 'Partner Settlement - 플랫폼 정산, 파트너 정산 자동화, 전자금융법 대응',
-            'RECON': 'Recon - 재무자동화, 정산 대사, 매출 분석, 마감 자동화',
-            'PRISM': 'Prism - 멀티 오픈마켓 정산 통합, 채널 통합 관리'
+            'PRISM': 'Prism - 멀티 오픈마켓 정산 통합, 채널 통합 관리, 매출 분석'
         }
         service_desc = service_descriptions.get(effective_service, '포트원 솔루션')
         
