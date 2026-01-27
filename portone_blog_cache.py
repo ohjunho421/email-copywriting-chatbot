@@ -1038,6 +1038,7 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             reasons = []
             this_industry_matched = False
             case_company_name = None  # 블로그에 언급된 고객사명
+            case_companies = []  # 블로그에서 추출한 고객사 리스트 (초기화 필수!)
             
             post_title_lower = (post.title or '').lower()
             blog_link_lower = (post.link or '').lower()
