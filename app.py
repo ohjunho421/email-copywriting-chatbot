@@ -3808,8 +3808,8 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
             ps_blog_content = get_service_knowledge(service_type='PS')
             logger.info(f"📚 [플랫폼 정산] {company_name}: 서비스 소개서 + 블로그 전체 지식베이스 로드")
         
-        # 🆕 이메일 본문에 언급할 블로그 선택 (OPI/Recon/PS 각각)
-        from portone_blog_cache import get_best_blog_for_email_mention
+        # 🆕 이메일 본문에 언급할 블로그 선택 (뉴스 AI 분석 + 스마트 추천)
+        from portone_blog_cache import get_best_blog_for_email_mention, analyze_news_for_blog_recommendation, get_smart_blog_recommendation
         blog_mention_instruction_opi = ""
         blog_mention_instruction_recon = ""
         blog_mention_instruction_ps = ""
@@ -3819,6 +3819,7 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         detected_industry = bm_analysis.get('primary_model_kr', '')
         
         company_info_for_blog = {
+            'company_name': company_name,
             'industry': detected_industry or research_data.get('industry', ''),
             'category': research_data.get('category', ''),
             'description': research_data.get('company_info', ''),
@@ -3828,13 +3829,57 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
         
         competitors = company_data.get('경쟁사명', '') or company_data.get('경쟁사', '') or ''
         
-        # OPI 블로그 선택
+        # 🆕 뉴스 기사 AI 분석 (의도/어려움/필요정보 추출)
+        news_analysis = None
+        news_content = research_data.get('news_summary', '') or research_data.get('company_info', '')
+        if news_content and len(news_content) > 100:
+            try:
+                news_analysis = analyze_news_for_blog_recommendation(
+                    news_content, 
+                    company_name, 
+                    industry=detected_industry,
+                    research_data=research_data
+                )
+                if news_analysis:
+                    logger.info(f"🎯 {company_name} 뉴스 분석 완료: 의도='{news_analysis.get('business_intent', '')[:40]}', 솔루션={news_analysis.get('portone_solution', 'OPI')}")
+            except Exception as news_e:
+                logger.warning(f"뉴스 분석 오류: {news_e}")
+        
+        # OPI 블로그 선택 (스마트 추천 우선, 폴백으로 키워드 매칭)
         is_opi_email = any('opi' in s for s in services_to_generate)
         if is_opi_email:
             try:
-                blog_opi = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='OPI')
-                if blog_opi and blog_opi.get('match_reason'):
+                # 🆕 스마트 블로그 추천 (뉴스 분석 결과 활용)
+                smart_blog_result = get_smart_blog_recommendation(
+                    company_info_for_blog, 
+                    research_data, 
+                    news_analysis=news_analysis,
+                    service_type='OPI'
+                )
+                
+                if smart_blog_result and smart_blog_result.get('primary_blog'):
+                    blog_opi = smart_blog_result['primary_blog']
+                    email_mention = smart_blog_result.get('email_mention_text', '')
+                    recommendation_reason = smart_blog_result.get('recommendation_reason', '')
+                    
+                    # 🆕 뉴스 분석 기반 맞춤형 블로그 언급 지침
                     blog_mention_instruction_opi = f"""
+**📌 [OPI 이메일] 맞춤형 블로그 추천 (뉴스 분석 기반):**
+🔗 제목: {blog_opi['title']}
+📎 링크: {blog_opi['link']}
+💡 추천 이유: {recommendation_reason}
+
+📝 **이메일에 삽입할 문구 (그대로 사용):**
+{email_mention}
+
+⚠️ 위 문구를 이메일 본문에 자연스럽게 삽입하세요. 블로그 링크는 반드시 포함!
+"""
+                    logger.info(f"🎯 {company_name}: 스마트 OPI 블로그 추천 - {blog_opi['title'][:30]}...")
+                else:
+                    # 폴백: 기존 키워드 매칭
+                    blog_opi = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='OPI')
+                    if blog_opi and blog_opi.get('match_reason'):
+                        blog_mention_instruction_opi = f"""
 **📌 [OPI 이메일] 블로그 필수 언급:**
 🔗 제목: {blog_opi['title']}
 📎 링크: {blog_opi['link']}
@@ -3844,17 +3889,42 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 👉 {blog_opi['title']}
 {blog_opi['link']}"
 """
-                    logger.info(f"📝 {company_name}: OPI 블로그 선택 - {blog_opi['title'][:30]}...")
+                        logger.info(f"📝 {company_name}: OPI 블로그 선택 (키워드 매칭) - {blog_opi['title'][:30]}...")
             except Exception as e:
                 logger.warning(f"OPI 블로그 선택 오류: {e}")
         
-        # Recon 블로그 선택
+        # Recon 블로그 선택 (스마트 추천 우선)
         is_recon_email = any('finance' in s for s in services_to_generate)
         if is_recon_email:
             try:
-                blog_recon = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='Recon')
-                if blog_recon and blog_recon.get('match_reason'):
+                smart_blog_result = get_smart_blog_recommendation(
+                    company_info_for_blog, 
+                    research_data, 
+                    news_analysis=news_analysis,
+                    service_type='Recon'
+                )
+                
+                if smart_blog_result and smart_blog_result.get('primary_blog'):
+                    blog_recon = smart_blog_result['primary_blog']
+                    email_mention = smart_blog_result.get('email_mention_text', '')
+                    recommendation_reason = smart_blog_result.get('recommendation_reason', '')
+                    
                     blog_mention_instruction_recon = f"""
+**📌 [Finance 이메일] 맞춤형 블로그 추천 (뉴스 분석 기반):**
+🔗 제목: {blog_recon['title']}
+📎 링크: {blog_recon['link']}
+💡 추천 이유: {recommendation_reason}
+
+📝 **이메일에 삽입할 문구 (그대로 사용):**
+{email_mention}
+
+⚠️ 위 문구를 이메일 본문에 자연스럽게 삽입하세요. 블로그 링크는 반드시 포함!
+"""
+                    logger.info(f"🎯 {company_name}: 스마트 Recon 블로그 추천 - {blog_recon['title'][:30]}...")
+                else:
+                    blog_recon = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='Recon')
+                    if blog_recon and blog_recon.get('match_reason'):
+                        blog_mention_instruction_recon = f"""
 **📌 [Finance 이메일] 블로그 필수 언급:**
 🔗 제목: {blog_recon['title']}
 📎 링크: {blog_recon['link']}
@@ -3864,28 +3934,48 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 👉 {blog_recon['title']}
 {blog_recon['link']}"
 """
-                    logger.info(f"📝 {company_name}: Recon 블로그 선택 - {blog_recon['title'][:30]}...")
+                        logger.info(f"📝 {company_name}: Recon 블로그 선택 (키워드 매칭) - {blog_recon['title'][:30]}...")
             except Exception as e:
                 logger.warning(f"Recon 블로그 선택 오류: {e}")
         
-        # PS 블로그 선택
+        # PS 블로그 선택 (스마트 추천 우선)
         is_ps_email = any('ps' in s for s in services_to_generate) or (is_multi_service and 'ps' in detected_services)
         if is_ps_email:
             try:
-                blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PS')
-                if blog_mention_info:
-                    blog_title = blog_mention_info.get('title', '')
-                    blog_link = blog_mention_info.get('link', '')
-                    blog_reason = blog_mention_info.get('match_reason', '')
-                    industry_matched = blog_mention_info.get('industry_matched', False)
+                smart_blog_result = get_smart_blog_recommendation(
+                    company_info_for_blog, 
+                    research_data, 
+                    news_analysis=news_analysis,
+                    service_type='PS'
+                )
+                
+                if smart_blog_result and smart_blog_result.get('primary_blog'):
+                    blog_ps = smart_blog_result['primary_blog']
+                    email_mention = smart_blog_result.get('email_mention_text', '')
+                    recommendation_reason = smart_blog_result.get('recommendation_reason', '')
                     
-                    # 업종 매칭이 된 경우에만 블로그 언급
-                    if industry_matched or blog_reason:
-                        blog_summary = blog_mention_info.get('summary', '')
-                        blog_case_company = blog_mention_info.get('case_company', '')
+                    blog_mention_instruction_ps = f"""
+**📌 [PS 이메일] 맞춤형 블로그 추천 (뉴스 분석 기반):**
+🔗 제목: {blog_ps['title']}
+📎 링크: {blog_ps['link']}
+💡 추천 이유: {recommendation_reason}
+
+📝 **이메일에 삽입할 문구 (그대로 사용):**
+{email_mention}
+
+⚠️ 위 문구를 이메일 본문에 자연스럽게 삽입하세요. 블로그 링크는 반드시 포함!
+"""
+                    logger.info(f"🎯 {company_name}: 스마트 PS 블로그 추천 - {blog_ps['title'][:30]}...")
+                else:
+                    blog_mention_info = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PS')
+                    if blog_mention_info:
+                        blog_title = blog_mention_info.get('title', '')
+                        blog_link = blog_mention_info.get('link', '')
+                        blog_reason = blog_mention_info.get('match_reason', '')
+                        industry_matched = blog_mention_info.get('industry_matched', False)
                         
-                        # 🆕 의사결정자 관점의 구체적 정보 포함
-                        blog_mention_instruction_ps = f"""
+                        if industry_matched or blog_reason:
+                            blog_mention_instruction_ps = f"""
 **📌 [PS 이메일] 블로그 필수 언급:**
 🔗 제목: {blog_title}
 📎 링크: {blog_link}
@@ -3895,15 +3985,35 @@ def generate_email_with_gemini(company_data, research_data, user_info=None):
 👉 {blog_title}
 {blog_link}"
 """
-                        logger.info(f"📝 {company_name}: PS 블로그 언급 예정 - {blog_title[:30]}... (업종매칭: {industry_matched})")
+                            logger.info(f"📝 {company_name}: PS 블로그 선택 (키워드 매칭) - {blog_title[:30]}...")
             except Exception as blog_mention_error:
                 logger.warning(f"PS 블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
         
+        # 🆕 뉴스 분석 결과를 이메일 프롬프트에 추가 (AI가 더 맞춤형으로 작성하도록)
+        news_analysis_instruction = ""
+        if news_analysis:
+            business_intent = news_analysis.get('business_intent', '')
+            expected_challenges = news_analysis.get('expected_challenges', [])
+            information_needs = news_analysis.get('information_needs', [])
+            
+            news_analysis_instruction = f"""
+**🎯 뉴스 분석 결과 (이메일 개인화에 활용):**
+- **이 회사가 하려는 것**: {business_intent}
+- **예상되는 어려움**: {', '.join(expected_challenges[:3])}
+- **필요한 정보**: {', '.join(information_needs[:3])}
+
+⚠️ 위 분석 결과를 바탕으로 이메일을 작성하세요:
+- "{business_intent}" 관련 Pain Point를 자연스럽게 언급
+- 예상 어려움에 공감하며 해결책 제시
+- 블로그 링크는 이 맥락에 맞게 자연스럽게 삽입
+"""
+        
         # 🆕 OPI/Recon/PS 블로그 지침 통합
         blog_mention_instruction = ""
-        if blog_mention_instruction_opi or blog_mention_instruction_recon or blog_mention_instruction_ps:
+        if blog_mention_instruction_opi or blog_mention_instruction_recon or blog_mention_instruction_ps or news_analysis_instruction:
             blog_mention_instruction = f"""
-**⚠️ 중요: 이메일 유형별 블로그 필수 언급!**
+**⚠️ 중요: 이메일 유형별 맞춤형 블로그 필수 언급!**
+{news_analysis_instruction}
 {blog_mention_instruction_opi}
 {blog_mention_instruction_recon}
 {blog_mention_instruction_ps}

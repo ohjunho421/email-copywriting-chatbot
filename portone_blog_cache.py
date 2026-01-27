@@ -1514,3 +1514,434 @@ def check_for_new_posts(category_url, existing_links, max_check_pages=2):
     except Exception as e:
         logger.error(f"새 포스트 확인 오류: {str(e)}")
         return []
+
+
+def analyze_news_for_blog_recommendation(news_content, company_name, industry='', research_data=None):
+    """
+    🆕 뉴스 기사를 AI로 분석하여 기업의 의도, 예상 어려움, 필요 정보를 추출
+    
+    Args:
+        news_content: 뉴스 기사 내용 (문자열 또는 딕셔너리)
+        company_name: 회사명
+        industry: 업종
+        research_data: Perplexity 조사 결과
+    
+    Returns:
+        dict: {
+            'business_intent': 기업이 하려는 것 (예: "해외 진출", "구독 서비스 런칭"),
+            'expected_challenges': 예상되는 어려움들 (리스트),
+            'information_needs': 필요할 것 같은 정보 (리스트),
+            'recommended_topics': 추천 블로그 주제 (리스트),
+            'urgency_level': 긴급도 (high/medium/low),
+            'confidence': 분석 신뢰도 (0-1)
+        }
+    """
+    import os
+    import json
+    
+    try:
+        import google.generativeai as genai
+        
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            logger.warning("Gemini API 키 없음 - 뉴스 분석 스킵")
+            return None
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        # 뉴스 내용 추출
+        if isinstance(news_content, dict):
+            news_text = f"제목: {news_content.get('title', '')}\n내용: {news_content.get('content', '')}"
+        else:
+            news_text = str(news_content)
+        
+        # 추가 컨텍스트
+        additional_context = ""
+        if research_data:
+            additional_context = f"""
+**Perplexity 조사 결과:**
+- 회사 정보: {research_data.get('company_info', '')[:500]}
+- Pain Points: {research_data.get('pain_points', '')}
+"""
+        
+        prompt = f"""다음 뉴스 기사와 회사 정보를 분석해서 JSON 형식으로 답변해주세요.
+
+**회사명:** {company_name}
+**업종:** {industry}
+
+**뉴스 기사:**
+{news_text[:3000]}
+
+{additional_context}
+
+**분석 요청:**
+이 회사가 뉴스에서 언급된 활동을 수행할 때, 결제/정산 관련해서 어떤 도움이 필요할지 분석해주세요.
+
+**JSON 형식으로 답변 (반드시 아래 형식 준수):**
+```json
+{{
+    "business_intent": "이 회사가 하려는 핵심 활동 (예: '해외 시장 진출', '구독 서비스 런칭', '신규 이커머스 플랫폼 구축')",
+    "expected_challenges": [
+        "예상되는 결제/정산 관련 어려움 1",
+        "예상되는 결제/정산 관련 어려움 2"
+    ],
+    "information_needs": [
+        "이 회사가 필요로 할 정보 1 (예: '해외 결제 수단 연동 방법')",
+        "이 회사가 필요로 할 정보 2"
+    ],
+    "recommended_topics": [
+        "추천할 블로그 주제 1 (예: '글로벌 결제 성공 사례')",
+        "추천할 블로그 주제 2"
+    ],
+    "portone_solution": "가장 적합한 포트원 솔루션 (OPI/PS/Recon/Prism 중 선택)",
+    "urgency_level": "high/medium/low (뉴스 내용 기반 긴급도)",
+    "confidence": 0.8
+}}
+```
+
+**주의사항:**
+- 결제, 정산, PG, 수수료, 해외결제 등 PortOne이 도울 수 있는 영역에 집중
+- 뉴스에서 명확한 정보가 없으면 업종 특성 기반으로 추론
+- 반드시 유효한 JSON만 출력 (설명 텍스트 없이)
+"""
+        
+        response = model.generate_content(prompt)
+        
+        if response and response.text:
+            # JSON 파싱
+            result_text = response.text.strip()
+            
+            # ```json ... ``` 블록 추출
+            if '```json' in result_text:
+                result_text = result_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in result_text:
+                result_text = result_text.split('```')[1].split('```')[0].strip()
+            
+            try:
+                analysis = json.loads(result_text)
+                logger.info(f"✅ {company_name} 뉴스 분석 완료: 의도={analysis.get('business_intent', '')[:30]}")
+                return analysis
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON 파싱 오류: {e}")
+                # 기본값 반환
+                return {
+                    'business_intent': '사업 확장',
+                    'expected_challenges': ['결제 시스템 복잡성', '정산 관리 어려움'],
+                    'information_needs': ['결제 연동 가이드', '정산 자동화 사례'],
+                    'recommended_topics': ['결제 인프라 구축', '정산 효율화'],
+                    'portone_solution': 'OPI',
+                    'urgency_level': 'medium',
+                    'confidence': 0.5
+                }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"뉴스 분석 오류: {str(e)}")
+        return None
+
+
+def get_smart_blog_recommendation(company_info, research_data=None, news_analysis=None, service_type=None, max_blogs=3):
+    """
+    🆕 AI 분석 결과를 바탕으로 가장 적합한 블로그를 추천
+    
+    기존 get_best_blog_for_email_mention()의 키워드 매칭 + AI 분석 결과 결합
+    
+    Args:
+        company_info: 회사 정보 딕셔너리
+        research_data: Perplexity 조사 결과
+        news_analysis: analyze_news_for_blog_recommendation() 결과
+        service_type: 서비스 유형 (OPI/PS/Recon)
+        max_blogs: 최대 추천 블로그 수
+    
+    Returns:
+        dict: {
+            'primary_blog': 메인 추천 블로그 (이메일에 포함),
+            'supporting_blogs': 참고용 블로그 리스트,
+            'recommendation_reason': AI가 추천하는 이유,
+            'email_mention_text': 이메일에 삽입할 문구
+        }
+    """
+    import os
+    import json
+    
+    try:
+        db = get_db()
+        BlogPost = get_blog_post_model()
+        
+        company_name = company_info.get('company_name', '') or company_info.get('회사명', '')
+        industry = company_info.get('industry', '')
+        
+        # 뉴스 분석 결과가 없으면 기존 함수로 폴백
+        if not news_analysis:
+            logger.info(f"📝 {company_name}: 뉴스 분석 없음 - 기존 키워드 매칭으로 폴백")
+            basic_blog = get_best_blog_for_email_mention(company_info, research_data, service_type=service_type)
+            if basic_blog:
+                return {
+                    'primary_blog': basic_blog,
+                    'supporting_blogs': [],
+                    'recommendation_reason': basic_blog.get('match_reason', '업종 관련 사례'),
+                    'email_mention_text': _generate_email_mention_text(basic_blog, company_name)
+                }
+            return None
+        
+        # 뉴스 분석 결과에서 추천 주제 추출
+        recommended_topics = news_analysis.get('recommended_topics', [])
+        business_intent = news_analysis.get('business_intent', '')
+        expected_challenges = news_analysis.get('expected_challenges', [])
+        information_needs = news_analysis.get('information_needs', [])
+        portone_solution = news_analysis.get('portone_solution', service_type or 'OPI')
+        
+        logger.info(f"🎯 {company_name} 스마트 블로그 추천 시작")
+        logger.info(f"   - 의도: {business_intent}")
+        logger.info(f"   - 어려움: {expected_challenges}")
+        logger.info(f"   - 추천 주제: {recommended_topics}")
+        
+        # 블로그 검색 (서비스 유형별 category 필터링 - PostgreSQL)
+        # ⚠️ 중요: OPI 메일엔 OPI 블로그만, PS엔 PS 블로그만, Prism엔 Prism 블로그만!
+        
+        # 서비스 유형 결정 (뉴스 분석 결과 > 명시적 서비스 타입)
+        effective_service = service_type.upper() if service_type else None
+        
+        # 뉴스 분석에서 추천한 솔루션이 있으면 참고 (단, 요청된 서비스 타입 우선)
+        if not effective_service and portone_solution:
+            effective_service = portone_solution.upper()
+        
+        query = db.session.query(BlogPost).order_by(BlogPost.created_at.desc())
+        
+        # 🔥 카테고리로 정확하게 필터링 (OPI/PS/Recon/Prism)
+        if effective_service:
+            # category 필드로 필터링 (PostgreSQL에 저장된 분류 사용)
+            query = query.filter(BlogPost.category == effective_service)
+            logger.info(f"🔍 {effective_service} 블로그만 검색 (category 필터)")
+        
+        all_blogs = query.limit(50).all()
+        
+        # 해당 카테고리 블로그가 없으면 폴백 시도하지 않음 (혼용 방지)
+        if not all_blogs and effective_service:
+            logger.warning(f"⚠️ {effective_service} 카테고리 블로그 없음 - 블로그 추천 스킵")
+            return None
+        
+        if not all_blogs:
+            logger.warning(f"📝 {company_name}: 블로그 없음")
+            return None
+        
+        # AI로 가장 적합한 블로그 선택
+        import google.generativeai as genai
+        
+        api_key = os.getenv('GEMINI_API_KEY')
+        if not api_key:
+            # API 없으면 키워드 매칭 폴백
+            basic_blog = get_best_blog_for_email_mention(company_info, research_data, service_type=effective_service)
+            if basic_blog:
+                return {
+                    'primary_blog': basic_blog,
+                    'supporting_blogs': [],
+                    'recommendation_reason': basic_blog.get('match_reason', '업종 관련 사례'),
+                    'email_mention_text': _generate_email_mention_text(basic_blog, company_name)
+                }
+            return None
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        # 블로그 리스트 구성
+        blog_list = []
+        for i, blog in enumerate(all_blogs[:20]):
+            blog_list.append({
+                'index': i,
+                'title': blog.title,
+                'link': blog.link,
+                'summary': (blog.summary or '')[:200],
+                'target_audience': blog.target_audience or '',
+                'pain_points': blog.pain_points_addressed or '',
+                'case_company': blog.case_company or '',
+                'case_industry': blog.case_industry or ''
+            })
+        
+        # 서비스 유형 설명
+        service_descriptions = {
+            'OPI': 'One Payment Infra - 결제 인프라 통합, PG 연동, 간편결제, 해외결제',
+            'PS': 'Partner Settlement - 플랫폼 정산, 파트너 정산 자동화, 전자금융법 대응',
+            'RECON': 'Recon - 재무자동화, 정산 대사, 매출 분석, 마감 자동화',
+            'PRISM': 'Prism - 멀티 오픈마켓 정산 통합, 채널 통합 관리'
+        }
+        service_desc = service_descriptions.get(effective_service, '포트원 솔루션')
+        
+        prompt = f"""다음 회사의 상황에 가장 적합한 **{effective_service}** 블로그를 추천해주세요.
+
+⚠️ 중요: 이 회사에게 보낼 이메일은 **{effective_service}** ({service_desc}) 관련 이메일입니다.
+아래 블로그 목록은 모두 {effective_service} 관련 블로그이므로, 회사 상황에 가장 적합한 것을 선택하세요.
+
+**회사 정보:**
+- 회사명: {company_name}
+- 업종: {industry}
+- 하려는 것: {business_intent}
+- 예상 어려움: {', '.join(expected_challenges)}
+- 필요한 정보: {', '.join(information_needs)}
+
+**{effective_service} 블로그 목록 ({len(blog_list)}개):**
+{json.dumps(blog_list, ensure_ascii=False, indent=2)}
+
+**선택 기준:**
+1. 회사의 "하려는 것"과 {effective_service} 솔루션이 어떻게 연결되는지
+2. "예상 어려움"을 {effective_service}로 어떻게 해결할 수 있는지
+3. 동일/유사 업종의 {effective_service} 도입 성공 사례
+4. 수치와 구체적 효과가 명시된 블로그
+
+**JSON 형식으로 답변:**
+```json
+{{
+    "primary_index": 가장 추천하는 블로그 인덱스 (숫자),
+    "supporting_indices": [2순위, 3순위 블로그 인덱스],
+    "recommendation_reason": "이 블로그를 추천하는 이유 ({effective_service} 관점에서 회사 상황과 연결)",
+    "email_hook": "이메일에서 이 블로그를 언급할 때 사용할 후킹 문구 (예: '비슷한 고민을 하셨던 XX 업종 고객사도...')"
+}}
+```
+"""
+        
+        response = model.generate_content(prompt)
+        
+        if response and response.text:
+            result_text = response.text.strip()
+            
+            if '```json' in result_text:
+                result_text = result_text.split('```json')[1].split('```')[0].strip()
+            elif '```' in result_text:
+                result_text = result_text.split('```')[1].split('```')[0].strip()
+            
+            try:
+                selection = json.loads(result_text)
+                
+                primary_idx = selection.get('primary_index', 0)
+                supporting_indices = selection.get('supporting_indices', [])
+                recommendation_reason = selection.get('recommendation_reason', '')
+                email_hook = selection.get('email_hook', '')
+                
+                # 메인 블로그
+                if 0 <= primary_idx < len(all_blogs):
+                    primary_blog_obj = all_blogs[primary_idx]
+                    primary_blog = {
+                        'title': primary_blog_obj.title,
+                        'link': primary_blog_obj.link,
+                        'summary': primary_blog_obj.summary or '',
+                        'match_reason': recommendation_reason,
+                        'case_company': primary_blog_obj.case_company,
+                        'industry_matched': True
+                    }
+                    
+                    # 서포팅 블로그
+                    supporting_blogs = []
+                    for idx in supporting_indices[:2]:
+                        if 0 <= idx < len(all_blogs):
+                            blog = all_blogs[idx]
+                            supporting_blogs.append({
+                                'title': blog.title,
+                                'link': blog.link,
+                                'summary': blog.summary or ''
+                            })
+                    
+                    # 이메일 언급 문구 생성
+                    email_mention = _generate_smart_email_mention(
+                        primary_blog, 
+                        company_name, 
+                        business_intent, 
+                        email_hook
+                    )
+                    
+                    logger.info(f"✅ {company_name}: 스마트 블로그 추천 - {primary_blog['title'][:40]}...")
+                    
+                    return {
+                        'primary_blog': primary_blog,
+                        'supporting_blogs': supporting_blogs,
+                        'recommendation_reason': recommendation_reason,
+                        'email_mention_text': email_mention,
+                        'news_analysis': news_analysis
+                    }
+                    
+            except json.JSONDecodeError as e:
+                logger.warning(f"블로그 선택 JSON 파싱 오류: {e}")
+        
+        # 파싱 실패 시 기존 방식 폴백
+        basic_blog = get_best_blog_for_email_mention(company_info, research_data, service_type=effective_service)
+        if basic_blog:
+            return {
+                'primary_blog': basic_blog,
+                'supporting_blogs': [],
+                'recommendation_reason': basic_blog.get('match_reason', '업종 관련 사례'),
+                'email_mention_text': _generate_email_mention_text(basic_blog, company_name)
+            }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"스마트 블로그 추천 오류: {str(e)}")
+        return None
+
+
+def _generate_email_mention_text(blog_info, company_name):
+    """기본 이메일 언급 문구 생성"""
+    if not blog_info:
+        return ""
+    
+    title = blog_info.get('title', '')
+    link = blog_info.get('link', '')
+    reason = blog_info.get('match_reason', '')
+    case_company = blog_info.get('case_company', '')
+    
+    if case_company:
+        mention = f"비슷한 고민을 하셨던 {case_company} 사례가 있는데요, 아래 글에서 자세히 확인해보실 수 있습니다."
+    elif reason:
+        mention = f"{reason} 관련해서 도움이 될 만한 사례가 있어요."
+    else:
+        mention = "비슷한 상황의 고객사 사례가 있어 공유드립니다."
+    
+    return f"""{mention}
+
+👉 {title}
+{link}"""
+
+
+def _generate_smart_email_mention(blog_info, company_name, business_intent, email_hook=''):
+    """
+    🆕 뉴스 분석 결과를 반영한 스마트 이메일 언급 문구 생성
+    """
+    if not blog_info:
+        return ""
+    
+    title = blog_info.get('title', '')
+    link = blog_info.get('link', '')
+    case_company = blog_info.get('case_company', '')
+    
+    # AI가 생성한 후킹 문구 사용
+    if email_hook:
+        mention = email_hook
+    elif business_intent:
+        # 의도 기반 문구 생성
+        intent_phrases = {
+            '해외': f"{company_name}님의 해외 진출 계획과 관련해서",
+            '글로벌': f"글로벌 시장 진출 시 결제 시스템 구축에 대해",
+            '구독': f"구독 서비스 결제 시스템 구축에 있어",
+            '정산': f"정산 업무 효율화와 관련해서",
+            '플랫폼': f"플랫폼 비즈니스의 파트너 정산에 대해",
+            '이커머스': f"이커머스 결제 시스템 개선과 관련해서"
+        }
+        
+        for keyword, phrase in intent_phrases.items():
+            if keyword in business_intent.lower():
+                mention = f"{phrase}, 비슷한 고민을 하셨던 고객사 사례가 있어요."
+                break
+        else:
+            mention = f"{company_name}님과 비슷한 상황의 고객사 사례가 있어 공유드립니다."
+    else:
+        mention = "비슷한 고민을 하셨던 고객사의 성공 사례가 있어요."
+    
+    # 고객사명이 있으면 더 구체적으로
+    if case_company and case_company not in mention:
+        mention = mention.replace("고객사", case_company)
+    
+    return f"""{mention}
+
+👉 {title}
+{link}"""
