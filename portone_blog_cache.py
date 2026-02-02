@@ -1555,14 +1555,37 @@ def analyze_news_for_blog_recommendation(news_content, company_name, industry=''
         else:
             news_text = str(news_content)
         
-        # 추가 컨텍스트
+        # 추가 컨텍스트 - Perplexity 리서치 데이터 적극 활용
         additional_context = ""
         if research_data:
-            additional_context = f"""
-**Perplexity 조사 결과:**
-- 회사 정보: {research_data.get('company_info', '')[:500]}
-- Pain Points: {research_data.get('pain_points', '')}
-"""
+            research_parts = []
+            if research_data.get('summary'):
+                research_parts.append(f"- 조사 요약: {research_data.get('summary', '')[:500]}")
+            if research_data.get('company_info'):
+                research_parts.append(f"- 회사 정보: {research_data.get('company_info', '')[:400]}")
+            if research_data.get('key_findings'):
+                findings = research_data.get('key_findings', [])
+                if isinstance(findings, list):
+                    research_parts.append(f"- 주요 발견: {', '.join(findings[:5])}")
+                else:
+                    research_parts.append(f"- 주요 발견: {str(findings)[:300]}")
+            if research_data.get('pain_points'):
+                pains = research_data.get('pain_points', [])
+                if isinstance(pains, list):
+                    research_parts.append(f"- 주요 고충/어려움: {', '.join(pains[:5])}")
+                else:
+                    research_parts.append(f"- 주요 고충/어려움: {str(pains)[:300]}")
+            if research_data.get('business_model'):
+                research_parts.append(f"- 비즈니스 모델: {research_data.get('business_model', '')}")
+            if research_data.get('competitors'):
+                comps = research_data.get('competitors', [])
+                if isinstance(comps, list):
+                    research_parts.append(f"- 경쟁사: {', '.join(comps[:5])}")
+            if research_data.get('recent_news'):
+                research_parts.append(f"- 최근 뉴스: {str(research_data.get('recent_news', ''))[:300]}")
+            
+            if research_parts:
+                additional_context = "\n**Perplexity 조사 결과 (AI가 조사한 회사 정보):**\n" + "\n".join(research_parts)
         
         prompt = f"""다음 뉴스 기사와 회사 정보를 분석해서 JSON 형식으로 답변해주세요.
 
@@ -1745,14 +1768,17 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash')
         
-        # 블로그 리스트 구성
+        # 블로그 리스트 구성 - 🆕 content도 포함하여 Gemini가 실제 내용 기반으로 판단
         blog_list = []
-        for i, blog in enumerate(all_blogs[:20]):
+        for i, blog in enumerate(all_blogs[:15]):  # 15개로 줄여 토큰 절약
+            # 블로그 본문 내용도 포함 (500자까지)
+            blog_content = (blog.content or '')[:500]
             blog_list.append({
                 'index': i,
                 'title': blog.title,
                 'link': blog.link,
-                'summary': (blog.summary or '')[:200],
+                'summary': (blog.summary or '')[:300],
+                'content_preview': blog_content,  # 🆕 실제 본문 내용 추가
                 'target_audience': blog.target_audience or '',
                 'pain_points': blog.pain_points_addressed or '',
                 'case_company': blog.case_company or '',
@@ -1767,10 +1793,34 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
         }
         service_desc = service_descriptions.get(effective_service, '포트원 솔루션')
         
-        prompt = f"""다음 회사의 상황에 가장 적합한 **{effective_service}** 블로그를 추천해주세요.
+        # 🆕 research_data에서 추가 정보 추출
+        research_summary = ""
+        if research_data:
+            # Perplexity 리서치 결과에서 핵심 정보 추출
+            if research_data.get('summary'):
+                research_summary += f"- 조사 요약: {research_data.get('summary', '')[:300]}\n"
+            if research_data.get('key_findings'):
+                findings = research_data.get('key_findings', [])
+                if isinstance(findings, list):
+                    research_summary += f"- 주요 발견: {', '.join(findings[:3])}\n"
+            if research_data.get('pain_points'):
+                pains = research_data.get('pain_points', [])
+                if isinstance(pains, list):
+                    research_summary += f"- 주요 고충: {', '.join(pains[:3])}\n"
+            if research_data.get('business_model'):
+                research_summary += f"- 비즈니스 모델: {research_data.get('business_model', '')}\n"
+            if research_data.get('competitors'):
+                comps = research_data.get('competitors', [])
+                if isinstance(comps, list):
+                    research_summary += f"- 경쟁사: {', '.join(comps[:3])}\n"
+        
+        prompt = f"""다음 회사에게 보낼 영업 이메일에 포함할 가장 적합한 **{effective_service}** 블로그를 추천해주세요.
 
-⚠️ 중요: 이 회사에게 보낼 이메일은 **{effective_service}** ({service_desc}) 관련 이메일입니다.
-아래 블로그 목록은 모두 {effective_service} 관련 블로그이므로, 회사 상황에 가장 적합한 것을 선택하세요.
+🎯 **핵심 목표: 이 회사의 "어려움을 해결해줄 수 있다"는 것을 보여주는 블로그를 찾으세요!**
+- 이메일에서 "비슷한 상황의 고객사가 이렇게 해결했다"라고 언급할 블로그
+- 회사가 "하려는 것"과 "예상 어려움"에 직접적으로 도움이 되는 사례
+- 업종이 다르더라도 "하려는 것"이나 "어려움"이 유사하면 추천 가능
+  (예: 구독 서비스 도입 예정 회사에게 업종이 달라도 구독 결제 도입 사례 블로그 ✅)
 
 **회사 정보:**
 - 회사명: {company_name}
@@ -1779,24 +1829,38 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
 - 예상 어려움: {', '.join(expected_challenges)}
 - 필요한 정보: {', '.join(information_needs)}
 
+**Perplexity 리서치 결과 (AI가 조사한 회사 정보):**
+{research_summary if research_summary else '조사 데이터 없음'}
+
 **{effective_service} 블로그 목록 ({len(blog_list)}개):**
+각 블로그의 **content_preview**를 꼼꼼히 읽고, 이 회사의 "하려는 것"과 "어려움"을 해결해줄 수 있는지 판단하세요.
 {json.dumps(blog_list, ensure_ascii=False, indent=2)}
 
-**선택 기준:**
-1. 회사의 "하려는 것"과 {effective_service} 솔루션이 어떻게 연결되는지
-2. "예상 어려움"을 {effective_service}로 어떻게 해결할 수 있는지
-3. 동일/유사 업종의 {effective_service} 도입 성공 사례
-4. 수치와 구체적 효과가 명시된 블로그
+**선택 기준 (우선순위):**
+1. 💡 **어려움 해결 (최우선)**: 회사의 "예상 어려움"과 유사한 문제를 해결한 사례인가?
+2. 🎯 **하려는 것 연관**: 회사의 "하려는 것"과 직접 연결되는 사례인가?
+3. 🏭 **업종 유사성**: 동일/유사 업종 사례라면 신뢰도 상승
+4. 📊 **구체적 성과**: 수치와 효과가 명시되어 있는가?
+
+⚠️ **주의:** 업종이 다르더라도 "하려는 것"이나 "어려움"이 유사하면 추천하세요.
+단, 완전히 관련 없는 블로그(예: 결제 도입 예정인데 정산 사례만 있는 경우)는 추천하지 마세요.
 
 **JSON 형식으로 답변:**
 ```json
 {{
-    "primary_index": 가장 추천하는 블로그 인덱스 (숫자),
+    "has_relevant_blog": true 또는 false (어려움 해결에 도움되는 블로그가 있는지),
+    "relevance_score": 1-10 (회사 상황과의 연관성 점수, 6점 이상이어야 추천),
+    "primary_index": 가장 추천하는 블로그 인덱스 (숫자, 적합한 블로그 없으면 -1),
     "supporting_indices": [2순위, 3순위 블로그 인덱스],
-    "recommendation_reason": "이 블로그를 추천하는 이유 ({effective_service} 관점에서 회사 상황과 연결)",
-    "email_hook": "이메일에서 이 블로그를 언급할 때 사용할 후킹 문구 (예: '비슷한 고민을 하셨던 XX 업종 고객사도...')"
+    "solution_match": "이 블로그가 해결해주는 문제 (예: PG 통합 복잡성, 정산 자동화 등)",
+    "recommendation_reason": "이 블로그를 추천하는 이유 (회사의 어려움과 어떻게 연결되는지)",
+    "email_hook": "이메일에서 이 블로그를 언급할 때 사용할 후킹 문구 (예: 'XX 고객사도 비슷한 고민을 하셨는데...')",
+    "rejection_reason": "적합한 블로그가 없는 경우 그 이유 (has_relevant_blog가 false일 때만)"
 }}
 ```
+
+⚠️ 적합한 블로그가 없으면 has_relevant_blog: false, primary_index: -1로 응답하세요.
+잘못된 블로그를 추천하는 것보다 추천하지 않는 것이 낫습니다.
 """
         
         response = model.generate_content(prompt)
@@ -1812,10 +1876,26 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
             try:
                 selection = json.loads(result_text)
                 
-                primary_idx = selection.get('primary_index', 0)
+                # 🆕 업종 연관성 체크 - 관련 없으면 추천하지 않음
+                has_relevant_blog = selection.get('has_relevant_blog', True)
+                relevance_score = selection.get('relevance_score', 0)
+                rejection_reason = selection.get('rejection_reason', '')
+                
+                # 관련성 점수가 6점 미만이거나 관련 블로그가 없으면 추천하지 않음
+                if not has_relevant_blog or relevance_score < 6:
+                    logger.info(f"⚠️ {company_name}: 회사 상황과 연관성 낮음 - 블로그 추천 스킵 (점수: {relevance_score}/10, 이유: {rejection_reason})")
+                    return None
+                
+                primary_idx = selection.get('primary_index', -1)
                 supporting_indices = selection.get('supporting_indices', [])
                 recommendation_reason = selection.get('recommendation_reason', '')
                 email_hook = selection.get('email_hook', '')
+                solution_match = selection.get('solution_match', '')  # 🆕 해결하는 문제
+                
+                # primary_index가 -1이면 적합한 블로그 없음
+                if primary_idx < 0:
+                    logger.info(f"⚠️ {company_name}: Gemini가 적합한 블로그 없다고 판단 - 추천 스킵")
+                    return None
                 
                 # 메인 블로그
                 if 0 <= primary_idx < len(all_blogs):
@@ -1848,7 +1928,7 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
                         email_hook
                     )
                     
-                    logger.info(f"✅ {company_name}: 스마트 블로그 추천 - {primary_blog['title'][:40]}...")
+                    logger.info(f"✅ {company_name}: 스마트 블로그 추천 - {primary_blog['title'][:40]}... (연관성: {relevance_score}/10, 해결문제: {solution_match})")
                     
                     return {
                         'primary_blog': primary_blog,
