@@ -1768,19 +1768,64 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash')
         
-        # 블로그 리스트 구성 - 🆕 content도 포함하여 Gemini가 실제 내용 기반으로 판단
+        # 🆕 회사 상황과 관련된 블로그 사전 필터링 (관련성 점수 기반)
+        # 키워드 추출: 어려움 + 의도 + 업종
+        search_keywords = []
+        search_keywords.extend(expected_challenges)
+        search_keywords.extend(information_needs)
+        if business_intent:
+            search_keywords.append(business_intent)
+        if industry:
+            search_keywords.append(industry)
+        
+        # 각 블로그에 관련성 점수 부여
+        scored_blogs = []
+        for blog in all_blogs:
+            score = 0
+            blog_text = f"{blog.title or ''} {blog.summary or ''} {blog.content or ''} {blog.pain_points_addressed or ''} {blog.target_audience or ''} {blog.case_industry or ''}"
+            blog_text_lower = blog_text.lower()
+            
+            # 키워드 매칭으로 점수 부여
+            for keyword in search_keywords:
+                if keyword and keyword.lower() in blog_text_lower:
+                    score += 2
+            
+            # pain_points_addressed에 매칭되면 추가 점수
+            if blog.pain_points_addressed:
+                for challenge in expected_challenges:
+                    if challenge and challenge.lower() in blog.pain_points_addressed.lower():
+                        score += 3
+            
+            # target_audience에 매칭되면 추가 점수
+            if blog.target_audience:
+                if industry and industry.lower() in blog.target_audience.lower():
+                    score += 2
+                if business_intent and any(word in blog.target_audience.lower() for word in business_intent.lower().split()):
+                    score += 2
+            
+            scored_blogs.append((blog, score))
+        
+        # 관련성 점수순 정렬 후 전체 선택 (Gemini가 전체 블로그에서 판단)
+        scored_blogs.sort(key=lambda x: x[1], reverse=True)
+        selected_blogs = [b[0] for b in scored_blogs]  # 전체 블로그 전달
+        
+        logger.info(f"🔍 {company_name}: 전체 {len(all_blogs)}개 블로그 중 관련성 높은 {len(selected_blogs)}개 선택")
+        logger.info(f"   - 검색 키워드: {search_keywords[:5]}...")
+        
+        # 블로그 리스트 구성 - content도 포함하여 Gemini가 실제 내용 기반으로 판단
         blog_list = []
-        for i, blog in enumerate(all_blogs[:15]):  # 15개로 줄여 토큰 절약
-            # 블로그 본문 내용도 포함 (500자까지)
-            blog_content = (blog.content or '')[:500]
+        for i, blog in enumerate(selected_blogs):
+            # 블로그 본문 내용도 포함 (700자까지 - 더 많은 정보 제공)
+            blog_content = (blog.content or blog.ai_summary or '')[:700]
             blog_list.append({
                 'index': i,
                 'title': blog.title,
                 'link': blog.link,
-                'summary': (blog.summary or '')[:300],
-                'content_preview': blog_content,  # 🆕 실제 본문 내용 추가
+                'summary': (blog.summary or '')[:400],
+                'content_preview': blog_content,
                 'target_audience': blog.target_audience or '',
                 'pain_points': blog.pain_points_addressed or '',
+                'key_benefits': blog.key_benefits or '',  # 🆕 핵심 효과 추가
                 'case_company': blog.case_company or '',
                 'case_industry': blog.case_industry or ''
             })
@@ -1897,9 +1942,9 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
                     logger.info(f"⚠️ {company_name}: Gemini가 적합한 블로그 없다고 판단 - 추천 스킵")
                     return None
                 
-                # 메인 블로그
-                if 0 <= primary_idx < len(all_blogs):
-                    primary_blog_obj = all_blogs[primary_idx]
+                # 메인 블로그 (selected_blogs에서 선택)
+                if 0 <= primary_idx < len(selected_blogs):
+                    primary_blog_obj = selected_blogs[primary_idx]
                     primary_blog = {
                         'title': primary_blog_obj.title,
                         'link': primary_blog_obj.link,
@@ -1909,11 +1954,11 @@ def get_smart_blog_recommendation(company_info, research_data=None, news_analysi
                         'industry_matched': True
                     }
                     
-                    # 서포팅 블로그
+                    # 서포팅 블로그 (selected_blogs에서 선택)
                     supporting_blogs = []
                     for idx in supporting_indices[:2]:
-                        if 0 <= idx < len(all_blogs):
-                            blog = all_blogs[idx]
+                        if 0 <= idx < len(selected_blogs):
+                            blog = selected_blogs[idx]
                             supporting_blogs.append({
                                 'title': blog.title,
                                 'link': blog.link,
