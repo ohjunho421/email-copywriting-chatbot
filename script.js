@@ -340,6 +340,80 @@ class EmailCopywritingChatbot {
         document.getElementById('fileName').textContent = fileName;
         document.getElementById('rowCount').textContent = rowCount;
         document.getElementById('fileInfo').style.display = 'block';
+        // 🆕 CSV 미리보기 + 헤더 검증
+        this.renderCsvPreview();
+    }
+
+    /**
+     * 업로드된 CSV의 헤더를 검증하고 첫 5행 미리보기 테이블을 렌더링.
+     * - 권장 컬럼(회사명/홈페이지/이메일) 누락 시 경고 알림
+     * - 잘못된 파일이 메일 생성 단계까지 흘러가지 않도록 사전 차단
+     */
+    renderCsvPreview() {
+        const data = this.uploadedData || [];
+        const validation = document.getElementById('csvValidation');
+        const preview = document.getElementById('csvPreview');
+        if (!validation || !preview) return;
+        if (!data.length) {
+            validation.style.display = 'none';
+            preview.style.display = 'none';
+            return;
+        }
+
+        const headers = Object.keys(data[0] || {});
+        const lower = headers.map(h => (h || '').toLowerCase());
+
+        const recommended = {
+            '회사명':   ['회사명', '회사', '기업명', 'company', '브랜드'],
+            '홈페이지': ['홈페이지', '홈페이지링크', '웹사이트', 'url', 'homepage', 'website'],
+            '이메일':   ['이메일', '대표자이메일', 'email', 'e-mail', '메일']
+        };
+        const present = [];
+        const missing = [];
+        Object.entries(recommended).forEach(([label, alts]) => {
+            const has = lower.some(h => alts.some(a => h.includes(a.toLowerCase())));
+            (has ? present : missing).push(label);
+        });
+
+        if (missing.length === 0) {
+            validation.innerHTML = `
+                <div class="alert alert-success py-2 mb-0 small">
+                    <i class="fas fa-check-circle"></i>
+                    <strong>필수 컬럼 확인 완료</strong> · ${present.join(' · ')}
+                </div>`;
+        } else {
+            validation.innerHTML = `
+                <div class="alert alert-warning py-2 mb-0 small">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>누락/미인식 컬럼:</strong> ${missing.join(', ')}
+                    <div class="text-muted mt-1">없어도 진행할 수는 있지만, 메일 개인화 정확도가 떨어집니다.</div>
+                </div>`;
+        }
+        validation.style.display = 'block';
+
+        const escapeHtml = (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+        const top = data.slice(0, 5);
+        const cols = headers.slice(0, 5);
+        let html = `<div class="po-csv-preview">
+            <div class="po-csv-preview-title">미리보기 · ${top.length}/${data.length}행 · ${cols.length}/${headers.length}컬럼</div>
+            <div class="po-csv-preview-scroll"><table class="po-csv-preview-table"><thead><tr>`;
+        cols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+        html += '</tr></thead><tbody>';
+        top.forEach(row => {
+            html += '<tr>';
+            cols.forEach(c => {
+                const v = (row[c] || '').toString();
+                const display = v.length > 32 ? v.slice(0, 32) + '…' : v;
+                html += `<td title="${escapeHtml(v)}">${escapeHtml(display)}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table></div></div>';
+        preview.innerHTML = html;
+        preview.style.display = 'block';
     }
 
     async generateEmailTemplates() {
@@ -4915,3 +4989,58 @@ async function saveSettings() {
 // ========================================
 window.openSettingsModal = openSettingsModal;
 window.saveSettings = saveSettings;
+
+// =====================================================================
+// 메일 검색 바 — chatContainer 안의 .email-template 카드를
+// 회사명·제목·본문으로 즉시 필터. 카드가 1개 이상 추가되면 자동 표시.
+// MutationObserver로 새 메일 카드 추가도 자동 감지.
+// =====================================================================
+(function setupMailFilter() {
+    const init = () => {
+        const bar = document.getElementById('mailFilterBar');
+        const input = document.getElementById('mailFilterInput');
+        const clearBtn = document.getElementById('mailFilterClear');
+        const meta = document.getElementById('mailFilterMeta');
+        const chat = document.getElementById('chatContainer');
+        if (!bar || !input || !chat) return;
+
+        const apply = () => {
+            const q = (input.value || '').trim().toLowerCase();
+            const cards = chat.querySelectorAll('.email-template');
+            let visible = 0;
+            cards.forEach(card => {
+                const text = (card.textContent || '').toLowerCase();
+                const match = !q || text.includes(q);
+                card.classList.toggle('po-filtered-out', !match);
+                if (match) visible++;
+            });
+            if (cards.length) {
+                bar.style.display = '';
+                if (meta) meta.textContent = q
+                    ? `${visible} / ${cards.length}개 일치`
+                    : `${cards.length}개 메일`;
+            } else {
+                bar.style.display = 'none';
+                if (meta) meta.textContent = '';
+            }
+        };
+
+        input.addEventListener('input', apply);
+        if (clearBtn) clearBtn.addEventListener('click', () => {
+            input.value = '';
+            apply();
+            input.focus();
+        });
+
+        // 메일 카드가 새로 추가/제거되면 자동으로 카운트·표시 업데이트
+        const obs = new MutationObserver(() => apply());
+        obs.observe(chat, { childList: true, subtree: true });
+
+        apply();
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
