@@ -678,69 +678,102 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
                     search_terms.append(keyword)
         
         from sqlalchemy import or_
-        
-        # 두 단계 검색: 1) Pain Point 매칭 우선 2) 업종 매칭
-        all_posts = []
-        seen_ids = set()
-        
-        # 1단계: Pain Point 키워드로 검색 (최우선)
-        if pain_point_terms:
-            pain_query = db.session.query(BlogPost)
-            if service_type:
-                pain_query = pain_query.filter(BlogPost.category == service_type)
-            
-            pain_pattern = f"%{'%'.join(pain_point_terms)}%"
-            pain_query = pain_query.filter(
-                or_(
-                    BlogPost.keywords.like(pain_pattern),
-                    BlogPost.title.like(pain_pattern),
-                    BlogPost.content.like(pain_pattern)
-                )
+
+        # ------------------------------------------------------------------
+        # 매칭 정확도 강화: 단일 LIKE 패턴(`%A%B%C%`)은 "A 다음에 B 다음에 C"
+        # 순서로만 매칭되는 잘못된 검색이었음. 각 키워드별 OR 매칭으로 변경하고
+        # 결과는 키워드 적중 빈도 + service/industry 적합도로 점수화하여 정렬.
+        # 임계값 미만 글은 제외하여 관련 없는 블로그가 추천되는 문제를 차단.
+        # ------------------------------------------------------------------
+        def _build_term_filter(terms, columns):
+            """주어진 컬럼들에 대해 각 term을 개별 LIKE OR로 묶어 반환."""
+            filters = []
+            for term in terms:
+                if not term or len(str(term).strip()) < 2:
+                    continue
+                pat = f"%{str(term).strip()}%"
+                for col in columns:
+                    filters.append(col.like(pat))
+            return filters
+
+        def _score_post(post, pain_terms, industry_terms):
+            """블로그 글이 회사/페인포인트와 얼마나 관련 있는지 가중치 점수."""
+            text = " ".join(
+                filter(None, [post.title, post.keywords, post.industry_tags, post.summary])
+            ).lower()
+            score = 0
+            # Pain Point 키워드 매칭 — 가장 높은 가중치
+            for term in pain_terms or []:
+                if term and len(str(term).strip()) >= 2 and str(term).strip().lower() in text:
+                    score += 30
+            # 업종/카테고리/회사 설명 매칭
+            for term in industry_terms or []:
+                if term and len(str(term).strip()) >= 2 and str(term).strip().lower() in text:
+                    score += 15
+            # 서비스 카테고리 정확 일치 보너스
+            if service_type and post.category == service_type:
+                score += 10
+            return score
+
+        # 1단계: Pain Point + 업종 키워드 통합 후보 풀 구성 (개별 OR 매칭)
+        candidate_query = db.session.query(BlogPost)
+        if service_type:
+            candidate_query = candidate_query.filter(BlogPost.category == service_type)
+
+        all_terms_filter = []
+        all_terms_filter.extend(
+            _build_term_filter(
+                pain_point_terms,
+                [BlogPost.keywords, BlogPost.title, BlogPost.content, BlogPost.summary],
             )
-            
-            pain_posts = pain_query.order_by(BlogPost.created_at.desc()).limit(max_posts).all()
-            for post in pain_posts:
-                if post.id not in seen_ids:
-                    all_posts.append(post)
-                    seen_ids.add(post.id)
-                    logger.info(f"  ✅ Pain Point 매칭: {post.title[:50]}...")
-        
-        # 2단계: 업종 키워드로 검색 (Pain Point 매칭 후 부족하면 채우기)
-        remaining_count = max_posts - len(all_posts)
-        if remaining_count > 0 and search_terms:
-            industry_query = db.session.query(BlogPost)
-            if service_type:
-                industry_query = industry_query.filter(BlogPost.category == service_type)
-            
-            search_pattern = f"%{'%'.join(search_terms)}%"
-            industry_query = industry_query.filter(
-                or_(
-                    BlogPost.industry_tags.like(search_pattern),
-                    BlogPost.keywords.like(search_pattern),
-                    BlogPost.title.like(search_pattern),
-                    BlogPost.content.like(search_pattern)
-                )
+        )
+        all_terms_filter.extend(
+            _build_term_filter(
+                search_terms,
+                [BlogPost.industry_tags, BlogPost.keywords, BlogPost.title, BlogPost.content],
             )
-            
-            industry_posts = industry_query.order_by(BlogPost.created_at.desc()).limit(remaining_count).all()
-            for post in industry_posts:
-                if post.id not in seen_ids:
-                    all_posts.append(post)
-                    seen_ids.add(post.id)
-        
+        )
+
+        if all_terms_filter:
+            candidate_query = candidate_query.filter(or_(*all_terms_filter))
+            # score 계산을 위해 후보를 max_posts*5 수준에서 가져옴
+            candidates = candidate_query.order_by(BlogPost.created_at.desc()).limit(max_posts * 5).all()
+        else:
+            candidates = []
+
+        # 점수 계산 + 임계값 컷오프
+        MIN_SCORE = 30  # Pain Point 1개 또는 업종 2개 이상 적중해야 통과
+        scored = []
+        for post in candidates:
+            s = _score_post(post, pain_point_terms, search_terms)
+            if s >= MIN_SCORE:
+                scored.append((s, post))
+
+        # 점수 내림차순, 동점은 최신순
+        scored.sort(key=lambda x: (-x[0], -(x[1].created_at.timestamp() if x[1].created_at else 0)))
+
+        all_posts = [p for _, p in scored[:max_posts]]
+        seen_ids = {p.id for p in all_posts}
+
+        for s, p in scored[:max_posts]:
+            logger.info(f"  ✅ 매칭(score={s}): {p.title[:50]}...")
+
         posts_query = all_posts
-        
+
         service_label = f"[{service_type}] " if service_type else ""
-        
+
         if not posts_query:
-            if search_terms:
-                logger.info(f"🔍 {service_label}'{', '.join(search_terms)}' 관련 블로그 글 없음")
+            if search_terms or pain_point_terms:
+                logger.info(
+                    f"🔍 {service_label}임계값({MIN_SCORE}점) 이상 매칭 글 없음 — 관련 없는 블로그 추천 방지를 위해 빈 결과 반환"
+                )
             else:
                 logger.info(f"🔍 {service_label}블로그 글 없음")
             return []
-        
-        # dict 형태로 변환
+
+        # dict 형태로 변환 (score 함께 반환)
         posts = []
+        score_map = {p.id: s for s, p in scored}
         for post in posts_query:
             posts.append({
                 'title': post.title,
@@ -749,14 +782,16 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
                 'content': post.content,
                 'category': post.category,
                 'keywords': post.keywords,
-                'industry_tags': post.industry_tags
+                'industry_tags': post.industry_tags,
+                'match_score': score_map.get(post.id, 0),
             })
-        
-        if search_terms:
-            logger.info(f"✅ {service_label}'{', '.join(search_terms)}' 관련 블로그 글 {len(posts)}개 조회 (PostgreSQL)")
+
+        if search_terms or pain_point_terms:
+            terms_log = ', '.join([t for t in (pain_point_terms or []) + (search_terms or []) if t])
+            logger.info(f"✅ {service_label}'{terms_log}' 관련 블로그 {len(posts)}개 (점수 임계값 통과)")
         else:
-            logger.info(f"✅ {service_label}블로그 글 {len(posts)}개 조회 (PostgreSQL)")
-        
+            logger.info(f"✅ {service_label}블로그 글 {len(posts)}개 조회")
+
         return posts
         
     except Exception as e:
