@@ -12,6 +12,64 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
+# =====================================================================
+# 페인포인트 동의어 사전 — "수수료가 비싸다" 같은 다양한 표현을
+# 블로그 키워드(수수료/비용/절감/단가/인하 등)와 의미적으로 매칭하기 위한 확장.
+# 매칭은 단순 LIKE 검색이라 동의어가 없으면 정확한 표현이 아닌 한 미스 발생.
+# =====================================================================
+PAIN_SYNONYMS = {
+    '수수료': ['수수료', '비용', '절감', '단가', '인하', '비용절감', '결제수수료', 'pg수수료'],
+    '비용': ['비용', '수수료', '절감', '비용절감', '원가'],
+    '정산': ['정산', '매출관리', '재무', '회계', '대사', '마감', '엑셀', '수기정산'],
+    '재무': ['재무', '정산', '회계', '매출관리', '대사', '마감', 'erp'],
+    '회계': ['회계', '재무', '정산', '대사', '마감'],
+    '구독': ['구독', '정기결제', '빌링키', '구독경제', '월정액', '멤버십', 'subscription'],
+    '정기결제': ['정기결제', '구독', '빌링키', '월정액', '구독결제'],
+    '빌링키': ['빌링키', '구독', '정기결제'],
+    '글로벌': ['글로벌', '해외', 'global', '해외진출', '크로스보더', '수출', '현지화'],
+    '해외': ['해외', '글로벌', '해외진출', '크로스보더', '수출'],
+    '해외진출': ['해외진출', '글로벌', '해외', '크로스보더', '수출', '현지화'],
+    'pg': ['pg', '간편결제', '결제연동', '결제수단', '멀티pg', '복수pg', '결제'],
+    '결제': ['결제', 'pg', '간편결제', '결제수단', '결제연동'],
+    '안정성': ['안정성', '장애', '리스크', '백업', '라우팅', '스마트라우팅', '결제실패', '결제오류'],
+    '장애': ['장애', '안정성', '리스크', '결제실패', '백업'],
+    '결제실패': ['결제실패', '결제오류', '안정성', '리스크', '장애'],
+    '자동화': ['자동화', '자동', '효율화', '시간절약', '리소스', '단축'],
+    '효율': ['효율', '자동화', '시간절약', '단축', '리소스절감'],
+    '오픈마켓': ['오픈마켓', '쿠팡', '11번가', 'ssg', '네이버', '지마켓', '옥션', '멀티채널', '다채널'],
+    '플랫폼': ['플랫폼', '중개', '마켓플레이스', '파트너정산', '양면시장'],
+    '파트너정산': ['파트너정산', '플랫폼', '지급대행', '세금계산서'],
+    '인앱결제': ['인앱결제', '게임', 'd2c', '웹상점', '앱스토어', '구글플레이'],
+}
+
+
+def _expand_pain_terms(terms):
+    """입력 페인 키워드를 동의어 사전으로 확장하여 매칭 풀을 넓힘.
+
+    예: ['수수료가 비싸다'] → ['수수료가 비싸다', '수수료', '비용', '절감', ...]
+    """
+    expanded = set()
+    for term in terms or []:
+        if not term:
+            continue
+        t = str(term).strip().lower()
+        if not t:
+            continue
+        expanded.add(t)
+        for key, syns in PAIN_SYNONYMS.items():
+            key_l = key.lower()
+            if key_l in t or t in key_l:
+                expanded.update(s.lower() for s in syns)
+                continue
+            for s in syns:
+                if s.lower() in t or (len(s) >= 2 and s.lower() in t):
+                    expanded.update(syn.lower() for syn in syns)
+                    break
+    # 너무 짧은(1글자) 토큰은 잡음이 되므로 제거
+    return [w for w in expanded if w and len(w) >= 2]
+
+
 def verify_url_exists(url, timeout=3):
     """
     URL이 실제로 접근 가능한지 확인 (HEAD 요청)
@@ -696,13 +754,28 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
                     filters.append(col.like(pat))
             return filters
 
+        # 페인포인트 동의어 확장 (수수료 → 비용/절감/단가/인하 등)
+        expanded_pain_terms = _expand_pain_terms(pain_point_terms or [])
+        if expanded_pain_terms and pain_point_terms:
+            logger.info(
+                f"🔁 Pain Point 동의어 확장: {pain_point_terms} → {expanded_pain_terms[:8]}…"
+            )
+
         def _score_post(post, pain_terms, industry_terms):
-            """블로그 글이 회사/페인포인트와 얼마나 관련 있는지 가중치 점수."""
+            """블로그 글이 회사/페인포인트와 얼마나 관련 있는지 가중치 점수.
+
+            점수 가중치:
+              - Pain Point 키워드 1개 적중: +30 (확장된 동의어 포함)
+              - 업종/카테고리 키워드 1개 적중: +15
+              - 서비스 카테고리(OPI/PS/PRISM) 일치: +10
+              - **고객사례** 블로그(keywords에 '고객사례'): +25  (사용자 요구: 사례 우선)
+              - **블로그의 industry_tags가 회사 업종과 직접 일치**: +20  (같은 업종 사례 우선)
+            """
             text = " ".join(
                 filter(None, [post.title, post.keywords, post.industry_tags, post.summary])
             ).lower()
             score = 0
-            # Pain Point 키워드 매칭 — 가장 높은 가중치
+            # Pain Point 키워드 매칭 (동의어 확장본 사용)
             for term in pain_terms or []:
                 if term and len(str(term).strip()) >= 2 and str(term).strip().lower() in text:
                     score += 30
@@ -713,6 +786,25 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
             # 서비스 카테고리 정확 일치 보너스
             if service_type and post.category == service_type:
                 score += 10
+            # 🆕 고객사례 블로그 보너스 — 사례형 글이 우선
+            if post.keywords and '고객사례' in post.keywords:
+                score += 25
+            # 🆕 industry_tags가 회사 업종을 직접 포함하면 보너스
+            if post.industry_tags and industry_terms:
+                post_industries = [t.strip().lower() for t in post.industry_tags.split(',') if t.strip()]
+                for term in industry_terms:
+                    if not term:
+                        continue
+                    tl = str(term).strip().lower()
+                    if not tl:
+                        continue
+                    for pi in post_industries:
+                        if pi and (tl in pi or pi in tl):
+                            score += 20
+                            break
+                    else:
+                        continue
+                    break
             return score
 
         # 1단계: Pain Point + 업종 키워드 통합 후보 풀 구성 (개별 OR 매칭)
@@ -723,7 +815,7 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
         all_terms_filter = []
         all_terms_filter.extend(
             _build_term_filter(
-                pain_point_terms,
+                expanded_pain_terms,
                 [BlogPost.keywords, BlogPost.title, BlogPost.content, BlogPost.summary],
             )
         )
@@ -745,7 +837,7 @@ def get_relevant_blog_posts_by_industry(company_info, max_posts=3, service_type=
         MIN_SCORE = 30  # Pain Point 1개 또는 업종 2개 이상 적중해야 통과
         scored = []
         for post in candidates:
-            s = _score_post(post, pain_point_terms, search_terms)
+            s = _score_post(post, expanded_pain_terms, search_terms)
             if s >= MIN_SCORE:
                 scored.append((s, post))
 
@@ -1154,7 +1246,20 @@ def get_best_blog_for_email_mention(company_info, research_data=None, max_check=
             if not industry_compatible and blog_industries:
                 score -= 50
                 logger.debug(f"⚠️ 업종 불일치 페널티: {post.title[:30]}... (회사: {matched_industries}, 블로그: {blog_industries})")
-            
+
+            # 🆕 사용자 요구: 고객사례 우선 + 동일 업종 사례 우선 (보너스)
+            #   - keywords에 '고객사례' 토큰 → +25
+            #   - 블로그가 다룬 업종이 회사 업종과 직접 일치(예: 뷰티 회사 ↔ 뷰티 사례) → +20
+            if post.keywords and '고객사례' in post.keywords:
+                score += 25
+                reasons.append('고객사례형 글')
+            if blog_industries and matched_industries:
+                direct_industry_overlap = [ind for ind in matched_industries if ind in blog_industries]
+                if direct_industry_overlap:
+                    score += 20
+                    this_industry_matched = True
+                    reasons.append(f"동일 업종 사례({direct_industry_overlap[0]})")
+
             # 🎯 뉴스 기사에서 파악된 의도와 블로그 매칭 (최우선!)
             title_lower = (post.title or '').lower()
             for intent_name in detected_intents:

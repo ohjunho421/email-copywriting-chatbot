@@ -2700,7 +2700,29 @@ class EmailCopywriter:
 ⚠️ 블로그 링크({opi_link})는 반드시 별도 줄에 그대로 포함하세요!
 """
                     logger.info(f"📝 {company_name}: OPI 블로그 선택 - {opi_title[:30]}...")
-            
+
+            # 🔗 1·2단계 매칭 통합 — 본문에서 인용할 best 블로그가 컨텍스트(opi_blogs)에도
+            #    1순위로 들어가게 하여, LLM이 인용한 사례와 참고자료가 어긋나지 않도록 함.
+            try:
+                if blog_mention_opi and blog_mention_opi.get('link'):
+                    _existing_links = {(b.get('link') or '') for b in (opi_blogs or [])}
+                    if blog_mention_opi.get('link') not in _existing_links:
+                        _injected = {
+                            'title': blog_mention_opi.get('title', ''),
+                            'link': blog_mention_opi.get('link', ''),
+                            'summary': blog_mention_opi.get('summary', ''),
+                            'content': blog_mention_opi.get('summary', ''),
+                            'category': 'OPI',
+                            'keywords': '고객사례',
+                            'industry_tags': '',
+                            'match_score': 999,
+                        }
+                        opi_blogs = [_injected] + (opi_blogs or [])
+                        blog_content_opi = format_relevant_blog_for_email(opi_blogs, company_name, 'OPI')
+                        logger.info(f"🔗 [OPI] 본문 인용 블로그를 컨텍스트 1순위로 통합: {_injected['title'][:30]}")
+            except Exception as _merge_err:
+                logger.warning(f"OPI best blog 컨텍스트 통합 실패: {_merge_err}")
+
             # PRISM/finance용 블로그 선택 (멀티오픈마켓 정산/매출분석 관련)
             blog_mention_prism = get_best_blog_for_email_mention(company_info_for_blog, research_data, competitors=competitors, service_type='PRISM')
             if blog_mention_prism:
@@ -2729,7 +2751,28 @@ class EmailCopywriter:
 ⚠️ 블로그 링크({prism_link})는 반드시 별도 줄에 그대로 포함하세요!
 """
                     logger.info(f"📝 {company_name}: PRISM 블로그 선택 - {prism_title[:30]}...")
-                    
+
+            # 🔗 1·2단계 매칭 통합 — PRISM도 동일하게 컨텍스트 1순위로 통합
+            try:
+                if blog_mention_prism and blog_mention_prism.get('link'):
+                    _existing_links_p = {(b.get('link') or '') for b in (prism_blogs or [])}
+                    if blog_mention_prism.get('link') not in _existing_links_p:
+                        _injected_p = {
+                            'title': blog_mention_prism.get('title', ''),
+                            'link': blog_mention_prism.get('link', ''),
+                            'summary': blog_mention_prism.get('summary', ''),
+                            'content': blog_mention_prism.get('summary', ''),
+                            'category': 'PRISM',
+                            'keywords': '고객사례',
+                            'industry_tags': '',
+                            'match_score': 999,
+                        }
+                        prism_blogs = [_injected_p] + (prism_blogs or [])
+                        blog_content_prism = format_relevant_blog_for_email(prism_blogs, company_name, 'PRISM')
+                        logger.info(f"🔗 [PRISM] 본문 인용 블로그를 컨텍스트 1순위로 통합: {_injected_p['title'][:30]}")
+            except Exception as _merge_err_p:
+                logger.warning(f"PRISM best blog 컨텍스트 통합 실패: {_merge_err_p}")
+
         except Exception as blog_mention_error:
             logger.warning(f"블로그 언급 정보 조회 오류: {str(blog_mention_error)}")
         
